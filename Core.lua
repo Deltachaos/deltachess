@@ -754,6 +754,47 @@ function DeltaChess:ShowReplayWindow(gameData)
 end
 
 --------------------------------------------------------------------------------
+-- RECENT OPPONENTS
+--------------------------------------------------------------------------------
+function DeltaChess:GetRecentOpponents()
+    local playerName = self:GetFullPlayerName(UnitName("player"))
+    local opponents = {} -- fullName -> lastPlayed
+
+    local function addOpponent(name, timestamp)
+        if name and name ~= playerName and name ~= "Computer" then
+            local existing = opponents[name]
+            if not existing or timestamp > existing then
+                opponents[name] = timestamp
+            end
+        end
+    end
+
+    for _, game in pairs(self.db.games) do
+        local ts = game.startTime or 0
+        addOpponent(game.white, ts)
+        addOpponent(game.black, ts)
+    end
+    for _, game in ipairs(self.db.history) do
+        local ts = game.startTime or 0
+        addOpponent(game.white, ts)
+        addOpponent(game.black, ts)
+    end
+
+    local list = {}
+    for fullName, lastPlayed in pairs(opponents) do
+        table.insert(list, { fullName = fullName, lastPlayed = lastPlayed })
+    end
+    table.sort(list, function(a, b) return a.lastPlayed > b.lastPlayed end)
+
+    local result = {}
+    for i = 1, math.min(15, #list) do
+        local name = list[i].fullName:match("^([^%-]+)") or list[i].fullName
+        table.insert(result, { fullName = list[i].fullName, displayName = name })
+    end
+    return result
+end
+
+--------------------------------------------------------------------------------
 -- CHALLENGE WINDOW
 --------------------------------------------------------------------------------
 function DeltaChess:ShowChallengeWindow(targetPlayer)
@@ -765,7 +806,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     -- Create challenge window if it doesn't exist
     if not self.frames.challengeWindow then
         local frame = CreateFrame("Frame", "ChessChallengeWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(350, 380)
+        frame:SetSize(350, 440)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -778,10 +819,46 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         
         local yPos = -35
         
+        -- Recent opponents dropdown
+        local recentLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        recentLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
+        recentLabel:SetText("Recent opponents:")
+        
+        yPos = yPos - 22
+        
+        local opponentDropdown = CreateFrame("Frame", nil, frame, "UIDropDownMenuTemplate")
+        opponentDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
+        UIDropDownMenu_SetWidth(opponentDropdown, 280)
+        frame.opponentDropdown = opponentDropdown
+
+        UIDropDownMenu_Initialize(opponentDropdown, function(self, level)
+            local recent = DeltaChess:GetRecentOpponents()
+            if #recent == 0 then
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = "No recent opponents"
+                info.notCheckable = 1
+                info.disabled = 1
+                UIDropDownMenu_AddButton(info)
+            else
+                for _, opp in ipairs(recent) do
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = opp.displayName
+                    info.func = function()
+                        frame.nameInput:SetText(opp.fullName)
+                        UIDropDownMenu_SetText(opponentDropdown, opp.displayName)
+                    end
+                    info.notCheckable = 1
+                    UIDropDownMenu_AddButton(info)
+                end
+            end
+        end)
+        
+        yPos = yPos - 38
+        
         -- Player name input
         local nameLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         nameLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        nameLabel:SetText("Player Name (Name-Realm):")
+        nameLabel:SetText("Or enter name (Name-Realm):")
         
         yPos = yPos - 25
         
@@ -956,6 +1033,15 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     self.frames.challengeWindow.clockCheck:SetChecked(false)
     self.frames.challengeWindow.timeSlider:SetValue(10)
     self.frames.challengeWindow.incSlider:SetValue(0)
+
+    -- Update dropdown display
+    local dropdown = self.frames.challengeWindow.opponentDropdown
+    if targetPlayer then
+        local displayName = targetPlayer:match("^([^%-]+)") or targetPlayer
+        UIDropDownMenu_SetText(dropdown, displayName)
+    else
+        UIDropDownMenu_SetText(dropdown, "Select recent opponent...")
+    end
     
     -- Update color buttons
     local frame = self.frames.challengeWindow

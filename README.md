@@ -129,7 +129,7 @@ Start checkmating people. ♟️
 ### Minimap button
 
 * **Left click** – Main menu
-* **Right click** – Challenge current target
+* **Right click** – Resume most recent game
 * **Drag** – Move the button around the minimap
 
 ### Gameplay
