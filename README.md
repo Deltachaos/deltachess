@@ -10,6 +10,16 @@ Stuck in Valdrakken doing absolutely nothing?
 
 ---
 
+## Installation
+
+Install via your preferred addon manager:
+
+* **[CurseForge](https://www.curseforge.com/wow/addons/deltachess)**
+* **[WoWUp (Wago)](https://addons.wago.io/addons/deltachess)**
+* **[WoWInterface](https://www.wowinterface.com/downloads/info27027-DeltaChess.html)**
+
+---
+
 ## Support Development ❤️
 
 If you enjoy DeltaChess and want to support its development (or just prevent the author from also camping rare spawns for gold), you can do so by subscribing to my other WoW project [blingtron.app](https://blingtron.app)—a Discord bot for supporting raid leaders—on Patreon:
@@ -96,16 +106,6 @@ Start checkmating people. ♟️
 ## Disclaimer
 
 **This project was built approximately 99% with AI assistance.** Code, structure, and documentation were developed with generative AI tools. Use and review at your own discretion.
-
----
-
-## Installation
-
-1. Copy the `DeltaChess` folder into your WoW AddOns directory:
-   * **Retail:** `World of Warcraft\_retail_\Interface\AddOns\`
-   * **Classic:** `World of Warcraft\_classic_\Interface\AddOns\`
-2. Restart WoW or run `/reload`.
-3. Enable the addon in the AddOns list at the character select screen.
 
 ---
 
