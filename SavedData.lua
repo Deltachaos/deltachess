@@ -42,17 +42,6 @@ function DeltaChess:SaveGameToHistory(game, result)
     -- Add to history
     table.insert(self.db.history, historyEntry)
     
-    -- Update statistics
-    if result == "won" then
-        self.db.statistics.wins = self.db.statistics.wins + 1
-    elseif result == "lost" or result == "resigned" then
-        self.db.statistics.losses = self.db.statistics.losses + 1
-    elseif result == "draw" then
-        self.db.statistics.draws = self.db.statistics.draws + 1
-    end
-    
-    self.db.statistics.totalGames = self.db.statistics.totalGames + 1
-    
     -- Remove from active games
     self.db.games[game.id] = nil
     
@@ -191,29 +180,6 @@ function DeltaChess:ImportFromPGN(pgnString)
     return game
 end
 
--- Get player statistics
-function DeltaChess:GetStatistics()
-    return {
-        totalGames = self.db.statistics.totalGames,
-        wins = self.db.statistics.wins,
-        losses = self.db.statistics.losses,
-        draws = self.db.statistics.draws,
-        winRate = self.db.statistics.totalGames > 0 and 
-                  (self.db.statistics.wins / self.db.statistics.totalGames * 100) or 0
-    }
-end
-
--- Reset statistics
-function DeltaChess:ResetStatistics()
-    self.db.statistics = {
-        wins = 0,
-        losses = 0,
-        draws = 0,
-        totalGames = 0
-    }
-    self:Print("Statistics reset.")
-end
-
 -- Clear game history
 function DeltaChess:ClearHistory()
     self.db.history = {}
@@ -258,7 +224,6 @@ function DeltaChess:BackupData()
     ChessDB_Backup[tostring(time())] = {
         games = self.db.games,
         history = self.db.history,
-        statistics = self.db.statistics,
         settings = self.db.settings
     }
     
@@ -276,7 +241,6 @@ function DeltaChess:RestoreData(backupTimestamp)
     
     self.db.games = backup.games
     self.db.history = backup.history
-    self.db.statistics = backup.statistics
     self.db.settings = backup.settings
     
     self:Print("Data restored from backup.")

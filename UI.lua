@@ -3,7 +3,7 @@
 DeltaChess.UI = {}
 
 -- Shared constants
-DeltaDeltaChess.UI.PIECE_TEXTURES = {
+DeltaChess.UI.PIECE_TEXTURES = {
     white = {
         king = "Interface\\AddOns\\DeltaChess\\Textures\\white_king",
         queen = "Interface\\AddOns\\DeltaChess\\Textures\\white_queen",
@@ -22,18 +22,18 @@ DeltaDeltaChess.UI.PIECE_TEXTURES = {
     }
 }
 
-DeltaDeltaChess.UI.FILE_LABELS = {"a", "b", "c", "d", "e", "f", "g", "h"}
+DeltaChess.UI.FILE_LABELS = {"a", "b", "c", "d", "e", "f", "g", "h"}
 
 -- Local references for convenience
-local PIECE_TEXTURES = DeltaDeltaChess.UI.PIECE_TEXTURES
-local FILE_LABELS = DeltaDeltaChess.UI.FILE_LABELS
+local PIECE_TEXTURES = DeltaChess.UI.PIECE_TEXTURES
+local FILE_LABELS = DeltaChess.UI.FILE_LABELS
 
 --------------------------------------------------------------------------------
 -- CLOCK CALCULATION FUNCTIONS
 --------------------------------------------------------------------------------
 
 -- Calculate remaining time for a player based on move timestamps
-function DeltaDeltaChess.UI:CalculateRemainingTime(game, color)
+function DeltaChess.UI:CalculateRemainingTime(game, color)
     if not game.settings.useClock then
         return nil
     end
@@ -98,7 +98,7 @@ function DeltaDeltaChess.UI:CalculateRemainingTime(game, color)
 end
 
 -- Format time as MM:SS
-function DeltaDeltaChess.UI:FormatTime(seconds)
+function DeltaChess.UI:FormatTime(seconds)
     if not seconds then return "--:--" end
     seconds = math.floor(seconds)
     local mins = math.floor(seconds / 60)
@@ -112,7 +112,7 @@ end
 
 -- Create board squares and labels on a container frame
 -- Returns a 2D table of square frames
-function DeltaDeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flipBoard, interactive)
+function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flipBoard, interactive)
     local squares = {}
     
     -- Create rank labels (1-8 on left side)
@@ -205,7 +205,7 @@ function DeltaDeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize,
 end
 
 -- Update piece display on squares from a board state (2D array or DeltaChess.Board object)
-function DeltaDeltaChess.UI:RenderPieces(squares, boardState, lastMove)
+function DeltaChess.UI:RenderPieces(squares, boardState, lastMove)
     for row = 1, 8 do
         for col = 1, 8 do
             local square = squares[row][col]
@@ -253,7 +253,7 @@ function DeltaDeltaChess.UI:RenderPieces(squares, boardState, lastMove)
 end
 
 -- Get initial chess board state as 2D array
-function DeltaDeltaChess.UI:GetInitialBoardState()
+function DeltaChess.UI:GetInitialBoardState()
     local board = {}
     for row = 1, 8 do
         board[row] = {}
@@ -272,7 +272,7 @@ function DeltaDeltaChess.UI:GetInitialBoardState()
 end
 
 -- Apply moves to a board state (for replay)
-function DeltaDeltaChess.UI:ApplyMovesToBoard(board, moves, upToIndex)
+function DeltaChess.UI:ApplyMovesToBoard(board, moves, upToIndex)
     for i = 1, upToIndex do
         local move = moves[i]
         if move then
@@ -314,7 +314,7 @@ function DeltaDeltaChess.UI:ApplyMovesToBoard(board, moves, upToIndex)
 end
 
 -- Format move as algebraic notation
-function DeltaDeltaChess.UI:FormatMoveNotation(move)
+function DeltaChess.UI:FormatMoveNotation(move)
     if not move then return "" end
     local pieceNames = {king = "K", queen = "Q", rook = "R", bishop = "B", knight = "N", pawn = ""}
     local fromRow = move.fromRow or (move.from and move.from.row) or 1
@@ -352,7 +352,7 @@ local PIECE_VALUES = {
 
 -- Get class color for a player name (returns r, g, b)
 -- savedClass: optional class token (e.g., "WARRIOR") for when player is offline
-function DeltaDeltaChess.UI:GetPlayerColor(playerName, savedClass)
+function DeltaChess.UI:GetPlayerColor(playerName, savedClass)
     if playerName == "Computer" then
         return 0.7, 0.7, 0.7 -- Gray for computer
     end
@@ -377,7 +377,7 @@ function DeltaDeltaChess.UI:GetPlayerColor(playerName, savedClass)
 end
 
 -- Calculate material advantage
-function DeltaDeltaChess.UI:CalculateMaterialAdvantage(capturedByWhite, capturedByBlack)
+function DeltaChess.UI:CalculateMaterialAdvantage(capturedByWhite, capturedByBlack)
     local whitePoints = 0
     local blackPoints = 0
     
@@ -398,7 +398,7 @@ end
 local CAPTURED_PIECE_SIZE = 18
 
 -- Update captured pieces display with small icons
-function DeltaDeltaChess.UI:UpdateCapturedPieces(container, capturedPieces, capturedColor, advantage)
+function DeltaChess.UI:UpdateCapturedPieces(container, capturedPieces, capturedColor, advantage)
     -- Clear existing textures
     for _, child in ipairs({container:GetRegions()}) do
         child:Hide()
@@ -446,7 +446,7 @@ function DeltaDeltaChess.UI:UpdateCapturedPieces(container, capturedPieces, capt
 end
 
 -- Format move in standard algebraic notation
-function DeltaDeltaChess.UI:FormatMoveAlgebraic(move)
+function DeltaChess.UI:FormatMoveAlgebraic(move)
     if not move then return "" end
     
     local pieceSymbols = {
@@ -502,8 +502,8 @@ function DeltaChess:ShowChessBoard(gameId)
     end
     
     -- Close existing board if open
-    if DeltaDeltaChess.UI.activeFrame then
-        DeltaDeltaChess.UI.activeFrame:Hide()
+    if DeltaChess.UI.activeFrame then
+        DeltaChess.UI.activeFrame:Hide()
     end
     
     -- Determine player's color for board orientation
@@ -733,7 +733,7 @@ function DeltaChess:ShowChessBoard(gameId)
     frame:Show()
     
     -- Store frame reference
-    DeltaDeltaChess.UI.activeFrame = frame
+    DeltaChess.UI.activeFrame = frame
     
     -- Check if there's a pending ACK for this game and show waiting overlay
     if not game.isVsComputer and DeltaChess:IsBoardLocked(gameId) then
@@ -742,7 +742,7 @@ function DeltaChess:ShowChessBoard(gameId)
 end
 
 -- Update board display
-function DeltaDeltaChess.UI:UpdateBoard(frame)
+function DeltaChess.UI:UpdateBoard(frame)
     local board = frame.board
     local game = frame.game
     
@@ -874,7 +874,7 @@ function DeltaDeltaChess.UI:UpdateBoard(frame)
 end
 
 -- Show/hide waiting overlay when waiting for ACK
-function DeltaDeltaChess.UI:ShowWaitingOverlay(frame, show)
+function DeltaChess.UI:ShowWaitingOverlay(frame, show)
     if not frame then return end
     
     if show then
@@ -925,7 +925,7 @@ function DeltaDeltaChess.UI:ShowWaitingOverlay(frame, show)
 end
 
 -- Handle square click
-function DeltaDeltaChess.UI:OnSquareClick(frame, row, col)
+function DeltaChess.UI:OnSquareClick(frame, row, col)
     local board = frame.board
     local piece = board:GetPiece(row, col)
     local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
@@ -1066,14 +1066,14 @@ function DeltaDeltaChess.UI:OnSquareClick(frame, row, col)
 end
 
 -- Format time for clock display
-function DeltaDeltaChess.UI:FormatTime(seconds)
+function DeltaChess.UI:FormatTime(seconds)
     local mins = math.floor(seconds / 60)
     local secs = seconds % 60
     return string.format("%d:%02d", mins, secs)
 end
 
 -- Start clock (recalculates time from timestamps each tick)
-function DeltaDeltaChess.UI:StartClock(frame)
+function DeltaChess.UI:StartClock(frame)
     local game = frame.game
     local board = frame.board
     local myColor = frame.myChessColor
@@ -1117,7 +1117,7 @@ function DeltaDeltaChess.UI:StartClock(frame)
 end
 
 -- Show game end screen
-function DeltaDeltaChess.UI:ShowGameEnd(frame)
+function DeltaChess.UI:ShowGameEnd(frame)
     local board = frame.board
     local game = frame.game
     local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))

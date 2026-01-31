@@ -16,12 +16,6 @@ local function Initialize()
         ChessDB = {
             games = {},
             history = {},
-            statistics = {
-                wins = 0,
-                losses = 0,
-                draws = 0,
-                totalGames = 0
-            },
             settings = {
                 showMinimapButton = true
             }
@@ -121,8 +115,6 @@ function DeltaChess:SlashCommand(input)
         end
     elseif command == "menu" or command == "help" then
         self:ShowMainMenu()
-    elseif command == "stats" or command == "statistics" then
-        self:ShowStatistics()
     elseif command == "games" or command == "active" then
         self:ShowActiveGames()
     elseif command == "history" then
@@ -182,58 +174,39 @@ function DeltaChess:ShowMainMenu()
         frame:SetFrameLevel(100)
         frame.TitleText:SetText("DeltaChess")
         
-        -- Statistics section
-        local statsTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        statsTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -35)
-        statsTitle:SetText("Your Statistics")
-        
-        local statsText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        statsText:SetPoint("TOPLEFT", statsTitle, "BOTTOMLEFT", 0, -10)
-        statsText:SetJustifyH("LEFT")
-        frame.statsText = statsText
-        
-        -- Challenge Player button
-        local challengeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        challengeBtn:SetSize(170, 30)
-        challengeBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -120)
-        challengeBtn:SetText("Challenge Player")
-        challengeBtn:SetScript("OnClick", function()
-            frame:Hide()
-            DeltaChess:ShowChallengeWindow()
-        end)
-        
-        -- Play vs Computer button
-        local computerBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        computerBtn:SetSize(170, 30)
-        computerBtn:SetPoint("LEFT", challengeBtn, "RIGHT", 10, 0)
-        computerBtn:SetText("Play vs Computer")
-        computerBtn:SetScript("OnClick", function()
-            frame:Hide()
-            DeltaChess:ShowComputerGameWindow()
-        end)
-        
         -- Game History title
         local historyTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        historyTitle:SetPoint("TOPLEFT", challengeBtn, "BOTTOMLEFT", 0, -20)
+        historyTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -35)
         historyTitle:SetText("Game History")
         
         -- History scroll frame
         local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
         scrollFrame:SetPoint("TOPLEFT", historyTitle, "BOTTOMLEFT", 0, -10)
-        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 40)
+        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 55)
         
         local scrollChild = CreateFrame("Frame", nil, scrollFrame)
         scrollChild:SetSize(340, 1)
         scrollFrame:SetScrollChild(scrollChild)
         frame.scrollChild = scrollChild
         
-        -- Close button at bottom
-        local closeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        closeBtn:SetSize(100, 25)
-        closeBtn:SetPoint("BOTTOM", frame, "BOTTOM", 0, 10)
-        closeBtn:SetText("Close")
-        closeBtn:SetScript("OnClick", function()
+        -- Challenge Player button (bottom left)
+        local challengeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        challengeBtn:SetSize(170, 30)
+        challengeBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 10)
+        challengeBtn:SetText("Challenge Player")
+        challengeBtn:SetScript("OnClick", function()
             frame:Hide()
+            DeltaChess:ShowChallengeWindow()
+        end)
+        
+        -- Play vs Computer button (bottom right)
+        local computerBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        computerBtn:SetSize(170, 30)
+        computerBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -15, 10)
+        computerBtn:SetText("Play vs Computer")
+        computerBtn:SetScript("OnClick", function()
+            frame:Hide()
+            DeltaChess:ShowComputerGameWindow()
         end)
         
         self.frames.mainMenu = frame
@@ -248,14 +221,6 @@ end
 -- Refresh just the main menu content (without showing/hiding window)
 function DeltaChess:RefreshMainMenuContent()
     if not self.frames.mainMenu then return end
-    
-    -- Update statistics
-    local stats = self.db.statistics
-    local winRate = stats.totalGames > 0 and (stats.wins / stats.totalGames * 100) or 0
-    self.frames.mainMenu.statsText:SetText(string.format(
-        "Games: %d  |  Wins: %d  |  Losses: %d  |  Draws: %d  |  Win Rate: %.1f%%",
-        stats.totalGames, stats.wins, stats.losses, stats.draws, winRate
-    ))
     
     -- Update history
     local scrollChild = self.frames.mainMenu.scrollChild
@@ -438,6 +403,15 @@ function DeltaChess:RefreshMainMenuContent()
                 resumeBtn:SetScript("OnClick", function()
                     self.frames.mainMenu:Hide()
                     DeltaChess:ShowChessBoard(game.id)
+                end)
+                
+                local resignBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
+                resignBtn:SetSize(55, 22)
+                resignBtn:SetPoint("RIGHT", resumeBtn, "LEFT", -3, 0)
+                resignBtn:SetText("Resign")
+                resignBtn:SetScript("OnClick", function()
+                    DeltaChess:ResignGame(game.id)
+                    DeltaChess:RefreshMainMenuContent()
                 end)
             else
                 -- Delete button for completed games
@@ -1234,22 +1208,6 @@ function DeltaChess:ShowGameHistory()
         if #self.db.history > 10 then
             self:Print(string.format("  ... and %d more games", #self.db.history - 10))
         end
-    end
-end
-
--- Show statistics
-function DeltaChess:ShowStatistics()
-    local stats = self.db.statistics
-    
-    self:Print("DeltaChess Statistics:")
-    self:Print(string.format("  Total Games: %d", stats.totalGames))
-    self:Print(string.format("  Wins: %d", stats.wins))
-    self:Print(string.format("  Losses: %d", stats.losses))
-    self:Print(string.format("  Draws: %d", stats.draws))
-    
-    if stats.totalGames > 0 then
-        local winRate = (stats.wins / stats.totalGames) * 100
-        self:Print(string.format("  Win Rate: %.1f%%", winRate))
     end
 end
 

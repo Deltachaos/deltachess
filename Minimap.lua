@@ -45,11 +45,20 @@ function DeltaChess.Minimap:Initialize()
         if button == "LeftButton" then
             DeltaChess:ShowMainMenu()
         elseif button == "RightButton" then
-            if UnitExists("target") and UnitIsPlayer("target") then
-                local targetName = DeltaChess:GetFullPlayerName(UnitName("target"))
-                DeltaChess:ShowChallengeWindow(targetName)
+            -- Resume most recent active game
+            local mostRecentId, mostRecentTime = nil, 0
+            if DeltaChess.db and DeltaChess.db.games then
+                for gameId, game in pairs(DeltaChess.db.games) do
+                    if game.status == "active" and game.startTime and game.startTime > mostRecentTime then
+                        mostRecentId = gameId
+                        mostRecentTime = game.startTime
+                    end
+                end
+            end
+            if mostRecentId then
+                DeltaChess:ShowChessBoard(mostRecentId)
             else
-                DeltaChess:Print("Right-click: Challenge your current target")
+                DeltaChess:ShowMainMenu()
             end
         end
     end)
@@ -60,7 +69,7 @@ function DeltaChess.Minimap:Initialize()
         GameTooltip:AddLine("|cFF33FF99DeltaChess|r")
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("|cFFFFFFFFLeft-click:|r Open menu", 1, 1, 1)
-        GameTooltip:AddLine("|cFFFFFFFFRight-click:|r Challenge target", 1, 1, 1)
+        GameTooltip:AddLine("|cFFFFFFFFRight-click:|r Resume most recent game", 1, 1, 1)
         GameTooltip:AddLine(" ")
         
         -- Show active games
@@ -73,13 +82,6 @@ function DeltaChess.Minimap:Initialize()
         
         if activeCount > 0 then
             GameTooltip:AddLine(string.format("|cFF00FF00Active Games:|r %d", activeCount), 1, 1, 1)
-        end
-        
-        -- Show statistics
-        if DeltaChess.db and DeltaChess.db.statistics then
-            local stats = DeltaChess.db.statistics
-            local winRate = stats.totalGames > 0 and (stats.wins / stats.totalGames * 100) or 0
-            GameTooltip:AddLine(string.format("Games: %d | Win Rate: %.0f%%", stats.totalGames, winRate), 0.7, 0.7, 0.7)
         end
         
         GameTooltip:Show()

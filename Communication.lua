@@ -463,18 +463,20 @@ function DeltaChess:ResignGame(gameId)
     local game = self.db.games[gameId]
     if not game then return end
     
-    local opponent = self:GetOpponent(gameId)
-    if not opponent then return end
-    
     -- Update game status
     game.status = "ended"
     game.board.gameStatus = "resignation"
     game.resignedPlayer = self:GetFullPlayerName(UnitName("player"))
     game.endTime = time()
     
-    -- Send resignation
-    local data = {gameId = gameId}
-    self:SendCommMessage("ChessResign", self:Serialize(data), "WHISPER", opponent)
+    -- Send resignation to opponent (skip for computer games)
+    if not game.isVsComputer then
+        local opponent = self:GetOpponent(gameId)
+        if opponent then
+            local data = {gameId = gameId}
+            self:SendCommMessage("ChessResign", self:Serialize(data), "WHISPER", opponent)
+        end
+    end
     
     -- Save to history
     self:SaveGameToHistory(game, "resigned")
