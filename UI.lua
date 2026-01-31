@@ -867,6 +867,16 @@ function DeltaChess.UI:UpdateBoard(frame)
         frame.historyText:SetText(historyStr)
     end
     
+    -- Disable resign/draw when game is over
+    if board.gameStatus ~= "active" then
+        if frame.resignButton then
+            frame.resignButton:Disable()
+        end
+        if frame.drawButton and not game.isVsComputer then
+            frame.drawButton:Disable()
+        end
+    end
+    
     -- Check for game end
     if board.gameStatus ~= "active" then
         DeltaChess.UI:ShowGameEnd(frame)
@@ -914,12 +924,14 @@ function DeltaChess.UI:ShowWaitingOverlay(frame, show)
             frame.waitingOverlay:Hide()
         end
         
-        -- Re-enable action buttons
-        if frame.resignButton then
-            frame.resignButton:Enable()
-        end
-        if frame.drawButton and not frame.isVsComputer then
-            frame.drawButton:Enable()
+        -- Re-enable action buttons only if game is still active
+        if frame.board and frame.board.gameStatus == "active" then
+            if frame.resignButton then
+                frame.resignButton:Enable()
+            end
+            if frame.drawButton and not frame.isVsComputer then
+                frame.drawButton:Enable()
+            end
         end
     end
 end

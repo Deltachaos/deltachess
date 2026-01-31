@@ -452,6 +452,8 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     -- Make the move on our board (timestamp is added automatically)
     game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
     
+    self:Print("Your opponent has made their move - it's your turn!")
+
     -- Update UI if board is open
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == moveData.gameId then
         DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
