@@ -626,12 +626,27 @@ function DeltaChess:ShowChessBoard(gameId)
     
     local frame = CreateFrame("Frame", "ChessBoardFrame", UIParent, "BasicFrameTemplateWithInset")
     frame:SetSize(totalWidth, totalHeight)
-    frame:SetPoint("CENTER")
+    -- Restore saved position or center
+    local pos = DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.boardPosition
+    if pos and pos.point and pos.relativePoint and pos.x and pos.y then
+        frame:ClearAllPoints()
+        frame:SetPoint(pos.point, UIParent, pos.relativePoint, pos.x, pos.y)
+    else
+        frame:SetPoint("CENTER")
+    end
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        if DeltaChess.db and DeltaChess.db.settings then
+            local point, _, relativePoint, xOfs, yOfs = self:GetPoint(1)
+            if point then
+                DeltaChess.db.settings.boardPosition = { point = point, relativePoint = relativePoint, x = xOfs, y = yOfs }
+            end
+        end
+    end)
     -- Pause timer when closing via X (vs computer only)
     frame:SetScript("OnHide", function(self)
         local g = self.game
@@ -644,6 +659,34 @@ function DeltaChess:ShowChessBoard(gameId)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
     frame.TitleText:SetText("DeltaChess")
+    
+    -- Compact width when minimized (board + margins, no right panel)
+    local compactWidth = LABEL_SIZE + BOARD_SIZE + 15
+    frame.isMinimized = false
+    
+    -- Minimize button in title bar (to the left of the close button)
+    local minimizeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    minimizeBtn:SetSize(28, 22)
+    minimizeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20,0)
+    minimizeBtn:SetText("−")
+    minimizeBtn:SetScript("OnClick", function()
+        frame.isMinimized = not frame.isMinimized
+        if DeltaChess.db and DeltaChess.db.settings then
+            DeltaChess.db.settings.boardMinimized = frame.isMinimized
+        end
+        if frame.isMinimized then
+            frame.rightPanel:Hide()
+            frame:SetSize(compactWidth, totalHeight)
+            frame:SetScale(0.75)
+            minimizeBtn:SetText("+")
+        else
+            frame.rightPanel:Show()
+            frame:SetSize(totalWidth, totalHeight)
+            frame:SetScale(1)
+            minimizeBtn:SetText("−")
+        end
+    end)
+    frame.minimizeBtn = minimizeBtn
     
     -- Store references
     frame.gameId = gameId
@@ -752,6 +795,7 @@ function DeltaChess:ShowChessBoard(gameId)
     local rightPanel = CreateFrame("Frame", nil, frame)
     rightPanel:SetSize(RIGHT_PANEL_WIDTH, PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT)
     rightPanel:SetPoint("TOPLEFT", opponentBar, "TOPRIGHT", 10, 0)
+    frame.rightPanel = rightPanel
     
     -- Move history scroll frame (top portion)
     local historyHeight = rightPanel:GetHeight() - 50
@@ -830,6 +874,20 @@ function DeltaChess:ShowChessBoard(gameId)
         closeButton:SetScript("OnClick", function()
             DeltaChess:RequestPause(gameId)
         end)
+    end
+    
+    -- Restore saved minimized state when opening the board
+    frame.isMinimized = (DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.boardMinimized) or false
+    if frame.isMinimized then
+        frame.rightPanel:Hide()
+        frame:SetSize(compactWidth, totalHeight)
+        frame:SetScale(0.75)
+        frame.minimizeBtn:SetText("+")
+    else
+        frame.rightPanel:Show()
+        frame:SetSize(totalWidth, totalHeight)
+        frame:SetScale(1)
+        frame.minimizeBtn:SetText("−")
     end
     
     -- Update the board display

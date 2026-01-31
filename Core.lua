@@ -18,12 +18,17 @@ local function Initialize()
             history = {},
             settings = {
                 showMinimapButton = true,
-                dnd = false
+                dnd = false,
+                boardMinimized = false,
+                boardPosition = nil  -- { point, relativePoint, x, y } from GetPoint(1), relative to UIParent
             }
         }
     end
     if ChessDB.settings.dnd == nil then
         ChessDB.settings.dnd = false
+    end
+    if ChessDB.settings.boardMinimized == nil then
+        ChessDB.settings.boardMinimized = false
     end
     
     DeltaChess.db = ChessDB
