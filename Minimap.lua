@@ -27,7 +27,7 @@ function DeltaChess.Minimap:Initialize()
     local icon = minimapButton:CreateTexture(nil, "BACKGROUND")
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER", 0, 1)
-    icon:SetTexture("Interface\\Icons\\INV_Misc_Toy_07")
+    icon:SetTexture("Interface\\AddOns\\DeltaChess\\Textures\\logo_small")
     minimapButton.icon = icon
     
     -- Border
@@ -131,8 +131,8 @@ function DeltaChess.Minimap:UpdatePosition()
     local x = math.cos(angle)
     local y = math.sin(angle)
     
-    x = x * 80
-    y = y * 80
+    x = x * 105
+    y = y * 105
     
     minimapButton:SetPoint("CENTER", Minimap, "CENTER", x, y)
 end
