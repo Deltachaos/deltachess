@@ -233,7 +233,7 @@ function DeltaChess:ShowMainMenu()
         -- History scroll frame
         local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
         scrollFrame:SetPoint("TOPLEFT", historyTitle, "BOTTOMLEFT", 0, -10)
-        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -40, 55)
+        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -40, 80)
         
         local scrollChild = CreateFrame("Frame", nil, scrollFrame)
         scrollChild:SetSize(340, 1)
