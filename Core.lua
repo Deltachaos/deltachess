@@ -821,12 +821,14 @@ function DeltaChess:GetRecentOpponents()
 end
 
 -- Get list of past opponent full names (for ping list)
+-- Limit to 5 most recent to reduce "player not online" spam when pinging offline players
 function DeltaChess:GetPastOpponentsFullNames()
     local recent = self:GetRecentOpponents()
     local out = {}
     local myName = self:GetFullPlayerName(UnitName("player"))
-    for _, opp in ipairs(recent) do
-        if opp.fullName and opp.fullName ~= myName then
+    for i = 1, math.min(5, #recent) do
+        local opp = recent[i]
+        if opp and opp.fullName and opp.fullName ~= myName then
             table.insert(out, opp.fullName)
         end
     end
@@ -850,16 +852,23 @@ function DeltaChess:GetGuildOnlineFullNames()
     return out
 end
 
--- Get list of online friend full names (WoW friend list)
+-- Get list of online friend full names (WoW + Battle.net friends)
 function DeltaChess:GetFriendsOnlineFullNames()
     local out = {}
+    local seen = {}
     local myName = self:GetFullPlayerName(UnitName("player"))
+    
+    -- WoW friend list
     if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
         local num = C_FriendList.GetNumFriends()
         for i = 1, num do
             local info = C_FriendList.GetFriendInfoByIndex(i)
             if info and info.name and info.connected and info.name ~= myName then
-                table.insert(out, self:GetFullPlayerName(info.name))
+                local fullName = self:GetFullPlayerName(info.name)
+                if not seen[fullName] then
+                    seen[fullName] = true
+                    table.insert(out, fullName)
+                end
             end
         end
     elseif GetNumFriends and GetFriendInfo then
@@ -867,10 +876,39 @@ function DeltaChess:GetFriendsOnlineFullNames()
         for i = 1, num do
             local name, _, _, _, connected = GetFriendInfo(i)
             if name and connected and name ~= myName then
-                table.insert(out, self:GetFullPlayerName(name))
+                local fullName = self:GetFullPlayerName(name)
+                if not seen[fullName] then
+                    seen[fullName] = true
+                    table.insert(out, fullName)
+                end
             end
         end
     end
+    
+    -- Battle.net friends (online in WoW, same region only - cross-region whisper causes "player not online" errors)
+    if BNGetNumFriends and C_BattleNet and C_BattleNet.GetFriendNumGameAccounts and C_BattleNet.GetFriendGameAccountInfo then
+        local wowClient = BNET_CLIENT_WOW or "WoW"
+        for i = 1, BNGetNumFriends() do
+            local numAccounts = C_BattleNet.GetFriendNumGameAccounts(i)
+            for j = 1, numAccounts do
+                local game = C_BattleNet.GetFriendGameAccountInfo(i, j)
+                if game and game.isOnline and game.clientProgram == wowClient and game.characterName then
+                    if game.isInCurrentRegion == false then
+                        -- Skip cross-region: whisper would fail with "player not online"
+                    else
+                        local realm = game.realmDisplayName or game.realmName
+                        local fullName = realm and (game.characterName .. "-" .. realm)
+                            or self:GetFullPlayerName(game.characterName)
+                        if fullName ~= myName and not seen[fullName] then
+                            seen[fullName] = true
+                            table.insert(out, fullName)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
     return out
 end
 
@@ -1178,22 +1216,34 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 return
             end
             
-            local finalColor = frame.selectedColor
-            if finalColor == "random" then
-                finalColor = math.random(2) == 1 and "white" or "black"
-            end
+            sendBtn:SetEnabled(false)
+            sendBtn:SetText("Checking...")
             
-            local gameSettings = {
-                challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
-                opponent = playerName,
-                challengerColor = finalColor,
-                useClock = frame.clockCheck:GetChecked(),
-                timeMinutes = math.floor(frame.timeSlider:GetValue()),
-                incrementSeconds = math.floor(frame.incSlider:GetValue())
-            }
-            
-            DeltaChess:SendChallenge(gameSettings)
-            frame:Hide()
+            DeltaChess:PingPlayer(playerName, function(hasAddon)
+                sendBtn:SetEnabled(true)
+                sendBtn:SetText("Send Challenge")
+                if not hasAddon then
+                    DeltaChess:Print("|cFFFF0000Player doesn't have DeltaChess installed or is offline.|r")
+                    return
+                end
+                
+                local finalColor = frame.selectedColor
+                if finalColor == "random" then
+                    finalColor = math.random(2) == 1 and "white" or "black"
+                end
+                
+                local gameSettings = {
+                    challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
+                    opponent = playerName,
+                    challengerColor = finalColor,
+                    useClock = frame.clockCheck:GetChecked(),
+                    timeMinutes = math.floor(frame.timeSlider:GetValue()),
+                    incrementSeconds = math.floor(frame.incSlider:GetValue())
+                }
+                
+                DeltaChess:SendChallenge(gameSettings)
+                frame:Hide()
+            end)
         end)
         
         local cancelBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
