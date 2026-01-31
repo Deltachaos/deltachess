@@ -680,38 +680,22 @@ function DeltaChess:ShowReplayWindow(gameData)
         local capturedByWhite = {}
         local capturedByBlack = {}
         
-        -- Apply moves and track captures
+        -- Apply moves and track captures (use move data, not board state, to handle promotions correctly)
         for i = 1, frame.currentMoveIndex do
             local move = frame.moves[i]
             if move then
-                local fromRow = move.fromRow or (move.from and move.from.row)
-                local fromCol = move.fromCol or (move.from and move.from.col)
-                local toRow = move.toRow or (move.to and move.to.row)
-                local toCol = move.toCol or (move.to and move.to.col)
+                local movingColor = move.color
                 
-                if fromRow and fromCol and toRow and toCol then
-                    local movingPiece = board[fromRow][fromCol]
-                    local capturedPiece = board[toRow][toCol]
+                -- Track captured piece using move data (handles promoted pieces correctly)
+                if move.captured or move.capturedType then
+                    local capturedType = move.capturedType or "pawn"
+                    local capturedColor = movingColor == "white" and "black" or "white"
+                    local capturedPiece = {type = capturedType, color = capturedColor}
                     
-                    -- Track captured piece
-                    if capturedPiece then
-                        if movingPiece and movingPiece.color == "white" then
-                            table.insert(capturedByWhite, capturedPiece)
-                        else
-                            table.insert(capturedByBlack, capturedPiece)
-                        end
-                    end
-                    
-                    -- En passant capture
-                    if move.enPassant and movingPiece then
-                        local capturedPawn = board[fromRow][toCol]
-                        if capturedPawn then
-                            if movingPiece.color == "white" then
-                                table.insert(capturedByWhite, capturedPawn)
-                            else
-                                table.insert(capturedByBlack, capturedPawn)
-                            end
-                        end
+                    if movingColor == "white" then
+                        table.insert(capturedByWhite, capturedPiece)
+                    else
+                        table.insert(capturedByBlack, capturedPiece)
                     end
                 end
             end

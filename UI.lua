@@ -949,7 +949,8 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
     local padding = 8
     local btnSpacing = 6
     local dialogWidth = (pieceSize + padding * 2) * 4 + btnSpacing * 3 + 30
-    local dialogHeight = pieceSize + padding * 2 + 70
+    local titleAreaHeight = 50
+    local dialogHeight = titleAreaHeight + (pieceSize + padding * 2) + 20
 
     if not DeltaChess.frames.promotionDialog then
         local dialog = CreateFrame("Frame", "ChessPromotionDialog", UIParent, "BasicFrameTemplateWithInset")
@@ -964,7 +965,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
         for i, pieceType in ipairs(pieceTypes) do
             local btn = CreateFrame("Button", nil, dialog)
             btn:SetSize(pieceSize + padding * 2, pieceSize + padding * 2)
-            btn:SetPoint("LEFT", dialog, "LEFT", 15 + (i - 1) * (pieceSize + padding * 2 + btnSpacing), -45)
+            btn:SetPoint("TOPLEFT", dialog, "TOPLEFT", 15 + (i - 1) * (pieceSize + padding * 2 + btnSpacing), -titleAreaHeight)
 
             -- Light background so black pieces are visible
             local bg = btn:CreateTexture(nil, "BACKGROUND")
