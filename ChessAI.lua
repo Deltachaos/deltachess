@@ -2,6 +2,21 @@
 
 DeltaChess.AI = {}
 
+-- Timer constants (milliseconds); C_Timer.After uses seconds
+local AI_YIELD_MS = 8          -- baseline ms between steps when FPS is good
+local AI_TARGET_FPS = 40       -- try to keep at least this FPS during AI calculation
+local AI_INITIAL_DELAY_MS = 500 -- ms before AI starts thinking
+
+-- Yield delay in ms: longer when FPS is low to keep game responsive (uses GetFramerate())
+local function getYieldDelayMs()
+    local fps = GetFramerate() or 60
+    if fps >= AI_TARGET_FPS then
+        return AI_YIELD_MS
+    end
+    local msPerFrameAtTarget = 1000 / AI_TARGET_FPS
+    return math.max(msPerFrameAtTarget, AI_YIELD_MS + (AI_TARGET_FPS - fps) * 2)
+end
+
 -- Piece values for evaluation
 local PIECE_VALUES = {
     pawn = 100,
@@ -183,7 +198,7 @@ function DeltaChess.AI:UndoTemporaryMove(board, move, state)
     board.squares[move.toRow][move.toCol] = state.captured
 end
 
--- Minimax with alpha-beta pruning
+-- Minimax with alpha-beta pruning (synchronous, full search)
 function DeltaChess.AI:Minimax(board, depth, alpha, beta, maximizingPlayer)
     if depth == 0 then
         return self:EvaluateBoard(board), nil
@@ -192,13 +207,10 @@ function DeltaChess.AI:Minimax(board, depth, alpha, beta, maximizingPlayer)
     local color = maximizingPlayer and "white" or "black"
     local moves = self:GetAllMoves(board, color)
     
-    -- No moves available - checkmate or stalemate
     if #moves == 0 then
         if board:IsInCheck(color) then
-            -- Checkmate
             return maximizingPlayer and -100000 or 100000, nil
         else
-            -- Stalemate
             return 0, nil
         end
     end
@@ -208,101 +220,164 @@ function DeltaChess.AI:Minimax(board, depth, alpha, beta, maximizingPlayer)
     if maximizingPlayer then
         local maxEval = -math.huge
         for _, move in ipairs(moves) do
-            local captured = self:MakeTemporaryMove(board, move)
+            local state = self:MakeTemporaryMove(board, move)
             local eval = self:Minimax(board, depth - 1, alpha, beta, false)
-            self:UndoTemporaryMove(board, move, captured)
-            
+            self:UndoTemporaryMove(board, move, state)
             if eval > maxEval then
                 maxEval = eval
                 bestMove = move
             end
-            
             alpha = math.max(alpha, eval)
-            if beta <= alpha then
-                break -- Beta cutoff
-            end
+            if beta <= alpha then break end
         end
         return maxEval, bestMove
     else
         local minEval = math.huge
         for _, move in ipairs(moves) do
-            local captured = self:MakeTemporaryMove(board, move)
+            local state = self:MakeTemporaryMove(board, move)
             local eval = self:Minimax(board, depth - 1, alpha, beta, true)
-            self:UndoTemporaryMove(board, move, captured)
-            
+            self:UndoTemporaryMove(board, move, state)
             if eval < minEval then
                 minEval = eval
                 bestMove = move
             end
-            
             beta = math.min(beta, eval)
-            if beta <= alpha then
-                break -- Alpha cutoff
-            end
+            if beta <= alpha then break end
         end
         return minEval, bestMove
     end
 end
 
--- Get best move for AI
-function DeltaChess.AI:GetBestMove(board, color, difficulty)
-    -- Difficulty determines search depth
-    -- 1 = Easy (depth 1), 2 = Medium (depth 2), 3 = Hard (depth 3)
-    local depth = difficulty or 2
-    
-    local maximizing = (color == "white")
-    local _, bestMove = self:Minimax(board, depth, -math.huge, math.huge, maximizing)
-    
-    return bestMove
+-- Map ELO (100-2500) to search depth and mistake chance
+local function eloToParams(difficulty)
+    local elo = math.max(100, math.min(2500, tonumber(difficulty) or 1200))
+    local depth = math.min(5, math.max(1, math.floor(1 + (elo - 100) / 600)))
+    local mistakeChance = math.max(0, 0.55 - (elo - 100) / 4500)
+    return depth, mistakeChance
 end
 
--- Make AI move with a small delay for better UX
-function DeltaChess.AI:MakeMove(gameId, delay)
-    delay = delay or 0.5
+-- Async: evaluate root moves one-by-one, yield between each to allow rendering
+function DeltaChess.AI:GetBestMoveAsync(board, color, difficulty, onComplete)
+    local depth, mistakeChance = eloToParams(difficulty or 1200)
+    local maximizing = (color == "white")
+    local moves = self:GetAllMoves(board, color)
     
-    C_Timer.After(delay, function()
+    if #moves == 0 then
+        onComplete(nil)
+        return
+    end
+    
+    local bestMove, bestEval = moves[1], maximizing and -math.huge or math.huge
+    local alpha, beta = -math.huge, math.huge
+    local moveIdx = 0
+    
+    local allEvals = {}  -- for mistake injection: {move, eval}
+    
+    local function evaluateNextMove()
+        moveIdx = moveIdx + 1
+        if moveIdx > #moves then
+            local finalMove = bestMove
+            if mistakeChance > 0 and math.random() < mistakeChance and #allEvals > 1 then
+                table.sort(allEvals, function(a, b)
+                    if not a then return false end
+                    if not b then return true end
+                    local ea, eb = a.eval or 0, b.eval or 0
+                    return maximizing and ea > eb or ea < eb
+                end)
+                local worseStart = math.floor(#allEvals / 2) + 1
+                local idx = math.random(worseStart, #allEvals)
+                finalMove = allEvals[idx] and allEvals[idx].move or bestMove
+            end
+            onComplete(finalMove)
+            return
+        end
+        
+        local move = moves[moveIdx]
+        local state = DeltaChess.AI:MakeTemporaryMove(board, move)
+        local eval
+        if depth <= 1 then
+            eval = DeltaChess.AI:EvaluateBoard(board)
+        else
+            eval = DeltaChess.AI:Minimax(board, depth - 1, alpha, beta, not maximizing)
+        end
+        DeltaChess.AI:UndoTemporaryMove(board, move, state)
+        
+        table.insert(allEvals, {move = move, eval = eval})
+        
+        if maximizing then
+            if eval > bestEval then
+                bestEval = eval
+                bestMove = move
+            end
+            alpha = math.max(alpha, eval)
+        else
+            if eval < bestEval then
+                bestEval = eval
+                bestMove = move
+            end
+            beta = math.min(beta, eval)
+        end
+        
+        if beta <= alpha then
+            local finalMove = bestMove
+            if mistakeChance > 0 and math.random() < mistakeChance and #allEvals > 1 then
+                table.sort(allEvals, function(a, b)
+                    if not a then return false end
+                    if not b then return true end
+                    local ea, eb = a.eval or 0, b.eval or 0
+                    return maximizing and ea > eb or ea < eb
+                end)
+                local worseStart = math.floor(#allEvals / 2) + 1
+                local idx = math.random(worseStart, #allEvals)
+                finalMove = allEvals[idx] and allEvals[idx].move or bestMove
+            end
+            onComplete(finalMove)
+            return
+        end
+        
+        C_Timer.After(getYieldDelayMs() / 1000, evaluateNextMove)
+    end
+    
+    C_Timer.After(getYieldDelayMs() / 1000, evaluateNextMove)
+end
+
+-- Make AI move with a small delay for better UX (async search, non-blocking)
+function DeltaChess.AI:MakeMove(gameId, delayMs)
+    local delaySec = (delayMs or AI_INITIAL_DELAY_MS) / 1000
+    C_Timer.After(delaySec, function()
         local game = DeltaChess.db.games[gameId]
         if not game or game.status ~= "active" then return end
         if not game.isVsComputer then return end
         
-        -- Check if it's AI's turn
         local aiColor = game.computerColor
         if game.board.currentTurn ~= aiColor then return end
         
-        -- Get best move
-        local difficulty = game.computerDifficulty or 2
-        local move = DeltaChess.AI:GetBestMove(game.board, aiColor, difficulty)
-        
-        if move then
-            -- Determine if this is a promotion move (pawn reaching back rank)
-            local piece = game.board:GetPiece(move.fromRow, move.fromCol)
-            local promotion = nil
-            if piece and piece.type == "pawn" then
-                local promotionRank = piece.color == "white" and 8 or 1
-                if move.toRow == promotionRank then
-                    promotion = "queen"
+        local difficulty = game.computerDifficulty or 1200
+        DeltaChess.AI:GetBestMoveAsync(game.board, aiColor, difficulty, function(move)
+            if not game or game.status ~= "active" then return end
+            if game.board.currentTurn ~= aiColor then return end
+            
+            if move then
+                local piece = game.board:GetPiece(move.fromRow, move.fromCol)
+                local promotion = nil
+                if piece and piece.type == "pawn" then
+                    local promotionRank = piece.color == "white" and 8 or 1
+                    if move.toRow == promotionRank then
+                        promotion = "queen"
+                    end
                 end
+                
+                game.board:MakeMove(move.fromRow, move.fromCol, move.toRow, move.toCol, promotion)
+                
+                DeltaChess:NotifyItIsYourTurn(gameId, "Computer")
+                
+                if game.board.gameStatus ~= "active" then
+                    DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
+                end
+            else
+                DeltaChess:Print("Computer has no valid moves!")
             end
-            
-            -- Make the move
-            game.board:MakeMove(move.fromRow, move.fromCol, move.toRow, move.toCol, promotion)
-            
-            -- Update UI if board is open
-            if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
-                DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
-            end
-            
-            -- Play sound
-            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-            
-            -- Check for game end
-            if game.board.gameStatus ~= "active" then
-                DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
-            end
-        else
-            -- No valid moves - game should be over
-            DeltaChess:Print("Computer has no valid moves!")
-        end
+        end)
     end)
 end
 
@@ -327,7 +402,7 @@ function DeltaChess:StartComputerGame(playerColor, difficulty)
         startTime = time(),
         isVsComputer = true,
         computerColor = computerColor,
-        computerDifficulty = difficulty or 2,
+        computerDifficulty = difficulty or 1200,
         playerColor = playerColor
     }
     
@@ -339,7 +414,7 @@ function DeltaChess:StartComputerGame(playerColor, difficulty)
     
     -- If computer plays white, make first move
     if computerColor == "white" then
-        DeltaChess.AI:MakeMove(gameId, 1.0)
+        DeltaChess.AI:MakeMove(gameId, 1000)
     end
     
     return gameId

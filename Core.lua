@@ -175,6 +175,30 @@ function DeltaChess:IsMyTurnInAnyGame()
     return false
 end
 
+-- Common: notify user that opponent moved and it's their turn (human or computer)
+function DeltaChess:NotifyItIsYourTurn(gameId, opponentDisplayName)
+    local game = self.db.games[gameId]
+    if not game or game.status ~= "active" then return end
+    
+    local lastMove = game.board.moves and game.board.moves[#game.board.moves]
+    local moveNotation = lastMove and DeltaChess.UI:FormatMoveAlgebraic(lastMove) or ""
+    if moveNotation ~= "" then
+        self:Print(opponentDisplayName .. " played " .. moveNotation .. " - it's your turn!")
+    else
+        self:Print(opponentDisplayName .. " made their move - it's your turn!")
+    end
+    
+    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+        DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+    end
+    
+    if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+        DeltaChess.Minimap:UpdateYourTurnHighlight()
+    end
+    
+    PlaySound(SOUNDKIT.ACHIEVEMENT_MENU_OPEN)
+end
+
 --------------------------------------------------------------------------------
 -- MAIN MENU WINDOW
 --------------------------------------------------------------------------------
@@ -403,8 +427,9 @@ function DeltaChess:RefreshMainMenuContent()
                 table.insert(settingsParts, "You: " .. game.playerColor)
             end
             if game.isVsComputer and game.computerDifficulty then
-                local diffNames = {[1] = "Easy", [2] = "Medium", [3] = "Hard"}
-                table.insert(settingsParts, "AI: " .. (diffNames[game.computerDifficulty] or "Medium"))
+                local d = game.computerDifficulty
+                local diffStr = (type(d) == "number" and d >= 100 and d <= 2500) and (tostring(d) .. " ELO") or "~1200 ELO"
+                table.insert(settingsParts, "AI: " .. diffStr)
             end
             if game.settings then
                 if game.settings.useClock then
@@ -1366,60 +1391,45 @@ function DeltaChess:ShowComputerGameWindow()
         
         yPos = yPos - 50
         
-        -- Difficulty selection
+        -- Difficulty slider (ELO 100-2500)
         local diffLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         diffLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        diffLabel:SetText("Difficulty:")
+        diffLabel:SetText("AI Strength (ELO):")
         
-        yPos = yPos - 30
+        yPos = yPos - 25
         
-        frame.selectedDifficulty = 2
+        frame.selectedDifficulty = 1200
         
-        local easyBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        easyBtn:SetSize(80, 25)
-        easyBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        easyBtn:SetText("Easy")
+        local diffValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        diffValue:SetPoint("LEFT", diffLabel, "RIGHT", 10, 0)
+        diffValue:SetText("1200")
+        frame.diffValueText = diffValue
         
-        local mediumBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        mediumBtn:SetSize(80, 25)
-        mediumBtn:SetPoint("LEFT", easyBtn, "RIGHT", 5, 0)
-        mediumBtn:SetText("Medium")
-        mediumBtn:SetEnabled(false)
-        
-        local hardBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        hardBtn:SetSize(80, 25)
-        hardBtn:SetPoint("LEFT", mediumBtn, "RIGHT", 5, 0)
-        hardBtn:SetText("Hard")
-        
-        local function updateDiffButtons()
-            easyBtn:SetEnabled(frame.selectedDifficulty ~= 1)
-            mediumBtn:SetEnabled(frame.selectedDifficulty ~= 2)
-            hardBtn:SetEnabled(frame.selectedDifficulty ~= 3)
-        end
-        
-        easyBtn:SetScript("OnClick", function()
-            frame.selectedDifficulty = 1
-            updateDiffButtons()
+        local diffSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
+        diffSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
+        diffSlider:SetSize(250, 17)
+        diffSlider:SetMinMaxValues(100, 2500)
+        diffSlider:SetValue(1200)
+        diffSlider:SetValueStep(100)
+        diffSlider:SetObeyStepOnDrag(true)
+        diffSlider.Low:SetText("100")
+        diffSlider.High:SetText("2500")
+        diffSlider:SetScript("OnValueChanged", function(self, value)
+            local elo = math.floor((value + 50) / 100) * 100
+            elo = math.max(100, math.min(2500, elo))
+            frame.selectedDifficulty = elo
+            diffValue:SetText(tostring(elo))
         end)
+        frame.diffSlider = diffSlider
         
-        mediumBtn:SetScript("OnClick", function()
-            frame.selectedDifficulty = 2
-            updateDiffButtons()
-        end)
-        
-        hardBtn:SetScript("OnClick", function()
-            frame.selectedDifficulty = 3
-            updateDiffButtons()
-        end)
-        
-        yPos = yPos - 40
+        yPos = yPos - 35
         
         -- Difficulty description
         local diffDesc = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         diffDesc:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         diffDesc:SetWidth(260)
         diffDesc:SetJustifyH("LEFT")
-        diffDesc:SetText("|cFF888888Easy: Quick moves, makes mistakes\nMedium: Thinks ahead, decent play\nHard: Careful analysis, challenging|r")
+        diffDesc:SetText("|cFF888888100-400: Beginner | 400-1000: Club | 1000-1600: Advanced | 1600+: Expert|r")
         
         -- Start button
         local startBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -1433,7 +1443,7 @@ function DeltaChess:ShowComputerGameWindow()
             end
             
             frame:Hide()
-            DeltaChess:StartComputerGame(color, frame.selectedDifficulty)
+            DeltaChess:StartComputerGame(color, frame.selectedDifficulty or 1200)
         end)
         
         local cancelBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -1449,9 +1459,15 @@ function DeltaChess:ShowComputerGameWindow()
     
     -- Reset to defaults
     self.frames.computerWindow.selectedColor = "white"
-    self.frames.computerWindow.selectedDifficulty = 2
+    self.frames.computerWindow.selectedDifficulty = 1200
+    if self.frames.computerWindow.diffSlider then
+        self.frames.computerWindow.diffSlider:SetValue(1200)
+    end
+    if self.frames.computerWindow.diffValueText then
+        self.frames.computerWindow.diffValueText:SetText("1200")
+    end
     
-    -- Update button states
+    -- Update color button states
     local frame = self.frames.computerWindow
     for _, child in ipairs({frame:GetChildren()}) do
         if child:IsObjectType("Button") then
@@ -1459,9 +1475,6 @@ function DeltaChess:ShowComputerGameWindow()
             if text == "White" then child:SetEnabled(false)
             elseif text == "Black" then child:SetEnabled(true)
             elseif text == "Random" then child:SetEnabled(true)
-            elseif text == "Easy" then child:SetEnabled(true)
-            elseif text == "Medium" then child:SetEnabled(false)
-            elseif text == "Hard" then child:SetEnabled(true)
             end
         end
     end

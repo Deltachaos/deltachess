@@ -573,28 +573,8 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     -- Make the move on our board (timestamp is added automatically)
     game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
     
-    -- Notify with opponent name and move
     local opponentName = sender:match("^([^%-]+)") or sender
-    local lastMove = game.board.moves[#game.board.moves]
-    local moveNotation = lastMove and DeltaChess.UI:FormatMoveAlgebraic(lastMove) or ""
-    if moveNotation ~= "" then
-        self:Print(opponentName .. " played " .. moveNotation .. " - it's your turn!")
-    else
-        self:Print(opponentName .. " made their move - it's your turn!")
-    end
-
-    -- Update UI if board is open
-    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == moveData.gameId then
-        DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
-    end
-
-    -- Update minimap "your turn" highlight
-    if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
-        DeltaChess.Minimap:UpdateYourTurnHighlight()
-    end
-    
-    -- Play sound
-    PlaySound(SOUNDKIT.ACHIEVEMENT_MENU_OPEN)
+    DeltaChess:NotifyItIsYourTurn(moveData.gameId, opponentName)
 end
 
 -- Resign game

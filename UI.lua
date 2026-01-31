@@ -1013,11 +1013,14 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
             if isVsComputer then
                 board:MakeMove(fromRow, fromCol, toRow, toCol, pieceType)
                 DeltaChess.UI:UpdateBoard(frame)
+                if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+                    DeltaChess.Minimap:UpdateYourTurnHighlight()
+                end
                 if board.gameStatus ~= "active" then
                     DeltaChess.UI:ShowGameEnd(frame)
                     return
                 end
-                DeltaChess.AI:MakeMove(frame.gameId, 0.5)
+                DeltaChess.AI:MakeMove(frame.gameId, 500)
             else
                 DeltaChess:SendMoveWithConfirmation(frame.gameId, fromRow, fromCol, toRow, toCol, pieceType)
             end
@@ -1121,6 +1124,11 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
                 -- Update display
                 DeltaChess.UI:UpdateBoard(frame)
                 
+                -- Update minimap (now computer's turn, icon should be normal)
+                if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+                    DeltaChess.Minimap:UpdateYourTurnHighlight()
+                end
+                
                 -- Check for game end
                 if board.gameStatus ~= "active" then
                     DeltaChess.UI:ShowGameEnd(frame)
@@ -1128,7 +1136,7 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
                 end
                 
                 -- Trigger AI move
-                DeltaChess.AI:MakeMove(frame.gameId, 0.5)
+                DeltaChess.AI:MakeMove(frame.gameId, 500)
             else
                 -- For multiplayer: send move first, apply after ACK
                 -- Clear selection visually
