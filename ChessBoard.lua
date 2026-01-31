@@ -114,17 +114,25 @@ function DeltaChess.Board:GetPawnMoves(row, col, color)
     local moves = {}
     local direction = color == "white" and 1 or -1
     local startRow = color == "white" and 2 or 7
+    local promotionRank = color == "white" and 8 or 1
+    
+    local function addMove(move)
+        if move.row == promotionRank then
+            move.promotion = true
+        end
+        table.insert(moves, move)
+    end
     
     -- Forward move
     local newRow = row + direction
     if self:IsValidSquare(newRow, col) and not self:GetPiece(newRow, col) then
-        table.insert(moves, {row = newRow, col = col})
+        addMove({row = newRow, col = col})
         
         -- Double move from start
         if row == startRow then
             local doubleRow = row + (direction * 2)
             if not self:GetPiece(doubleRow, col) then
-                table.insert(moves, {row = doubleRow, col = col})
+                addMove({row = doubleRow, col = col})
             end
         end
     end
@@ -135,14 +143,14 @@ function DeltaChess.Board:GetPawnMoves(row, col, color)
         if self:IsValidSquare(newRow, captureCol) then
             local target = self:GetPiece(newRow, captureCol)
             if target and target.color ~= color then
-                table.insert(moves, {row = newRow, col = captureCol})
+                addMove({row = newRow, col = captureCol})
             end
             
             -- En passant
             if self.enPassantSquare and 
                self.enPassantSquare.row == newRow and 
                self.enPassantSquare.col == captureCol then
-                table.insert(moves, {row = newRow, col = captureCol, enPassant = true})
+                addMove({row = newRow, col = captureCol, enPassant = true})
             end
         end
     end

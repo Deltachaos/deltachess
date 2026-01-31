@@ -266,7 +266,7 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
     if not game then return end
     
     -- Make the move on the board (timestamp is added automatically)
-    game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol)
+    game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
     
     -- Update UI if board is open
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -283,7 +283,7 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
 end
 
 -- Send move that requires confirmation before being applied locally
-function DeltaChess:SendMoveWithConfirmation(gameId, fromRow, fromCol, toRow, toCol)
+function DeltaChess:SendMoveWithConfirmation(gameId, fromRow, fromCol, toRow, toCol, promotion)
     local game = self.db.games[gameId]
     if not game then return end
     
@@ -304,6 +304,9 @@ function DeltaChess:SendMoveWithConfirmation(gameId, fromRow, fromCol, toRow, to
         toCol = toCol,
         timestamp = time()
     }
+    if promotion then
+        moveData.promotion = promotion
+    end
     
     -- Generate message ID and send
     local messageId = self:GenerateMessageId()
@@ -447,7 +450,7 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     end
     
     -- Make the move on our board (timestamp is added automatically)
-    game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol)
+    game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
     
     -- Update UI if board is open
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == moveData.gameId then

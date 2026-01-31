@@ -997,6 +997,13 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
             if not playerName:find("-") then
                 playerName = playerName .. "-" .. GetRealmName()
             end
+
+            -- Cannot challenge yourself
+            local myName = DeltaChess:GetFullPlayerName(UnitName("player"))
+            if playerName == myName then
+                DeltaChess:Print("You cannot challenge yourself!")
+                return
+            end
             
             local finalColor = frame.selectedColor
             if finalColor == "random" then
@@ -1027,7 +1034,15 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         self.frames.challengeWindow = frame
     end
     
-    -- Reset values
+    -- Reset values (pre-fill with target if no player specified)
+    if not targetPlayer or targetPlayer == "" then
+        if UnitExists("target") and UnitIsPlayer("target") then
+            local targetName = self:GetFullPlayerName(UnitName("target"))
+            if targetName ~= self:GetFullPlayerName(UnitName("player")) then
+                targetPlayer = targetName
+            end
+        end
+    end
     self.frames.challengeWindow.nameInput:SetText(targetPlayer or "")
     self.frames.challengeWindow.selectedColor = "random"
     self.frames.challengeWindow.clockCheck:SetChecked(false)

@@ -924,6 +924,85 @@ function DeltaChess.UI:ShowWaitingOverlay(frame, show)
     end
 end
 
+-- Show promotion piece selection dialog
+function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol, isVsComputer)
+    -- Close existing promotion dialog
+    if DeltaChess.frames.promotionDialog and DeltaChess.frames.promotionDialog:IsShown() then
+        DeltaChess.frames.promotionDialog:Hide()
+    end
+
+    local board = frame.board
+    local playerColor = board.currentTurn
+    local pieceSize = 50
+
+    if not DeltaChess.frames.promotionDialog then
+        local dialog = CreateFrame("Frame", "ChessPromotionDialog", UIParent, "BasicFrameTemplateWithInset")
+        dialog:SetSize(pieceSize * 4 + 50, pieceSize + 70)
+        dialog:SetPoint("CENTER")
+        dialog:SetMovable(false)
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(200)
+        dialog.TitleText:SetText("Promote pawn to:")
+
+        local pieceTypes = {"queen", "rook", "bishop", "knight"}
+        for i, pieceType in ipairs(pieceTypes) do
+            local btn = CreateFrame("Button", nil, dialog)
+            btn:SetSize(pieceSize, pieceSize)
+            btn:SetPoint("LEFT", dialog, "LEFT", 15 + (i - 1) * (pieceSize + 5), -45)
+
+            local tex = btn:CreateTexture(nil, "BACKGROUND")
+            tex:SetAllPoints()
+            tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            btn.texture = tex
+
+            local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 1, 1, 0.3)
+            btn:SetHighlightTexture(hl)
+
+            dialog["pieceBtn_" .. pieceType] = btn
+        end
+
+        DeltaChess.frames.promotionDialog = dialog
+    end
+
+    local dialog = DeltaChess.frames.promotionDialog
+    local pieceTypes = {"queen", "rook", "bishop", "knight"}
+    local textures = PIECE_TEXTURES[playerColor]
+
+    for _, pieceType in ipairs(pieceTypes) do
+        local btn = dialog["pieceBtn_" .. pieceType]
+        btn.texture:SetTexture(textures[pieceType])
+        btn:SetScript("OnClick", function()
+            dialog:Hide()
+
+            -- Clear selection
+            frame.selectedSquare = nil
+            frame.validMoves = {}
+            for r = 1, 8 do
+                for c = 1, 8 do
+                    frame.squares[r][c].highlight:Hide()
+                    frame.squares[r][c].validMove:Hide()
+                end
+            end
+
+            if isVsComputer then
+                board:MakeMove(fromRow, fromCol, toRow, toCol, pieceType)
+                DeltaChess.UI:UpdateBoard(frame)
+                if board.gameStatus ~= "active" then
+                    DeltaChess.UI:ShowGameEnd(frame)
+                    return
+                end
+                DeltaChess.AI:MakeMove(frame.gameId, 0.5)
+            else
+                DeltaChess:SendMoveWithConfirmation(frame.gameId, fromRow, fromCol, toRow, toCol, pieceType)
+            end
+        end)
+    end
+
+    dialog:Show()
+end
+
 -- Handle square click
 function DeltaChess.UI:OnSquareClick(frame, row, col)
     local board = frame.board
@@ -992,6 +1071,19 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
         
         if isValidMove then
             local fromRow, fromCol = frame.selectedSquare.row, frame.selectedSquare.col
+            local clickedMove = nil
+            for _, m in ipairs(frame.validMoves) do
+                if m.row == row and m.col == col then
+                    clickedMove = m
+                    break
+                end
+            end
+
+            -- Promotion move: show piece selection first
+            if clickedMove and clickedMove.promotion then
+                DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, row, col, game.isVsComputer)
+                return
+            end
             
             -- Handle based on game type
             if game.isVsComputer then
