@@ -101,6 +101,45 @@ function DeltaChess:GenerateGameId()
     return string.format("%s_%d_%s", UnitName("player"), time(), uuid)
 end
 
+-- Compact challenge serialization (within 255-byte addon message limit)
+local function escapeForLua(s)
+    return (tostring(s or ""):gsub("\\", "\\\\"):gsub('"', '\\"'))
+end
+
+function DeltaChess:SerializeChallenge(gs)
+    return string.format('{g="%s",c="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s"}',
+        escapeForLua(gs.gameId),
+        escapeForLua(gs.challenger),
+        escapeForLua(gs.opponent),
+        gs.challengerColor or "random",
+        tostring(gs.useClock or false),
+        gs.timeMinutes or 10,
+        gs.incrementSeconds or 0,
+        gs.challengerTimestamp or 0,
+        escapeForLua(gs.challengerClass))
+end
+
+function DeltaChess:DeserializeChallenge(str)
+    local ok, result = pcall(function()
+        local fn, err = loadstring("return " .. str)
+        if not fn then error(err or "parse failed") end
+        local t = fn()
+        if not t then return nil end
+        return {
+            gameId = t.g,
+            challenger = t.c,
+            opponent = t.o,
+            challengerColor = t.cc,
+            useClock = t.uc,
+            timeMinutes = t.tm,
+            incrementSeconds = t.inc,
+            challengerTimestamp = t.ct,
+            challengerClass = t.ccl
+        }
+    end)
+    return ok and result, ok and result or nil
+end
+
 -- Send challenge to another player
 function DeltaChess:SendChallenge(gameSettings)
     -- Generate game ID upfront so both sides use the same ID
@@ -111,7 +150,7 @@ function DeltaChess:SendChallenge(gameSettings)
     local _, challengerClass = UnitClass("player")
     gameSettings.challengerClass = challengerClass
     
-    local data = DeltaChess:Serialize(gameSettings)
+    local data = self:SerializeChallenge(gameSettings)
     
     self:SendCommMessage("ChessChallenge", data, "WHISPER", gameSettings.opponent)
     
@@ -124,8 +163,8 @@ end
 -- Handle received addon message
 function DeltaChess:OnCommReceived(prefix, message, channel, sender)
     if prefix == "ChessChallenge" then
-        local success, data = self:Deserialize(message)
-        if not success then 
+        local success, data = self:DeserializeChallenge(message)
+        if not success or not data then 
             self:Print("Failed to parse challenge from " .. sender)
             return 
         end
@@ -155,7 +194,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         
     elseif prefix == "ChessResponse" then
         local success, data = self:Deserialize(message)
-        if not success then return end
+        if not success or not data then return end
         
         if data.accepted then
             self:Print(sender .. " accepted your challenge!")
@@ -214,19 +253,19 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         
     elseif prefix == "ChessMove" then
         local success, data = self:Deserialize(message)
-        if not success then return end
+        if not success or not data then return end
         
         self:HandleOpponentMove(data, sender)
         
     elseif prefix == "ChessResign" then
         local success, data = self:Deserialize(message)
-        if not success then return end
+        if not success or not data then return end
         
         self:HandleResignation(data.gameId, sender)
         
     elseif prefix == "ChessDraw" then
         local success, data = self:Deserialize(message)
-        if not success then return end
+        if not success or not data then return end
         
         if data.offer then
             StaticPopup_Show("CHESS_DRAW_OFFER", nil, nil, data.gameId)
@@ -238,7 +277,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         
     elseif prefix == "ChessAck" then
         local success, data = self:Deserialize(message)
-        if not success then return end
+        if not success or not data then return end
         
         self:HandleAckReceived(data.messageId, sender)
     end

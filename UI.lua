@@ -945,11 +945,15 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
 
     local board = frame.board
     local playerColor = board.currentTurn
-    local pieceSize = 50
+    local pieceSize = 36
+    local padding = 8
+    local btnSpacing = 6
+    local dialogWidth = (pieceSize + padding * 2) * 4 + btnSpacing * 3 + 30
+    local dialogHeight = pieceSize + padding * 2 + 70
 
     if not DeltaChess.frames.promotionDialog then
         local dialog = CreateFrame("Frame", "ChessPromotionDialog", UIParent, "BasicFrameTemplateWithInset")
-        dialog:SetSize(pieceSize * 4 + 50, pieceSize + 70)
+        dialog:SetSize(dialogWidth, dialogHeight)
         dialog:SetPoint("CENTER")
         dialog:SetMovable(false)
         dialog:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -959,17 +963,24 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
         local pieceTypes = {"queen", "rook", "bishop", "knight"}
         for i, pieceType in ipairs(pieceTypes) do
             local btn = CreateFrame("Button", nil, dialog)
-            btn:SetSize(pieceSize, pieceSize)
-            btn:SetPoint("LEFT", dialog, "LEFT", 15 + (i - 1) * (pieceSize + 5), -45)
+            btn:SetSize(pieceSize + padding * 2, pieceSize + padding * 2)
+            btn:SetPoint("LEFT", dialog, "LEFT", 15 + (i - 1) * (pieceSize + padding * 2 + btnSpacing), -45)
 
-            local tex = btn:CreateTexture(nil, "BACKGROUND")
-            tex:SetAllPoints()
+            -- Light background so black pieces are visible
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(0.85, 0.8, 0.7, 1)
+            btn.bg = bg
+
+            local tex = btn:CreateTexture(nil, "ARTWORK")
+            tex:SetSize(pieceSize, pieceSize)
+            tex:SetPoint("CENTER")
             tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             btn.texture = tex
 
             local hl = btn:CreateTexture(nil, "HIGHLIGHT")
             hl:SetAllPoints()
-            hl:SetColorTexture(1, 1, 1, 0.3)
+            hl:SetColorTexture(1, 1, 1, 0.4)
             btn:SetHighlightTexture(hl)
 
             dialog["pieceBtn_" .. pieceType] = btn
