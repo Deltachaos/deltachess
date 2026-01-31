@@ -274,28 +274,32 @@ function DeltaChess.Board:GetKingMoves(row, col, color)
         end
     end
     
-    -- Castling
+    -- Castling (king cannot pass through or land on a square attacked by the opponent)
     if not self:IsInCheck(color) then
         if color == "white" and not self.whiteKingMoved then
-            -- Kingside
+            -- Kingside: king moves e1->f1->g1; f1 and g1 must not be under attack
             if not self.whiteRookKingsideMoved and
-               not self:GetPiece(1, 6) and not self:GetPiece(1, 7) then
+               not self:GetPiece(1, 6) and not self:GetPiece(1, 7) and
+               not self:IsSquareUnderAttack(1, 6, color) and not self:IsSquareUnderAttack(1, 7, color) then
                 table.insert(moves, {row = 1, col = 7, castle = "kingside"})
             end
-            -- Queenside
+            -- Queenside: king moves e1->d1->c1; d1 and c1 must not be under attack
             if not self.whiteRookQueensideMoved and
-               not self:GetPiece(1, 2) and not self:GetPiece(1, 3) and not self:GetPiece(1, 4) then
+               not self:GetPiece(1, 2) and not self:GetPiece(1, 3) and not self:GetPiece(1, 4) and
+               not self:IsSquareUnderAttack(1, 4, color) and not self:IsSquareUnderAttack(1, 3, color) then
                 table.insert(moves, {row = 1, col = 3, castle = "queenside"})
             end
         elseif color == "black" and not self.blackKingMoved then
-            -- Kingside
+            -- Kingside: king moves e8->f8->g8; f8 and g8 must not be under attack
             if not self.blackRookKingsideMoved and
-               not self:GetPiece(8, 6) and not self:GetPiece(8, 7) then
+               not self:GetPiece(8, 6) and not self:GetPiece(8, 7) and
+               not self:IsSquareUnderAttack(8, 6, color) and not self:IsSquareUnderAttack(8, 7, color) then
                 table.insert(moves, {row = 8, col = 7, castle = "kingside"})
             end
-            -- Queenside
+            -- Queenside: king moves e8->d8->c8; d8 and c8 must not be under attack
             if not self.blackRookQueensideMoved and
-               not self:GetPiece(8, 2) and not self:GetPiece(8, 3) and not self:GetPiece(8, 4) then
+               not self:GetPiece(8, 2) and not self:GetPiece(8, 3) and not self:GetPiece(8, 4) and
+               not self:IsSquareUnderAttack(8, 4, color) and not self:IsSquareUnderAttack(8, 3, color) then
                 table.insert(moves, {row = 8, col = 3, castle = "queenside"})
             end
         end
@@ -320,6 +324,25 @@ function DeltaChess.Board:WouldBeInCheck(fromRow, fromCol, toRow, toCol, color)
     self.squares[toRow][toCol] = capturedPiece
     
     return inCheck
+end
+
+-- Check if a square is under attack by the opponent
+function DeltaChess.Board:IsSquareUnderAttack(row, col, color)
+    local opponentColor = color == "white" and "black" or "white"
+    for r = 1, 8 do
+        for c = 1, 8 do
+            local piece = self:GetPiece(r, c)
+            if piece and piece.color == opponentColor then
+                local moves = self:GetPseudoLegalMoves(r, c, piece)
+                for _, move in ipairs(moves) do
+                    if move.row == row and move.col == col then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
 end
 
 -- Check if king is in check
