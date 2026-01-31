@@ -163,6 +163,22 @@ function DeltaChess.AI:GetAllMoves(board, color)
     return moves
 end
 
+-- Order moves for alpha-beta (captures first via MVV-LVA, then non-captures)
+function DeltaChess.AI:OrderMoves(board, moves, color)
+    local function moveScore(m)
+        local captured = board:GetPiece(m.toRow, m.toCol)
+        local mover = board:GetPiece(m.fromRow, m.fromCol)
+        if captured then
+            local victimVal = PIECE_VALUES[captured.type] or 100
+            local attackerVal = PIECE_VALUES[mover and mover.type or "pawn"] or 100
+            return 10000 + victimVal * 10 - attackerVal
+        end
+        return 0
+    end
+    table.sort(moves, function(a, b) return moveScore(a) > moveScore(b) end)
+    return moves
+end
+
 -- Make a temporary move and return state for undo
 function DeltaChess.AI:MakeTemporaryMove(board, move)
     local piece = board:GetPiece(move.fromRow, move.fromCol)
@@ -198,7 +214,7 @@ function DeltaChess.AI:UndoTemporaryMove(board, move, state)
     board.squares[move.toRow][move.toCol] = state.captured
 end
 
--- Minimax with alpha-beta pruning (synchronous, full search)
+-- Minimax with alpha-beta pruning, move ordering for efficiency
 function DeltaChess.AI:Minimax(board, depth, alpha, beta, maximizingPlayer)
     if depth == 0 then
         return self:EvaluateBoard(board), nil
@@ -206,6 +222,7 @@ function DeltaChess.AI:Minimax(board, depth, alpha, beta, maximizingPlayer)
     
     local color = maximizingPlayer and "white" or "black"
     local moves = self:GetAllMoves(board, color)
+    self:OrderMoves(board, moves, color)
     
     if #moves == 0 then
         if board:IsInCheck(color) then
@@ -248,97 +265,108 @@ function DeltaChess.AI:Minimax(board, depth, alpha, beta, maximizingPlayer)
     end
 end
 
--- Map ELO (100-2500) to search depth and mistake chance
+-- Map ELO (100-2500) to search depth and mistake chance (cap depth 4 for performance)
 local function eloToParams(difficulty)
     local elo = math.max(100, math.min(2500, tonumber(difficulty) or 1200))
-    local depth = math.min(5, math.max(1, math.floor(1 + (elo - 100) / 600)))
+    local depth = math.min(4, math.max(1, math.floor(1 + (elo - 100) / 650)))
     local mistakeChance = math.max(0, 0.55 - (elo - 100) / 4500)
     return depth, mistakeChance
 end
 
--- Async: evaluate root moves one-by-one, yield between each to allow rendering
+-- Move best move to front of list (for iterative deepening PV ordering)
+local function putFirst(moves, bestMove)
+    if not bestMove then return moves end
+    for i, m in ipairs(moves) do
+        if m.fromRow == bestMove.fromRow and m.fromCol == bestMove.fromCol and
+           m.toRow == bestMove.toRow and m.toCol == bestMove.toCol then
+            table.remove(moves, i)
+            table.insert(moves, 1, m)
+            break
+        end
+    end
+    return moves
+end
+
+-- Async: iterative deepening, move ordering, yield between root moves
 function DeltaChess.AI:GetBestMoveAsync(board, color, difficulty, onComplete)
-    local depth, mistakeChance = eloToParams(difficulty or 1200)
+    local maxDepth, mistakeChance = eloToParams(difficulty or 1200)
     local maximizing = (color == "white")
-    local moves = self:GetAllMoves(board, color)
+    local bestMoveSoFar = nil
     
-    if #moves == 0 then
-        onComplete(nil)
-        return
-    end
-    
-    local bestMove, bestEval = moves[1], maximizing and -math.huge or math.huge
-    local alpha, beta = -math.huge, math.huge
-    local moveIdx = 0
-    
-    local allEvals = {}  -- for mistake injection: {move, eval}
-    
-    local function evaluateNextMove()
-        moveIdx = moveIdx + 1
-        if moveIdx > #moves then
-            local finalMove = bestMove
-            if mistakeChance > 0 and math.random() < mistakeChance and #allEvals > 1 then
-                table.sort(allEvals, function(a, b)
-                    if not a then return false end
-                    if not b then return true end
-                    local ea, eb = a.eval or 0, b.eval or 0
-                    return maximizing and ea > eb or ea < eb
-                end)
-                local worseStart = math.floor(#allEvals / 2) + 1
-                local idx = math.random(worseStart, #allEvals)
-                finalMove = allEvals[idx] and allEvals[idx].move or bestMove
-            end
-            onComplete(finalMove)
+    local function searchDepth(currentDepth)
+        local moves = DeltaChess.AI:GetAllMoves(board, color)
+        if #moves == 0 then
+            onComplete(nil)
             return
         end
         
-        local move = moves[moveIdx]
-        local state = DeltaChess.AI:MakeTemporaryMove(board, move)
-        local eval
-        if depth <= 1 then
-            eval = DeltaChess.AI:EvaluateBoard(board)
-        else
-            eval = DeltaChess.AI:Minimax(board, depth - 1, alpha, beta, not maximizing)
-        end
-        DeltaChess.AI:UndoTemporaryMove(board, move, state)
+        DeltaChess.AI:OrderMoves(board, moves, color)
+        putFirst(moves, bestMoveSoFar)
         
-        table.insert(allEvals, {move = move, eval = eval})
+        local bestMove, bestEval = nil, maximizing and -math.huge or math.huge
+        local alpha, beta = -math.huge, math.huge
+        local allEvals = {}
+        local moveIdx = 0
         
-        if maximizing then
-            if eval > bestEval then
-                bestEval = eval
-                bestMove = move
+        local function evalNext()
+            moveIdx = moveIdx + 1
+            if moveIdx > #moves then
+                if bestMove and mistakeChance > 0 and math.random() < mistakeChance and #allEvals > 1 then
+                    table.sort(allEvals, function(a, b)
+                        if not a or not b then return (a and not b) end
+                        local ea, eb = a.eval or 0, b.eval or 0
+                        return maximizing and ea > eb or ea < eb
+                    end)
+                    local worseStart = math.floor(#allEvals / 2) + 1
+                    local idx = math.random(worseStart, #allEvals)
+                    bestMove = allEvals[idx] and allEvals[idx].move or bestMove
+                end
+                bestMoveSoFar = bestMove
+                if currentDepth >= maxDepth then
+                    onComplete(bestMoveSoFar)
+                    return
+                end
+                C_Timer.After(getYieldDelayMs() / 1000, function() searchDepth(currentDepth + 1) end)
+                return
             end
-            alpha = math.max(alpha, eval)
-        else
-            if eval < bestEval then
-                bestEval = eval
-                bestMove = move
+            
+            local move = moves[moveIdx]
+            local state = DeltaChess.AI:MakeTemporaryMove(board, move)
+            local eval
+            if currentDepth <= 1 then
+                eval = DeltaChess.AI:EvaluateBoard(board)
+            else
+                eval = DeltaChess.AI:Minimax(board, currentDepth - 1, alpha, beta, not maximizing)
             end
-            beta = math.min(beta, eval)
+            DeltaChess.AI:UndoTemporaryMove(board, move, state)
+            
+            table.insert(allEvals, {move = move, eval = eval})
+            
+            if maximizing then
+                if eval > bestEval then bestEval = eval; bestMove = move end
+                alpha = math.max(alpha, eval)
+            else
+                if eval < bestEval then bestEval = eval; bestMove = move end
+                beta = math.min(beta, eval)
+            end
+            
+            if beta <= alpha then
+                bestMoveSoFar = bestMove
+                if currentDepth >= maxDepth then
+                    onComplete(bestMoveSoFar)
+                    return
+                end
+                C_Timer.After(getYieldDelayMs() / 1000, function() searchDepth(currentDepth + 1) end)
+                return
+            end
+            
+            C_Timer.After(getYieldDelayMs() / 1000, evalNext)
         end
         
-        if beta <= alpha then
-            local finalMove = bestMove
-            if mistakeChance > 0 and math.random() < mistakeChance and #allEvals > 1 then
-                table.sort(allEvals, function(a, b)
-                    if not a then return false end
-                    if not b then return true end
-                    local ea, eb = a.eval or 0, b.eval or 0
-                    return maximizing and ea > eb or ea < eb
-                end)
-                local worseStart = math.floor(#allEvals / 2) + 1
-                local idx = math.random(worseStart, #allEvals)
-                finalMove = allEvals[idx] and allEvals[idx].move or bestMove
-            end
-            onComplete(finalMove)
-            return
-        end
-        
-        C_Timer.After(getYieldDelayMs() / 1000, evaluateNextMove)
+        C_Timer.After(getYieldDelayMs() / 1000, evalNext)
     end
     
-    C_Timer.After(getYieldDelayMs() / 1000, evaluateNextMove)
+    C_Timer.After(getYieldDelayMs() / 1000, function() searchDepth(1) end)
 end
 
 -- Make AI move with a small delay for better UX (async search, non-blocking)
