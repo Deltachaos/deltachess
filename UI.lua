@@ -497,7 +497,9 @@ function DeltaChess.UI:UpdateCapturedPieces(container, capturedPieces, capturedC
     
     local xOffset = 0
     for _, piece in ipairs(sorted) do
-        local texturePath = PIECE_TEXTURES[capturedColor] and PIECE_TEXTURES[capturedColor][piece.type]
+        -- Use piece's own color for texture (captured pieces display in their actual color)
+        local pieceColor = piece.color or capturedColor
+        local texturePath = PIECE_TEXTURES[pieceColor] and PIECE_TEXTURES[pieceColor][piece.type]
         if texturePath then
             local tex = getTex()
             tex:ClearAllPoints()
@@ -698,6 +700,7 @@ function DeltaChess:ShowChessBoard(gameId)
     frame.playerColor = playerColor
     frame.myChessColor = myChessColor
     frame.opponentChessColor = opponentChessColor
+    frame.gameEndShown = false  -- Reset so game-end popup can fire for this game
     
     local leftMargin = 10
     local topOffset = -30
@@ -824,6 +827,7 @@ function DeltaChess:ShowChessBoard(gameId)
     historyText:SetSpacing(2)
     frame.historyText = historyText
     frame.historyScrollChild = historyScrollChild
+    frame.historyScroll = historyScroll
     
     -- Turn indicator
     local turnLabel = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -1083,10 +1087,11 @@ function DeltaChess.UI:UpdateBoard(frame)
             frame.opponentThinkTime:Show()
         end
         
-        -- Refresh thinking time every second while game is active (not when paused)
-        if game.status == "active" and not game.pausedByClose and frame:IsShown() then
+        -- Refresh thinking time every second while game is active (not when paused or ended)
+        if game.status == "active" and board.gameStatus == "active" and not game.pausedByClose and frame:IsShown() then
             C_Timer.After(1, function()
-                if frame.game and frame.gameId and DeltaChess.UI.activeFrame == frame and frame:IsShown() then
+                if frame.game and frame.gameId and DeltaChess.UI.activeFrame == frame and frame:IsShown() 
+                   and frame.board.gameStatus == "active" then
                     DeltaChess.UI:UpdateBoard(frame)
                 end
             end)
@@ -1110,6 +1115,14 @@ function DeltaChess.UI:UpdateBoard(frame)
     
     if frame.historyText then
         frame.historyText:SetText(historyStr)
+        -- Size scroll child to text so scroll range is correct, then scroll to bottom
+        local textHeight = frame.historyText:GetStringHeight()
+        if frame.historyScrollChild then
+            frame.historyScrollChild:SetHeight(math.max(100, textHeight))
+        end
+        if frame.historyScroll then
+            frame.historyScroll:SetVerticalScroll(frame.historyScroll:GetVerticalScrollRange())
+        end
     end
     
     -- Disable resign/draw when game is over
@@ -1119,6 +1132,9 @@ function DeltaChess.UI:UpdateBoard(frame)
         end
         if frame.drawButton and not game.isVsComputer then
             frame.drawButton:Disable()
+        end
+        if frame.closeButton then
+            frame.closeButton:Disable()
         end
     end
     
@@ -1487,6 +1503,18 @@ end
 
 -- Show game end screen
 function DeltaChess.UI:ShowGameEnd(frame)
+    -- Prevent showing multiple times
+    if frame.gameEndShown then
+        return
+    end
+    frame.gameEndShown = true
+    
+    -- Stop the clock ticker immediately
+    if frame.clockTicker then
+        frame.clockTicker:Cancel()
+        frame.clockTicker = nil
+    end
+    
     local board = frame.board
     local game = frame.game
     local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
@@ -1539,6 +1567,11 @@ StaticPopupDialogs["CHESS_GAME_END"] = {
     whileDead = true,
     hideOnEscape = true,
     preferredIndex = 3,
+    OnShow = function(dialog)
+        -- Ensure popup appears above the board (FULLSCREEN_DIALOG level 100)
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(200)
+    end,
 }
 
 -- Draw offer popup
