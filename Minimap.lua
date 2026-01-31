@@ -40,15 +40,6 @@ function DeltaChess.Minimap:Initialize()
     -- Highlight
     minimapButton:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
-    -- "Your turn" glow (shown when it's the player's turn in any game)
-    local yourTurnGlow = minimapButton:CreateTexture(nil, "OVERLAY")
-    yourTurnGlow:SetSize(40, 40)
-    yourTurnGlow:SetPoint("CENTER", 0, 1)
-    yourTurnGlow:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
-    yourTurnGlow:SetVertexColor(0.2, 1, 0.2, 0.9)
-    yourTurnGlow:Hide()
-    minimapButton.yourTurnGlow = yourTurnGlow
-    
     -- Click handler
     minimapButton:SetScript("OnClick", function(self, button)
         if button == "LeftButton" then
@@ -95,6 +86,9 @@ function DeltaChess.Minimap:Initialize()
         if DeltaChess:IsMyTurnInAnyGame() then
             GameTooltip:AddLine("|cFF00FF00Your turn!|r", 1, 1, 1)
         end
+        if DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.dnd then
+            GameTooltip:AddLine("|cFFFF0000Do Not Disturb|r", 1, 1, 1)
+        end
         
         GameTooltip:Show()
     end)
@@ -133,6 +127,8 @@ function DeltaChess.Minimap:Initialize()
     else
         minimapButton:Hide()
     end
+    
+    self:UpdateDNDHighlight()
 
     -- Periodically update "your turn" highlight
     C_Timer.NewTicker(2, function()
@@ -140,14 +136,30 @@ function DeltaChess.Minimap:Initialize()
     end)
 end
 
--- Update minimap button highlight when it's the player's turn
+local ICON_NORMAL = "Interface\\AddOns\\DeltaChess\\Textures\\logo_small"
+local ICON_GREEN  = "Interface\\AddOns\\DeltaChess\\Textures\\logo_green"
+local ICON_RED    = "Interface\\AddOns\\DeltaChess\\Textures\\logo_red"
+
+-- Update minimap icon texture (green = your turn has priority over red = DND)
 function DeltaChess.Minimap:UpdateYourTurnHighlight()
-    if not minimapButton or not minimapButton:IsShown() then return end
-    if DeltaChess:IsMyTurnInAnyGame() then
-        minimapButton.yourTurnGlow:Show()
+    if not minimapButton or not minimapButton.icon then return end
+    if not minimapButton:IsShown() then return end
+    local myTurn = DeltaChess:IsMyTurnInAnyGame()
+    local dnd = DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.dnd
+    local tex
+    if myTurn then
+        tex = ICON_GREEN
+    elseif dnd then
+        tex = ICON_RED
     else
-        minimapButton.yourTurnGlow:Hide()
+        tex = ICON_NORMAL
     end
+    minimapButton.icon:SetTexture(tex)
+end
+
+-- Update minimap highlight (DND); green (your turn) always has priority
+function DeltaChess.Minimap:UpdateDNDHighlight()
+    self:UpdateYourTurnHighlight()
 end
 
 -- Update button position

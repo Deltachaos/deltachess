@@ -17,9 +17,13 @@ local function Initialize()
             games = {},
             history = {},
             settings = {
-                showMinimapButton = true
+                showMinimapButton = true,
+                dnd = false
             }
         }
+    end
+    if ChessDB.settings.dnd == nil then
+        ChessDB.settings.dnd = false
     end
     
     DeltaChess.db = ChessDB
@@ -37,6 +41,7 @@ local function Initialize()
     C_ChatInfo.RegisterAddonMessagePrefix("ChessResign")
     C_ChatInfo.RegisterAddonMessagePrefix("ChessDraw")
     C_ChatInfo.RegisterAddonMessagePrefix("ChessAck")
+    C_ChatInfo.RegisterAddonMessagePrefix("ChessPing")
     
     -- Register for addon messages
     eventFrame:RegisterEvent("CHAT_MSG_ADDON")
@@ -209,6 +214,19 @@ function DeltaChess:ShowMainMenu()
         scrollFrame:SetScrollChild(scrollChild)
         frame.scrollChild = scrollChild
         
+        -- DND checkbox (above bottom buttons)
+        local dndCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+        dndCheck:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 48)
+        dndCheck.text:SetText("Do Not Disturb (no challenge popups)")
+        dndCheck:SetChecked(DeltaChess.db.settings.dnd)
+        dndCheck:SetScript("OnClick", function(self)
+            DeltaChess.db.settings.dnd = self:GetChecked()
+            if DeltaChess.Minimap and DeltaChess.Minimap.UpdateDNDHighlight then
+                DeltaChess.Minimap:UpdateDNDHighlight()
+            end
+        end)
+        frame.dndCheck = dndCheck
+        
         -- Challenge Player button (bottom left)
         local challengeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         challengeBtn:SetSize(170, 30)
@@ -241,6 +259,10 @@ end
 -- Refresh just the main menu content (without showing/hiding window)
 function DeltaChess:RefreshMainMenuContent()
     if not self.frames.mainMenu then return end
+    
+    if self.frames.mainMenu.dndCheck then
+        self.frames.mainMenu.dndCheck:SetChecked(self.db.settings.dnd)
+    end
     
     -- Update history
     local scrollChild = self.frames.mainMenu.scrollChild
@@ -814,6 +836,150 @@ function DeltaChess:GetRecentOpponents()
     return result
 end
 
+-- Get list of past opponent full names (for ping list)
+function DeltaChess:GetPastOpponentsFullNames()
+    local recent = self:GetRecentOpponents()
+    local out = {}
+    local myName = self:GetFullPlayerName(UnitName("player"))
+    for _, opp in ipairs(recent) do
+        if opp.fullName and opp.fullName ~= myName then
+            table.insert(out, opp.fullName)
+        end
+    end
+    return out
+end
+
+-- Get list of online guild member full names
+function DeltaChess:GetGuildOnlineFullNames()
+    local out = {}
+    local myName = self:GetFullPlayerName(UnitName("player"))
+    if not IsInGuild() then return out end
+    C_GuildInfo.GuildRoster()
+    local num = GetNumGuildMembers()
+    for i = 1, num do
+        local name, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
+        if name and online and name ~= myName then
+            local fullName = name:find("-") and name or (name .. "-" .. GetRealmName())
+            table.insert(out, fullName)
+        end
+    end
+    return out
+end
+
+-- Get list of online friend full names (WoW friend list)
+function DeltaChess:GetFriendsOnlineFullNames()
+    local out = {}
+    local myName = self:GetFullPlayerName(UnitName("player"))
+    if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
+        local num = C_FriendList.GetNumFriends()
+        for i = 1, num do
+            local info = C_FriendList.GetFriendInfoByIndex(i)
+            if info and info.name and info.connected and info.name ~= myName then
+                table.insert(out, self:GetFullPlayerName(info.name))
+            end
+        end
+    elseif GetNumFriends and GetFriendInfo then
+        local num = GetNumFriends()
+        for i = 1, num do
+            local name, _, _, _, connected = GetFriendInfo(i)
+            if name and connected and name ~= myName then
+                table.insert(out, self:GetFullPlayerName(name))
+            end
+        end
+    end
+    return out
+end
+
+--------------------------------------------------------------------------------
+-- PLAYER LIST POPUP (online + addon only)
+--------------------------------------------------------------------------------
+function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
+    -- source: "past", "guild", "friends"
+    local candidates = {}
+    if source == "past" then
+        candidates = self:GetPastOpponentsFullNames()
+    elseif source == "guild" then
+        candidates = self:GetGuildOnlineFullNames()
+    elseif source == "friends" then
+        candidates = self:GetFriendsOnlineFullNames()
+    end
+    local myName = self:GetFullPlayerName(UnitName("player"))
+    local filtered = {}
+    for _, name in ipairs(candidates) do
+        if name ~= myName then
+            table.insert(filtered, name)
+        end
+    end
+    candidates = filtered
+
+    local popup = CreateFrame("Frame", nil, parentFrame, "BasicFrameTemplateWithInset")
+    popup:SetSize(320, 380)
+    popup:SetPoint("CENTER", parentFrame, "CENTER", 0, 0)
+    popup:SetFrameStrata("FULLSCREEN_DIALOG")
+    popup:SetFrameLevel(parentFrame:GetFrameLevel() + 50)
+    popup:SetMovable(true)
+    popup:EnableMouse(true)
+    popup:RegisterForDrag("LeftButton")
+    popup:SetScript("OnDragStart", popup.StartMoving)
+    popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
+    local titleMap = { past = "Recent", guild = "Guild", friends = "Friends" }
+    popup.TitleText:SetText(titleMap[source] or "Select Player")
+
+    local statusText = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    statusText:SetPoint("TOPLEFT", popup, "TOPLEFT", 15, -35)
+    statusText:SetText("Checking who has DeltaChess...")
+    popup.statusText = statusText
+
+    local scrollFrame = CreateFrame("ScrollFrame", nil, popup, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", statusText, "BOTTOMLEFT", 0, -8)
+    scrollFrame:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -32, 10)
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetSize(280, 1)
+    scrollFrame:SetScrollChild(scrollChild)
+    popup.scrollChild = scrollChild
+
+    if #candidates == 0 then
+        statusText:SetText("No players to show.")
+        popup:Show()
+        return
+    end
+
+    popup:Show()
+    DeltaChess:PingPlayers(candidates, function(respondedList)
+        statusText:SetText(string.format("%d player(s) with DeltaChess online.", #respondedList))
+        for _, child in ipairs({ scrollChild:GetChildren() }) do
+            child:Hide()
+            child:SetParent(nil)
+        end
+        local y = 0
+        for _, entry in ipairs(respondedList) do
+            local fullName = entry.fullName
+            local dnd = entry.dnd
+            local displayName = fullName:match("^([^%-]+)") or fullName
+            if dnd then
+                displayName = displayName .. " |cFFFF6666(DND)|r"
+            end
+            local btn = CreateFrame("Button", nil, scrollChild)
+            btn:SetSize(260, 24)
+            btn:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -y)
+            btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+            local label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            label:SetPoint("LEFT", btn, "LEFT", 6, 0)
+            label:SetText(displayName)
+            btn:SetScript("OnClick", function()
+                if onSelect then onSelect(fullName) end
+                popup:Hide()
+                popup:SetParent(nil)
+                popup:ClearAllPoints()
+            end)
+            y = y + 26
+        end
+        scrollChild:SetHeight(y)
+        popup:Show()
+    end)
+    popup:Show()
+end
+
 --------------------------------------------------------------------------------
 -- CHALLENGE WINDOW
 --------------------------------------------------------------------------------
@@ -826,7 +992,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     -- Create challenge window if it doesn't exist
     if not self.frames.challengeWindow then
         local frame = CreateFrame("Frame", "ChessChallengeWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(350, 440)
+        frame:SetSize(350, 480)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -839,38 +1005,41 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         
         local yPos = -35
         
-        -- Recent opponents dropdown
-        local recentLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        recentLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        recentLabel:SetText("Recent opponents:")
+        -- Opponent selection buttons
+        local selectLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        selectLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
+        selectLabel:SetText("Select opponent:")
         
-        yPos = yPos - 22
+        yPos = yPos - 24
         
-        local opponentDropdown = CreateFrame("Frame", nil, frame, "UIDropDownMenuTemplate")
-        opponentDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        UIDropDownMenu_SetWidth(opponentDropdown, 280)
-        frame.opponentDropdown = opponentDropdown
-
-        UIDropDownMenu_Initialize(opponentDropdown, function(self, level)
-            local recent = DeltaChess:GetRecentOpponents()
-            if #recent == 0 then
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = "No recent opponents"
-                info.notCheckable = 1
-                info.disabled = 1
-                UIDropDownMenu_AddButton(info)
-            else
-                for _, opp in ipairs(recent) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = opp.displayName
-                    info.func = function()
-                        frame.nameInput:SetText(opp.fullName)
-                        UIDropDownMenu_SetText(opponentDropdown, opp.displayName)
-                    end
-                    info.notCheckable = 1
-                    UIDropDownMenu_AddButton(info)
-                end
-            end
+        local pastBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        pastBtn:SetSize(105, 24)
+        pastBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
+        pastBtn:SetText("Recent")
+        pastBtn:SetScript("OnClick", function()
+            DeltaChess:ShowPlayerListPopup("past", frame, function(fullName)
+                frame.nameInput:SetText(fullName)
+            end)
+        end)
+        
+        local guildBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        guildBtn:SetSize(105, 24)
+        guildBtn:SetPoint("LEFT", pastBtn, "RIGHT", 5, 0)
+        guildBtn:SetText("Guild")
+        guildBtn:SetScript("OnClick", function()
+            DeltaChess:ShowPlayerListPopup("guild", frame, function(fullName)
+                frame.nameInput:SetText(fullName)
+            end)
+        end)
+        
+        local friendsBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        friendsBtn:SetSize(105, 24)
+        friendsBtn:SetPoint("LEFT", guildBtn, "RIGHT", 5, 0)
+        friendsBtn:SetText("Friends")
+        friendsBtn:SetScript("OnClick", function()
+            DeltaChess:ShowPlayerListPopup("friends", frame, function(fullName)
+                frame.nameInput:SetText(fullName)
+            end)
         end)
         
         yPos = yPos - 38
@@ -1068,15 +1237,6 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     self.frames.challengeWindow.clockCheck:SetChecked(false)
     self.frames.challengeWindow.timeSlider:SetValue(10)
     self.frames.challengeWindow.incSlider:SetValue(0)
-
-    -- Update dropdown display
-    local dropdown = self.frames.challengeWindow.opponentDropdown
-    if targetPlayer then
-        local displayName = targetPlayer:match("^([^%-]+)") or targetPlayer
-        UIDropDownMenu_SetText(dropdown, displayName)
-    else
-        UIDropDownMenu_SetText(dropdown, "Select recent opponent...")
-    end
     
     -- Update color buttons
     local frame = self.frames.challengeWindow

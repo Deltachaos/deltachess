@@ -160,13 +160,95 @@ function DeltaChess:SendChallenge(gameSettings)
     self.pendingChallenge = gameSettings
 end
 
+-- Ping: track pending pings (sender -> { callback, timer })
+DeltaChess.pendingPings = {}
+DeltaChess.PING_TIMEOUT = 3
+
+-- Reply to ping so others can detect we have the addon (include DND status)
+function DeltaChess:ReplyToPing(sender)
+    local msg = (self.db.settings.dnd and "PONG:DND") or "PONG"
+    self:SendCommMessage("ChessPing", msg, "WHISPER", sender)
+end
+
+-- Ping a single player; callback(hasAddon, isDND) after reply or timeout
+function DeltaChess:PingPlayer(targetName, callback)
+    if not targetName or targetName == "" then
+        if callback then callback(false, false) end
+        return
+    end
+    local myName = self:GetFullPlayerName(UnitName("player"))
+    if targetName == myName then
+        if callback then callback(true, self.db.settings.dnd) end
+        return
+    end
+    if self.pendingPings[targetName] then
+        if callback then callback(false, false) end
+        return
+    end
+    self.pendingPings[targetName] = { callback = callback, answered = false }
+    self:SendCommMessage("ChessPing", "PING", "WHISPER", targetName)
+    C_Timer.After(self.PING_TIMEOUT, function()
+        local pending = self.pendingPings[targetName]
+        self.pendingPings[targetName] = nil
+        if pending and not pending.answered and pending.callback then
+            pending.callback(false, false)
+        end
+    end)
+end
+
+-- Ping multiple players; callback(respondedList) after timeout. respondedList = array of { fullName, dnd }.
+function DeltaChess:PingPlayers(listOfNames, callback)
+    if not listOfNames or #listOfNames == 0 then
+        if callback then callback({}) end
+        return
+    end
+    local responded = {}
+    local expected = #listOfNames
+    local done = 0
+    local function checkDone()
+        done = done + 1
+        if done >= expected and callback then
+            callback(responded)
+        end
+    end
+    for _, name in ipairs(listOfNames) do
+        self:PingPlayer(name, function(hasAddon, isDND)
+            if hasAddon then
+                table.insert(responded, { fullName = name, dnd = isDND })
+            end
+            checkDone()
+        end)
+    end
+end
+
 -- Handle received addon message
 function DeltaChess:OnCommReceived(prefix, message, channel, sender)
+    if prefix == "ChessPing" then
+        if message == "PING" then
+            self:ReplyToPing(sender)
+        elseif message == "PONG" or message == "PONG:DND" then
+            local pending = self.pendingPings[sender]
+            self.pendingPings[sender] = nil
+            if pending then
+                pending.answered = true
+                local isDND = (message == "PONG:DND")
+                if pending.callback then pending.callback(true, isDND) end
+            end
+        end
+        return
+    end
     if prefix == "ChessChallenge" then
         local success, data = self:DeserializeChallenge(message)
         if not success or not data then 
             self:Print("Failed to parse challenge from " .. sender)
             return 
+        end
+        
+        -- Do Not Disturb: auto-decline and do not show popup
+        if self.db.settings.dnd then
+            local response = { accepted = false }
+            self:SendCommMessage("ChessResponse", self:Serialize(response), "WHISPER", sender)
+            return
         end
         
         -- Build settings text for popup
