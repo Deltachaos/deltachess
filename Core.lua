@@ -42,6 +42,8 @@ local function Initialize()
     C_ChatInfo.RegisterAddonMessagePrefix("ChessDraw")
     C_ChatInfo.RegisterAddonMessagePrefix("ChessAck")
     C_ChatInfo.RegisterAddonMessagePrefix("ChessPing")
+    C_ChatInfo.RegisterAddonMessagePrefix("ChessPause")
+    C_ChatInfo.RegisterAddonMessagePrefix("ChessUnpause")
     
     -- Register for addon messages
     eventFrame:RegisterEvent("CHAT_MSG_ADDON")
@@ -325,13 +327,16 @@ function DeltaChess:RefreshMainMenuContent()
             isPlayerTurn = (currentTurn == playerColor)
         end
         
+        local gameStatus = game.status or "active"
+        local isPaused = (gameStatus == "paused")
+        local windowShown = DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame:IsShown()
         table.insert(allGames, {
             id = gameId,
             white = game.white,
             black = game.black,
             whiteClass = game.whiteClass,
             blackClass = game.blackClass,
-            status = "active",
+            status = gameStatus,
             startTime = game.startTime,
             isVsComputer = game.isVsComputer,
             moveCount = game.board and #game.board.moves or 0,
@@ -339,7 +344,9 @@ function DeltaChess:RefreshMainMenuContent()
             isPlayerTurn = isPlayerTurn,
             playerColor = playerColor,
             settings = game.settings,
-            computerDifficulty = game.computerDifficulty
+            computerDifficulty = game.computerDifficulty,
+            pausedByClose = game.pausedByClose,
+            windowShown = windowShown
         })
     end
     
@@ -388,8 +395,10 @@ function DeltaChess:RefreshMainMenuContent()
             -- Background
             local bg = entry:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints()
-            if game.status == "active" then
-                if game.isPlayerTurn then
+            if game.status == "active" or game.status == "paused" then
+                if game.status == "paused" then
+                    bg:SetColorTexture(0.2, 0.2, 0.0, 0.7) -- Yellow tint - paused
+                elseif game.isPlayerTurn then
                     bg:SetColorTexture(0.0, 0.3, 0.0, 0.7) -- Bright green - your turn
                 else
                     bg:SetColorTexture(0.1, 0.15, 0.1, 0.6) -- Dim green - waiting
@@ -446,9 +455,13 @@ function DeltaChess:RefreshMainMenuContent()
             local statusText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             statusText:SetPoint("TOPLEFT", settingsText, "BOTTOMLEFT", 0, -1)
             
-            if game.status == "active" then
-                local turnText = game.isPlayerTurn and "|cFF00FF00YOUR TURN|r" or "|cFFFFFF00Waiting...|r"
-                statusText:SetText(string.format("%s - %d moves", turnText, game.moveCount))
+            if game.status == "active" or game.status == "paused" then
+                if game.status == "paused" then
+                    statusText:SetText("|cFFFFFF00Paused|r - " .. game.moveCount .. " moves")
+                else
+                    local turnText = game.isPlayerTurn and "|cFF00FF00YOUR TURN|r" or "|cFFFFFF00Waiting...|r"
+                    statusText:SetText(string.format("%s - %d moves", turnText, game.moveCount))
+                end
             else
                 local resultColor = "|cFFFFFFFF"
                 if game.result == "won" then
@@ -462,15 +475,35 @@ function DeltaChess:RefreshMainMenuContent()
             end
             
             -- Buttons
-            if game.status == "active" then
+            if game.status == "active" or game.status == "paused" then
+                local isPaused = (game.status == "paused")
+                local isHumanWindowHidden = not game.isVsComputer and not game.windowShown
+                local btnText, btnAction
+                if isPaused and not game.isVsComputer then
+                    btnText = "Resume"
+                    btnAction = function()
+                        self.frames.mainMenu:Hide()
+                        DeltaChess:RequestUnpause(game.id)
+                        DeltaChess:ShowChessBoard(game.id)
+                    end
+                elseif isHumanWindowHidden and not isPaused then
+                    btnText = "Open"
+                    btnAction = function()
+                        self.frames.mainMenu:Hide()
+                        DeltaChess:ShowChessBoard(game.id)
+                    end
+                else
+                    btnText = "Resume"
+                    btnAction = function()
+                        self.frames.mainMenu:Hide()
+                        DeltaChess:ShowChessBoard(game.id)
+                    end
+                end
                 local resumeBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
                 resumeBtn:SetSize(60, 22)
                 resumeBtn:SetPoint("RIGHT", entry, "RIGHT", -5, 0)
-                resumeBtn:SetText("Resume")
-                resumeBtn:SetScript("OnClick", function()
-                    self.frames.mainMenu:Hide()
-                    DeltaChess:ShowChessBoard(game.id)
-                end)
+                resumeBtn:SetText(btnText)
+                resumeBtn:SetScript("OnClick", btnAction)
                 
                 local resignBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
                 resignBtn:SetSize(55, 22)
@@ -1496,6 +1529,58 @@ StaticPopupDialogs["CHESS_CHALLENGE_RECEIVED"] = {
         DeltaChess:DeclineChallenge(data)
     end,
     timeout = 60,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
+    text = "Your opponent wants to pause the game. Do you accept?",
+    button1 = "Accept",
+    button2 = "Decline",
+    OnAccept = function(self, popupData)
+        local game = DeltaChess.db.games[popupData.gameId]
+        if game then
+            game.status = "paused"
+            game.pauseStartTime = time()
+            DeltaChess:SendPauseResponse(popupData.gameId, true)
+            DeltaChess:Print("Game paused.")
+            if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
+                DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+            end
+            DeltaChess:RefreshMainMenuContent()
+        end
+    end,
+    OnCancel = function(self, popupData)
+        DeltaChess:SendPauseResponse(popupData.gameId, false)
+    end,
+    timeout = 30,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
+    text = "Your opponent wants to resume the game. Do you accept?",
+    button1 = "Accept",
+    button2 = "Decline",
+    OnAccept = function(self, popupData)
+        local game = DeltaChess.db.games[popupData.gameId]
+        if game then
+            game.status = "active"
+            game.pauseStartTime = nil
+            DeltaChess:SendUnpauseResponse(popupData.gameId, true)
+            DeltaChess:Print("Game resumed.")
+            if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
+                DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+            end
+            DeltaChess:RefreshMainMenuContent()
+        end
+    end,
+    OnCancel = function(self, popupData)
+        DeltaChess:SendUnpauseResponse(popupData.gameId, false)
+    end,
+    timeout = 30,
     whileDead = true,
     hideOnEscape = true,
     preferredIndex = 3,

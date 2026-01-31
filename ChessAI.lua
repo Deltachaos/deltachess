@@ -313,9 +313,10 @@ function DeltaChess.AI:GetBestMoveAsync(board, color, difficulty, onComplete)
             if moveIdx > #moves then
                 if bestMove and mistakeChance > 0 and math.random() < mistakeChance and #allEvals > 1 then
                     table.sort(allEvals, function(a, b)
-                        if not a or not b then return (a and not b) end
+                        if not a then return false end
+                        if not b then return true end
                         local ea, eb = a.eval or 0, b.eval or 0
-                        return maximizing and ea > eb or ea < eb
+                        return maximizing and (ea > eb) or (not maximizing and ea < eb)
                     end)
                     local worseStart = math.floor(#allEvals / 2) + 1
                     local idx = math.random(worseStart, #allEvals)

@@ -78,8 +78,12 @@ function DeltaChess.UI:CalculateRemainingTime(game, color)
         end
     end
     
-    -- Add time for current thinking if it's this color's turn
+    -- Add time for current thinking if it's this color's turn (not when paused)
     if game.board.currentTurn == color and game.status == "active" then
+        if game._lastMoveCountWhenPaused and #moves > game._lastMoveCountWhenPaused then
+            game.timeSpentClosed = nil
+            game._lastMoveCountWhenPaused = nil
+        end
         local lastMoveTimestamp
         if #moves == 0 then
             lastMoveTimestamp = gameStartTime
@@ -87,6 +91,11 @@ function DeltaChess.UI:CalculateRemainingTime(game, color)
             lastMoveTimestamp = moves[#moves].timestamp or gameStartTime
         end
         local currentThinkTime = time() - lastMoveTimestamp
+        if game.pausedByClose and game.pauseClosedAt then
+            currentThinkTime = math.max(0, game.pauseClosedAt - lastMoveTimestamp)
+        elseif game.timeSpentClosed and game.timeSpentClosed > 0 then
+            currentThinkTime = math.max(0, currentThinkTime - game.timeSpentClosed)
+        end
         timeUsed = timeUsed + math.max(0, currentThinkTime)
     end
     
@@ -104,6 +113,51 @@ function DeltaChess.UI:FormatTime(seconds)
     local mins = math.floor(seconds / 60)
     local secs = seconds % 60
     return string.format("%02d:%02d", mins, secs)
+end
+
+-- Calculate total thinking time for a color (all moves + current if their turn)
+function DeltaChess.UI:CalculateTotalThinkingTime(game, color)
+    if not game then return 0 end
+    local gameStartTime = game.startTime or (game.clockData and game.clockData.gameStartTimestamp) or time()
+    local moves = game.board.moves or {}
+    local totalSec = 0
+    
+    -- Use move.color to attribute each move (prevTimestamp = last move by anyone)
+    local prevTimestamp = gameStartTime
+    for i = 1, #moves do
+        local move = moves[i]
+        local moveColor = (move and move.color) or (i % 2 == 1 and "white" or "black")
+        if move and moveColor == color then
+            if move.thinkTime then
+                totalSec = totalSec + move.thinkTime
+            elseif move.timestamp then
+                totalSec = totalSec + math.max(0, move.timestamp - prevTimestamp)
+            end
+        end
+        if move and move.timestamp then
+            prevTimestamp = move.timestamp
+        end
+    end
+    
+    -- Add current thinking time if it's this color's turn (not when paused)
+    if game.board.currentTurn == color and game.status == "active" then
+        local lastMoveTimestamp = (#moves == 0) and gameStartTime or (moves[#moves].timestamp or gameStartTime)
+        local elapsed = time() - lastMoveTimestamp
+        -- When pausedByClose, freeze at pauseClosedAt; when reopened, subtract time spent closed
+        if game.pausedByClose and game.pauseClosedAt then
+            elapsed = math.max(0, game.pauseClosedAt - lastMoveTimestamp)
+        elseif game.timeSpentClosed and game.timeSpentClosed > 0 then
+            elapsed = math.max(0, elapsed - game.timeSpentClosed)
+        end
+        -- Reset timeSpentClosed when a new move has been made since we paused
+        if game._lastMoveCountWhenPaused and #moves > game._lastMoveCountWhenPaused then
+            game.timeSpentClosed = nil
+            game._lastMoveCountWhenPaused = nil
+        end
+        totalSec = totalSec + elapsed
+    end
+    
+    return totalSec
 end
 
 --------------------------------------------------------------------------------
@@ -166,12 +220,6 @@ function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flip
                 square.checkIndicator:Hide()
             end
             
-            -- Move highlight (for last move / selection)
-            square.moveHighlight = square:CreateTexture(nil, "BORDER")
-            square.moveHighlight:SetAllPoints()
-            square.moveHighlight:SetColorTexture(1, 1, 0, 0.3)
-            square.moveHighlight:Hide()
-            
             -- Highlight texture (for selection) - only for interactive boards
             if interactive then
                 square.highlight = square:CreateTexture(nil, "OVERLAY")
@@ -219,20 +267,31 @@ function DeltaChess.UI:RenderPieces(squares, boardState, lastMove)
             end
             
             -- Hide all highlights first
-            if square.moveHighlight then square.moveHighlight:Hide() end
             if square.checkIndicator then square.checkIndicator:Hide() end
             if square.highlight then square.highlight:Hide() end
             if square.validMove then square.validMove:Hide() end
             
-            -- Show last move highlight
+            -- Last move: highlight via background color (always visible, not covered by pieces)
+            local isLastMoveSquare = false
             if lastMove then
                 local fromRow = lastMove.fromRow or (lastMove.from and lastMove.from.row)
                 local fromCol = lastMove.fromCol or (lastMove.from and lastMove.from.col)
                 local toRow = lastMove.toRow or (lastMove.to and lastMove.to.row)
                 local toCol = lastMove.toCol or (lastMove.to and lastMove.to.col)
-                
-                if (row == fromRow and col == fromCol) or (row == toRow and col == toCol) then
-                    square.moveHighlight:Show()
+                isLastMoveSquare = (row == fromRow and col == fromCol) or (row == toRow and col == toCol)
+            end
+            if isLastMoveSquare then
+                -- Subtle yellow highlight, respecting light/dark squares
+                if square.isLightSquare then
+                    square.bg:SetColorTexture(0.96, 0.94, 0.72, 1)
+                else
+                    square.bg:SetColorTexture(0.72, 0.6, 0.28, 1)
+                end
+            else
+                if square.isLightSquare then
+                    square.bg:SetColorTexture(0.9, 0.9, 0.8, 1)
+                else
+                    square.bg:SetColorTexture(0.6, 0.4, 0.2, 1)
                 end
             end
             
@@ -324,9 +383,9 @@ function DeltaChess.UI:FormatMoveNotation(move)
     local pieceType = move.pieceType or move.piece or "pawn"
     
     local notation = pieceNames[pieceType] or ""
-    notation = notation .. FILE_LABELS[fromCol] .. (9 - fromRow)
+    notation = notation .. FILE_LABELS[fromCol] .. fromRow
     notation = notation .. (move.captured and "x" or "-")
-    notation = notation .. FILE_LABELS[toCol] .. (9 - toRow)
+    notation = notation .. FILE_LABELS[toCol] .. toRow
     return notation
 end
 
@@ -398,50 +457,64 @@ end
 local CAPTURED_PIECE_SIZE = 18
 
 -- Update captured pieces display with small icons
+-- Reuses regions to avoid accumulation and recursive layout updates
 function DeltaChess.UI:UpdateCapturedPieces(container, capturedPieces, capturedColor, advantage)
-    -- Clear existing textures
-    for _, child in ipairs({container:GetRegions()}) do
-        child:Hide()
+    container._capturedTextures = container._capturedTextures or {}
+    container._capturedFontStrings = container._capturedFontStrings or {}
+    local texPool = container._capturedTextures
+    local strPool = container._capturedFontStrings
+    for _, r in ipairs(texPool) do if r and r.Hide then r:Hide() end end
+    for _, r in ipairs(strPool) do if r and r.Hide then r:Hide() end end
+    
+    local texIdx, strIdx = 1, 1
+    local function getTex()
+        local r = texPool[texIdx]
+        if not r then r = container:CreateTexture(nil, "OVERLAY"); texPool[texIdx] = r end
+        texIdx = texIdx + 1
+        return r
+    end
+    local function getStr()
+        local r = strPool[strIdx]
+        if not r then r = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); strPool[strIdx] = r end
+        strIdx = strIdx + 1
+        return r
     end
     
     if not capturedPieces or #capturedPieces == 0 then
-        -- Just show advantage if any
         if advantage and advantage > 0 then
-            local advText = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local advText = getStr()
+            advText:ClearAllPoints()
             advText:SetPoint("LEFT", container, "LEFT", 0, 0)
             advText:SetText("|cFF00FF00+" .. advantage .. "|r")
+            advText:Show()
         end
         return
     end
     
-    -- Sort by value (highest first)
     local sorted = {}
-    for _, piece in ipairs(capturedPieces) do
-        table.insert(sorted, piece)
-    end
-    table.sort(sorted, function(a, b)
-        return (PIECE_VALUES[a.type] or 0) > (PIECE_VALUES[b.type] or 0)
-    end)
+    for _, piece in ipairs(capturedPieces) do table.insert(sorted, piece) end
+    table.sort(sorted, function(a, b) return (PIECE_VALUES[a.type] or 0) > (PIECE_VALUES[b.type] or 0) end)
     
-    -- Create textures for each captured piece
     local xOffset = 0
-    for i, piece in ipairs(sorted) do
-        local texturePath = PIECE_TEXTURES[capturedColor][piece.type]
+    for _, piece in ipairs(sorted) do
+        local texturePath = PIECE_TEXTURES[capturedColor] and PIECE_TEXTURES[capturedColor][piece.type]
         if texturePath then
-            local tex = container:CreateTexture(nil, "OVERLAY")
+            local tex = getTex()
+            tex:ClearAllPoints()
             tex:SetSize(CAPTURED_PIECE_SIZE, CAPTURED_PIECE_SIZE)
             tex:SetPoint("LEFT", container, "LEFT", xOffset, 0)
             tex:SetTexture(texturePath)
             tex:Show()
-            xOffset = xOffset + CAPTURED_PIECE_SIZE - 4 -- Slight overlap for compact display
+            xOffset = xOffset + CAPTURED_PIECE_SIZE - 4
         end
     end
     
-    -- Show advantage after the pieces
     if advantage and advantage > 0 then
-        local advText = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local advText = getStr()
+        advText:ClearAllPoints()
         advText:SetPoint("LEFT", container, "LEFT", xOffset + 5, 0)
         advText:SetText("|cFF00FF00+" .. advantage .. "|r")
+        advText:Show()
     end
 end
 
@@ -483,7 +556,7 @@ function DeltaChess.UI:FormatMoveAlgebraic(move)
     end
     
     -- Destination square
-    notation = notation .. FILE_LABELS[toCol] .. (9 - toRow)
+    notation = notation .. FILE_LABELS[toCol] .. toRow
     
     -- Promotion
     if move.promotion then
@@ -499,6 +572,15 @@ function DeltaChess:ShowChessBoard(gameId)
     if not game then
         self:Print("Game not found!")
         return
+    end
+    
+    -- Resume counting for computer game when opening
+    if game.isVsComputer and game.pausedByClose then
+        if game.pauseClosedAt then
+            game.timeSpentClosed = (game.timeSpentClosed or 0) + (time() - game.pauseClosedAt)
+        end
+        game.pausedByClose = nil
+        game.pauseClosedAt = nil
     end
     
     -- Close existing board if open
@@ -550,6 +632,15 @@ function DeltaChess:ShowChessBoard(gameId)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    -- Pause timer when closing via X (vs computer only)
+    frame:SetScript("OnHide", function(self)
+        local g = self.game
+        if g and g.isVsComputer and g.status == "active" then
+            g.pausedByClose = true
+            g.pauseClosedAt = time()
+            g._lastMoveCountWhenPaused = #g.board.moves
+        end
+    end)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
     frame.TitleText:SetText("DeltaChess")
@@ -584,12 +675,16 @@ function DeltaChess:ShowChessBoard(gameId)
     opponentNameText:SetTextColor(opR, opG, opB)
     opponentNameText:SetText(opponentName:match("^([^%-]+)") or opponentName)
     
-    -- Opponent clock (if enabled)
+    -- Opponent clock (if enabled) or thinking time (when no clock)
     if game.settings.useClock then
         local opponentClock = opponentBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         opponentClock:SetPoint("RIGHT", opponentBar, "RIGHT", -10, 0)
         frame.opponentClock = opponentClock
         frame.opponentClockColor = opponentChessColor
+    else
+        local opponentThinkTime = opponentBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        opponentThinkTime:SetPoint("RIGHT", opponentBar, "RIGHT", -10, 0)
+        frame.opponentThinkTime = opponentThinkTime
     end
     
     -- Opponent captured pieces container (frame for icons)
@@ -634,12 +729,16 @@ function DeltaChess:ShowChessBoard(gameId)
     playerNameText:SetTextColor(plR, plG, plB)
     playerNameText:SetText(myName:match("^([^%-]+)") or myName)
     
-    -- Player clock (if enabled)
+    -- Player clock (if enabled) or thinking time (when no clock)
     if game.settings.useClock then
         local playerClock = playerBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         playerClock:SetPoint("RIGHT", playerBar, "RIGHT", -10, 0)
         frame.playerClock = playerClock
         frame.playerClockColor = myChessColor
+    else
+        local playerThinkTime = playerBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        playerThinkTime:SetPoint("RIGHT", playerBar, "RIGHT", -10, 0)
+        frame.playerThinkTime = playerThinkTime
     end
     
     -- Player captured pieces container (frame for icons)
@@ -717,10 +816,21 @@ function DeltaChess:ShowChessBoard(gameId)
     local closeButton = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
     closeButton:SetSize(buttonWidth, 25)
     closeButton:SetPoint("LEFT", drawButton, "RIGHT", buttonSpacing, 0)
-    closeButton:SetText("Close")
-    closeButton:SetScript("OnClick", function()
-        frame:Hide()
-    end)
+    frame.closeButton = closeButton
+    if game.isVsComputer then
+        closeButton:SetText("Pause")
+        closeButton:SetScript("OnClick", function()
+            game.pausedByClose = true
+            game.pauseClosedAt = time()
+            game._lastMoveCountWhenPaused = #game.board.moves
+            frame:Hide()
+        end)
+    else
+        closeButton:SetText("Pause")
+        closeButton:SetScript("OnClick", function()
+            DeltaChess:RequestPause(gameId)
+        end)
+    end
     
     -- Update the board display
     DeltaChess.UI:UpdateBoard(frame)
@@ -764,6 +874,13 @@ function DeltaChess.UI:UpdateBoard(frame)
     local whiteInCheck = board:IsInCheck("white")
     local blackInCheck = board:IsInCheck("black")
     
+    -- Last move for highlight (from/to squares)
+    local lastMove = board.moves and board.moves[#board.moves] or nil
+    local fromRow = lastMove and (lastMove.fromRow or (lastMove.from and lastMove.from.row))
+    local fromCol = lastMove and (lastMove.fromCol or (lastMove.from and lastMove.from.col))
+    local toRow = lastMove and (lastMove.toRow or (lastMove.to and lastMove.to.row))
+    local toCol = lastMove and (lastMove.toCol or (lastMove.to and lastMove.to.col))
+    
     -- Update squares
     for row = 1, 8 do
         for col = 1, 8 do
@@ -774,6 +891,22 @@ function DeltaChess.UI:UpdateBoard(frame)
             if square.checkIndicator then square.checkIndicator:Hide() end
             if square.highlight then square.highlight:Hide() end
             if square.validMove then square.validMove:Hide() end
+            
+            -- Last move: subtle yellow highlight, respecting light/dark squares
+            local isLastMoveSquare = lastMove and ((row == fromRow and col == fromCol) or (row == toRow and col == toCol))
+            if isLastMoveSquare then
+                if square.isLightSquare then
+                    square.bg:SetColorTexture(0.96, 0.94, 0.72, 1)
+                else
+                    square.bg:SetColorTexture(0.72, 0.6, 0.28, 1)
+                end
+            else
+                if square.isLightSquare then
+                    square.bg:SetColorTexture(0.9, 0.9, 0.8, 1)
+                else
+                    square.bg:SetColorTexture(0.6, 0.4, 0.2, 1)
+                end
+            end
             
             -- Show check indicator on king's square
             if square.checkIndicator then
@@ -796,11 +929,39 @@ function DeltaChess.UI:UpdateBoard(frame)
         end
     end
     
+    -- Restore selection highlight and valid moves (UpdateBoard clears them above)
+    if frame.selectedSquare and frame.validMoves then
+        local row, col = frame.selectedSquare.row, frame.selectedSquare.col
+        if frame.squares[row] and frame.squares[row][col] and frame.squares[row][col].highlight then
+            frame.squares[row][col].highlight:Show()
+            for _, move in ipairs(frame.validMoves) do
+                if frame.squares[move.row] and frame.squares[move.row][move.col] and frame.squares[move.row][move.col].validMove then
+                    frame.squares[move.row][move.col].validMove:Show()
+                end
+            end
+        end
+    end
+    
+    -- Update Pause button state for human games
+    if frame.closeButton and not game.isVsComputer then
+        if game.status == "paused" then
+            frame.closeButton:SetText("Paused")
+            frame.closeButton:Disable()
+        else
+            frame.closeButton:SetText("Pause")
+            frame.closeButton:Enable()
+        end
+    end
+    
     -- Update turn indicator
-    local turn = board.currentTurn
-    local turnColor = turn == "white" and "|cFFFFFFFF" or "|cFF888888"
     if frame.turnLabel then
-        frame.turnLabel:SetText(turnColor .. (turn == "white" and "White" or "Black") .. " to move|r")
+        if game.status == "paused" then
+            frame.turnLabel:SetText("|cFFFFFF00Game Paused|r")
+        else
+            local turn = board.currentTurn
+            local turnColor = turn == "white" and "|cFFFFFFFF" or "|cFF888888"
+            frame.turnLabel:SetText(turnColor .. (turn == "white" and "White" or "Black") .. " to move|r")
+        end
     end
     
     -- Calculate material advantage
@@ -828,7 +989,7 @@ function DeltaChess.UI:UpdateBoard(frame)
             frame.opponentCapturedColor, opponentAdvantage > 0 and opponentAdvantage or nil)
     end
     
-    -- Update clocks
+    -- Update clocks or thinking time
     if game.settings.useClock then
         local whiteTime = DeltaChess.UI:CalculateRemainingTime(game, "white")
         local blackTime = DeltaChess.UI:CalculateRemainingTime(game, "black")
@@ -845,6 +1006,32 @@ function DeltaChess.UI:UpdateBoard(frame)
             local opponentTurn = board.currentTurn == opponentColor
             local timeColor = opponentTurn and "|cFFFFFF00" or "|cFFFFFFFF"
             frame.opponentClock:SetText(timeColor .. DeltaChess.UI:FormatTime(opponentTime) .. "|r")
+        end
+    else
+        -- Show total thinking time for both sides (vs human or computer)
+        local myTotalSec = DeltaChess.UI:CalculateTotalThinkingTime(game, myColor)
+        local opponentTotalSec = DeltaChess.UI:CalculateTotalThinkingTime(game, opponentColor)
+        local myTurn = board.currentTurn == myColor
+        
+        if frame.playerThinkTime then
+            local timeColor = myTurn and "|cFFFFFF00" or "|cFFFFFFFF"
+            frame.playerThinkTime:SetText(timeColor .. DeltaChess.UI:FormatTime(myTotalSec) .. "|r")
+            frame.playerThinkTime:Show()
+        end
+        
+        if frame.opponentThinkTime then
+            local timeColor = not myTurn and "|cFFFFFF00" or "|cFFFFFFFF"
+            frame.opponentThinkTime:SetText(timeColor .. DeltaChess.UI:FormatTime(opponentTotalSec) .. "|r")
+            frame.opponentThinkTime:Show()
+        end
+        
+        -- Refresh thinking time every second while game is active (not when paused)
+        if game.status == "active" and not game.pausedByClose and frame:IsShown() then
+            C_Timer.After(1, function()
+                if frame.game and frame.gameId and DeltaChess.UI.activeFrame == frame and frame:IsShown() then
+                    DeltaChess.UI:UpdateBoard(frame)
+                end
+            end)
         end
     end
     
@@ -1204,7 +1391,7 @@ function DeltaChess.UI:StartClock(frame)
     local opponentColor = frame.opponentChessColor
     
     frame.clockTicker = C_Timer.NewTicker(1, function()
-        if not frame:IsShown() or game.status ~= "active" or board.gameStatus ~= "active" then
+        if not frame:IsShown() or game.status ~= "active" or game.pausedByClose or board.gameStatus ~= "active" then
             if frame.clockTicker then
                 frame.clockTicker:Cancel()
             end

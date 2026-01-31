@@ -362,6 +362,16 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         if not success or not data then return end
         
         self:HandleAckReceived(data.messageId, sender)
+    elseif prefix == "ChessPause" then
+        local success, data = self:Deserialize(message)
+        if not success or not data then return end
+        data.sender = sender
+        self:HandlePauseRequest(data)
+    elseif prefix == "ChessUnpause" then
+        local success, data = self:Deserialize(message)
+        if not success or not data then return end
+        data.sender = sender
+        self:HandleUnpauseRequest(data)
     end
 end
 
@@ -734,6 +744,86 @@ function DeltaChess:TimeOut(gameId, color)
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
         DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+    end
+end
+
+-- Request pause (human vs human)
+function DeltaChess:RequestPause(gameId)
+    local game = self.db.games[gameId]
+    if not game or game.isVsComputer or game.status ~= "active" then return end
+    local opponent = self:GetOpponent(gameId)
+    if not opponent then return end
+    self:SendCommMessage("ChessPause", self:Serialize({ gameId = gameId, accepted = nil }), "WHISPER", opponent)
+    self:Print("Pause request sent to opponent.")
+end
+
+-- Send pause response (accept/decline)
+function DeltaChess:SendPauseResponse(gameId, accepted)
+    local game = self.db.games[gameId]
+    if not game then return end
+    local opponent = self:GetOpponent(gameId)
+    if not opponent then return end
+    self:SendCommMessage("ChessPause", self:Serialize({ gameId = gameId, accepted = accepted }), "WHISPER", opponent)
+end
+
+-- Handle pause request/response
+function DeltaChess:HandlePauseRequest(data)
+    local gameId, sender = data.gameId, data.sender
+    local game = self.db.games[gameId]
+    if not game or game.isVsComputer or game.status ~= "active" then return end
+    if data.accepted == nil then
+        StaticPopup_Show("CHESS_PAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
+    else
+        if data.accepted then
+            game.status = "paused"
+            game.pauseStartTime = time()
+            self:Print("Opponent accepted. Game paused.")
+        else
+            self:Print("Opponent declined the pause request.")
+        end
+        if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+            DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+        end
+    end
+end
+
+-- Request unpause (human vs human)
+function DeltaChess:RequestUnpause(gameId)
+    local game = self.db.games[gameId]
+    if not game or game.isVsComputer or game.status ~= "paused" then return end
+    local opponent = self:GetOpponent(gameId)
+    if not opponent then return end
+    self:SendCommMessage("ChessUnpause", self:Serialize({ gameId = gameId, accepted = nil }), "WHISPER", opponent)
+    self:Print("Unpause request sent to opponent.")
+end
+
+-- Send unpause response
+function DeltaChess:SendUnpauseResponse(gameId, accepted)
+    local game = self.db.games[gameId]
+    if not game then return end
+    local opponent = self:GetOpponent(gameId)
+    if not opponent then return end
+    self:SendCommMessage("ChessUnpause", self:Serialize({ gameId = gameId, accepted = accepted }), "WHISPER", opponent)
+end
+
+-- Handle unpause request/response
+function DeltaChess:HandleUnpauseRequest(data)
+    local gameId, sender = data.gameId, data.sender
+    local game = self.db.games[gameId]
+    if not game or game.isVsComputer or game.status ~= "paused" then return end
+    if data.accepted == nil then
+        StaticPopup_Show("CHESS_UNPAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
+    else
+        if data.accepted then
+            game.status = "active"
+            game.pauseStartTime = nil
+            self:Print("Opponent accepted. Game resumed.")
+        else
+            self:Print("Opponent declined the unpause request.")
+        end
+        if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+            DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+        end
     end
 end
 
