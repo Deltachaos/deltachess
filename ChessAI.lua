@@ -148,23 +148,39 @@ function DeltaChess.AI:GetAllMoves(board, color)
     return moves
 end
 
--- Make a temporary move and return captured piece (for undo)
+-- Make a temporary move and return state for undo
 function DeltaChess.AI:MakeTemporaryMove(board, move)
     local piece = board:GetPiece(move.fromRow, move.fromCol)
     local captured = board:GetPiece(move.toRow, move.toCol)
+    local originalType = piece and piece.type or nil
     
     board.squares[move.toRow][move.toCol] = piece
     board.squares[move.fromRow][move.fromCol] = nil
     
-    return captured
+    -- Handle pawn promotion (always promote to queen for AI evaluation)
+    local wasPromoted = false
+    if piece and piece.type == "pawn" then
+        local promotionRank = piece.color == "white" and 8 or 1
+        if move.toRow == promotionRank then
+            piece.type = "queen"
+            wasPromoted = true
+        end
+    end
+    
+    return { captured = captured, originalType = originalType, wasPromoted = wasPromoted }
 end
 
 -- Undo a temporary move
-function DeltaChess.AI:UndoTemporaryMove(board, move, captured)
+function DeltaChess.AI:UndoTemporaryMove(board, move, state)
     local piece = board:GetPiece(move.toRow, move.toCol)
     
+    -- Restore piece type if it was promoted
+    if piece and state.wasPromoted then
+        piece.type = state.originalType
+    end
+    
     board.squares[move.fromRow][move.fromCol] = piece
-    board.squares[move.toRow][move.toCol] = captured
+    board.squares[move.toRow][move.toCol] = state.captured
 end
 
 -- Minimax with alpha-beta pruning
@@ -258,8 +274,18 @@ function DeltaChess.AI:MakeMove(gameId, delay)
         local move = DeltaChess.AI:GetBestMove(game.board, aiColor, difficulty)
         
         if move then
+            -- Determine if this is a promotion move (pawn reaching back rank)
+            local piece = game.board:GetPiece(move.fromRow, move.fromCol)
+            local promotion = nil
+            if piece and piece.type == "pawn" then
+                local promotionRank = piece.color == "white" and 8 or 1
+                if move.toRow == promotionRank then
+                    promotion = "queen"
+                end
+            end
+            
             -- Make the move
-            game.board:MakeMove(move.fromRow, move.fromCol, move.toRow, move.toCol)
+            game.board:MakeMove(move.fromRow, move.fromCol, move.toRow, move.toCol, promotion)
             
             -- Update UI if board is open
             if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
