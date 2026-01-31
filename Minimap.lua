@@ -39,6 +39,15 @@ function DeltaChess.Minimap:Initialize()
     
     -- Highlight
     minimapButton:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+    -- "Your turn" glow (shown when it's the player's turn in any game)
+    local yourTurnGlow = minimapButton:CreateTexture(nil, "OVERLAY")
+    yourTurnGlow:SetSize(40, 40)
+    yourTurnGlow:SetPoint("CENTER", 0, 1)
+    yourTurnGlow:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    yourTurnGlow:SetVertexColor(0.2, 1, 0.2, 0.9)
+    yourTurnGlow:Hide()
+    minimapButton.yourTurnGlow = yourTurnGlow
     
     -- Click handler
     minimapButton:SetScript("OnClick", function(self, button)
@@ -83,6 +92,9 @@ function DeltaChess.Minimap:Initialize()
         if activeCount > 0 then
             GameTooltip:AddLine(string.format("|cFF00FF00Active Games:|r %d", activeCount), 1, 1, 1)
         end
+        if DeltaChess:IsMyTurnInAnyGame() then
+            GameTooltip:AddLine("|cFF00FF00Your turn!|r", 1, 1, 1)
+        end
         
         GameTooltip:Show()
     end)
@@ -120,6 +132,21 @@ function DeltaChess.Minimap:Initialize()
         minimapButton:Show()
     else
         minimapButton:Hide()
+    end
+
+    -- Periodically update "your turn" highlight
+    C_Timer.NewTicker(2, function()
+        DeltaChess.Minimap:UpdateYourTurnHighlight()
+    end)
+end
+
+-- Update minimap button highlight when it's the player's turn
+function DeltaChess.Minimap:UpdateYourTurnHighlight()
+    if not minimapButton or not minimapButton:IsShown() then return end
+    if DeltaChess:IsMyTurnInAnyGame() then
+        minimapButton.yourTurnGlow:Show()
+    else
+        minimapButton.yourTurnGlow:Hide()
     end
 end
 

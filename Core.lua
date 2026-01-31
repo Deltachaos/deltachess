@@ -150,6 +150,26 @@ function DeltaChess:GetFullPlayerName(name)
     return name
 end
 
+-- Check if it's the player's turn in any active game
+function DeltaChess:IsMyTurnInAnyGame()
+    if not self.db or not self.db.games then return false end
+    local playerName = self:GetFullPlayerName(UnitName("player"))
+    for _, game in pairs(self.db.games) do
+        if game.status == "active" and game.board then
+            local currentTurn = game.board.currentTurn or "white"
+            local isPlayerTurn
+            if game.isVsComputer then
+                isPlayerTurn = (currentTurn == (game.playerColor or "white"))
+            else
+                isPlayerTurn = (game.white == playerName and currentTurn == "white") or
+                              (game.black == playerName and currentTurn == "black")
+            end
+            if isPlayerTurn then return true end
+        end
+    end
+    return false
+end
+
 --------------------------------------------------------------------------------
 -- MAIN MENU WINDOW
 --------------------------------------------------------------------------------
