@@ -44,29 +44,85 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
 
         local difficulty = game.computerDifficulty or 1200
         local position = DeltaChess.Engines.CreateBoardAdapter(game.board)
+        local primaryEngineId = engine.id
+        
+        -- Function to apply a validated move
+        local function applyMove(validMove)
+            if not game or game.status ~= "active" then return end
+            if game.board.currentTurn ~= aiColor then return end
+            
+            local piece = game.board:GetPiece(validMove.fromRow, validMove.fromCol)
+            local promotion = validMove.promotion
+            if piece and piece.type == PT.PAWN then
+                local promotionRank = piece.color == C.WHITE and 8 or 1
+                if validMove.toRow == promotionRank and not promotion then
+                    promotion = PT.QUEEN
+                end
+            end
+
+            game.board:MakeMove(validMove.fromRow, validMove.fromCol, validMove.toRow, validMove.toCol, promotion)
+
+            DeltaChess:NotifyItIsYourTurn(gameId, "Computer")
+
+            if game.board.gameStatus ~= "active" then
+                DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
+            end
+        end
+        
+        -- Function to use a random move as last resort
+        local function useRandomMove()
+            local randomMove = DeltaChess.Engines:GetRandomMove(game.board, aiColor)
+            if randomMove then
+                DeltaChess:Print("|cFFFF0000Using random move.|r")
+                applyMove(randomMove)
+            else
+                DeltaChess:Print("|cFFFF0000Computer has no valid moves!|r")
+            end
+        end
+        
+        -- Function to try minimax as fallback
+        local function tryMinimaxFallback()
+            local minimaxEngine = DeltaChess.Engines:Get("minimax")
+            if not minimaxEngine or not minimaxEngine.GetBestMoveAsync then
+                useRandomMove()
+                return
+            end
+            
+            DeltaChess:Print("|cFFFF0000Falling back to Minimax engine...|r")
+            local fallbackPosition = DeltaChess.Engines.CreateBoardAdapter(game.board)
+            minimaxEngine:GetBestMoveAsync(fallbackPosition, aiColor, difficulty, function(fallbackMove)
+                if fallbackMove and DeltaChess.Engines:ValidateMove(game.board, fallbackMove) then
+                    applyMove(fallbackMove)
+                else
+                    useRandomMove()
+                end
+            end)
+        end
+        
         engine:GetBestMoveAsync(position, aiColor, difficulty, function(move)
             if not game or game.status ~= "active" then return end
             if game.board.currentTurn ~= aiColor then return end
 
             if move then
-                local piece = game.board:GetPiece(move.fromRow, move.fromCol)
-                local promotion = nil
-                if piece and piece.type == PT.PAWN then
-                    local promotionRank = piece.color == C.WHITE and 8 or 1
-                    if move.toRow == promotionRank then
-                        promotion = PT.QUEEN
+                -- Validate the engine's move against DeltaChess game logic
+                if DeltaChess.Engines:ValidateMove(game.board, move) then
+                    applyMove(move)
+                else
+                    -- Invalid move from primary engine, fall back to minimax
+                    DeltaChess:Print("|cFFFF0000Engine '" .. (engine.name or primaryEngineId) .. "' returned invalid move.|r")
+                    if primaryEngineId ~= "minimax" then
+                        tryMinimaxFallback()
+                    else
+                        useRandomMove()
                     end
                 end
-
-                game.board:MakeMove(move.fromRow, move.fromCol, move.toRow, move.toCol, promotion)
-
-                DeltaChess:NotifyItIsYourTurn(gameId, "Computer")
-
-                if game.board.gameStatus ~= "active" then
-                    DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
-                end
             else
-                DeltaChess:Print("Computer has no valid moves!")
+                -- Engine returned no move, try minimax or random
+                if primaryEngineId ~= "minimax" then
+                    tryMinimaxFallback()
+                else
+                    useRandomMove()
+                end
             end
         end)
     end)

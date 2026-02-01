@@ -165,6 +165,61 @@ function DeltaChess.Engines:GetEloRange(engineId)
     return engine:GetEloRange()
 end
 
+-- Validate a move against DeltaChess game logic
+-- Returns true if the move is legal, false otherwise
+function DeltaChess.Engines:ValidateMove(board, move)
+    if not board or not move then return false end
+    if not move.fromRow or not move.fromCol or not move.toRow or not move.toCol then return false end
+    
+    local piece = board:GetPiece(move.fromRow, move.fromCol)
+    if not piece then return false end
+    
+    -- Get valid moves for this piece using DeltaChess's own logic
+    local validMoves = board:GetValidMoves(move.fromRow, move.fromCol)
+    if not validMoves then return false end
+    
+    -- Check if the engine's move is in the list of valid moves
+    for _, vm in ipairs(validMoves) do
+        if vm.row == move.toRow and vm.col == move.toCol then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Get a random legal move (last resort fallback)
+function DeltaChess.Engines:GetRandomMove(board, color)
+    if not board then return nil end
+    
+    -- Collect all legal moves for this color
+    local allMoves = {}
+    for row = 1, 8 do
+        for col = 1, 8 do
+            local piece = board:GetPiece(row, col)
+            if piece and piece.color == color then
+                local moves = board:GetValidMoves(row, col)
+                if moves then
+                    for _, m in ipairs(moves) do
+                        table.insert(allMoves, {
+                            fromRow = row,
+                            fromCol = col,
+                            toRow = m.row,
+                            toCol = m.col,
+                            promotion = m.promotion
+                        })
+                    end
+                end
+            end
+        end
+    end
+    
+    if #allMoves == 0 then return nil end
+    
+    -- Pick a random move
+    return allMoves[math.random(1, #allMoves)]
+end
+
 -- Get list of engine ids and display names for UI (sorted by max ELO, strongest first)
 function DeltaChess.Engines:GetEngineList()
     local list = {}
