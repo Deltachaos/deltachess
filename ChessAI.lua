@@ -42,7 +42,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             return
         end
 
-        local difficulty = game.computerDifficulty or 1200
+        local difficulty = game.computerDifficulty  -- nil if engine doesn't support ELO
         local position = DeltaChess.Engines.CreateBoardAdapter(game.board)
         local primaryEngineId = engine.id
         local moveApplied = false  -- Flag to prevent double-moves from timeout vs callback race
@@ -178,7 +178,7 @@ function DeltaChess:StartComputerGame(playerColor, difficulty, engineId)
         startTime = time(),
         isVsComputer = true,
         computerColor = computerColor,
-        computerDifficulty = difficulty or 1200,
+        computerDifficulty = difficulty,  -- nil if engine doesn't support ELO
         computerEngine = engine and engine.id or DeltaChess.Engines:GetEffectiveDefaultId(),
         playerColor = playerColor
     }

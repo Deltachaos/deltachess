@@ -1775,11 +1775,8 @@ function DeltaChess:ShowComputerGameWindow()
             end
             
             frame:Hide()
-            local difficulty = frame.selectedDifficulty
-            if difficulty == nil then
-                difficulty = 1200  -- Fallback for engines with no ELO (e.g. Random)
-            end
-            DeltaChess:StartComputerGame(color, difficulty, frame.selectedEngine)
+            -- Pass nil for difficulty if engine doesn't support ELO
+            DeltaChess:StartComputerGame(color, frame.selectedDifficulty, frame.selectedEngine)
         end)
         
         local cancelBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
