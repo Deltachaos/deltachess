@@ -2199,7 +2199,30 @@ end
 -- SEARCH ASYNC
 --------------------------------------------------------------------------------
 
-local function SearchAsync(state, maxPly, yieldFn, onComplete)
+-- Randomness parameter (0.0 to 1.0) weakens the engine by perturbing alpha-beta bounds
+-- 0.0 = no randomness (full strength), 1.0 = maximum randomness (very weak)
+-- The randomness adds noise to the aspiration window, causing the engine to
+-- occasionally miss better moves or accept worse ones
+local function SearchAsync(state, maxPly, yieldFn, onComplete, randomness)
+    -- Default to no randomness if not specified
+    randomness = randomness or 0
+
+    -- Clamp randomness to valid range
+    if randomness < 0 then randomness = 0 end
+    if randomness > 1 then randomness = 1 end
+
+    -- Calculate the maximum random perturbation based on randomness level
+    -- At full randomness, can perturb by up to 3000 centipawns (roughly 3 pawns worth)
+    local maxPerturbation = math.floor(randomness * 3000)
+
+    -- Helper function to generate random perturbation
+    local function getRandomPerturbation()
+        if maxPerturbation == 0 then
+            return 0
+        end
+        return math.random(-maxPerturbation, maxPerturbation)
+    end
+
     local alpha = minEval
     local beta = maxEval
 
@@ -2228,7 +2251,21 @@ local function SearchAsync(state, maxPly, yieldFn, onComplete)
             return
         end
 
-        local tmp = AlphaBeta(state, i, 0, alpha, beta)
+        -- Apply random perturbation to alpha and beta before searching
+        local searchAlpha = alpha + getRandomPerturbation()
+        local searchBeta = beta + getRandomPerturbation()
+
+        -- Ensure alpha < beta after perturbation
+        if searchAlpha >= searchBeta then
+            searchAlpha = alpha
+            searchBeta = beta
+        end
+
+        -- Clamp to valid evaluation range
+        if searchAlpha < minEval then searchAlpha = minEval end
+        if searchBeta > maxEval then searchBeta = maxEval end
+
+        local tmp = AlphaBeta(state, i, 0, searchAlpha, searchBeta)
         if (not state.searchValid) then
             if (bestMove ~= nil and bestMove ~= 0) then
                 MakeMove(state, bestMove)
@@ -2243,8 +2280,10 @@ local function SearchAsync(state, maxPly, yieldFn, onComplete)
         value = tmp
 
         if (value > alpha and value < beta) then
-            alpha = value - 500
-            beta = value + 500
+            -- Apply randomness to the aspiration window width as well
+            local windowAdjust = 500 + math.abs(getRandomPerturbation())
+            alpha = value - windowAdjust
+            beta = value + windowAdjust
 
             if (alpha < minEval) then
                 alpha = minEval
@@ -2406,6 +2445,13 @@ DeltaChess.GarboChess = {
     InitializeFromFen = InitializeFromFen,
 
     -- Run async search on a state
+    -- Parameters:
+    --   state: game state object from createState()
+    --   maxPly: maximum search depth
+    --   yieldFn: function to yield execution (for async operation)
+    --   onComplete: callback when search completes
+    --   randomness: (optional) 0.0-1.0, weakens engine by perturbing alpha-beta bounds
+    --               0.0 = full strength, 1.0 = very weak (default: 0)
     SearchAsync = SearchAsync,
 
     -- Format a move to string (e.g., "e2e4")

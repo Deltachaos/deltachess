@@ -14,7 +14,18 @@ local MinimaxEngine = {
 }
 
 function MinimaxEngine.GetEloRange(self)
-    return { 100, 1500 }
+    return { 100, 1000 }
+end
+
+-- Estimated average CPU time in milliseconds for a move at given ELO
+-- Minimax is relatively fast at low depths but scales poorly
+function MinimaxEngine.GetAverageCpuTime(self, elo)
+    -- Based on depth used at each ELO level (from eloToParams)
+    -- depth 1: ~50ms, depth 2: ~200ms, depth 3: ~800ms, depth 4: ~3000ms
+    if elo <= 400 then return 100 end      -- depth 1
+    if elo <= 700 then return 200 end     -- depth 2
+    if elo <= 850 then return 800 end     -- depth 3
+    return 3000                            -- depth 4
 end
 
 -- Piece values for evaluation
@@ -230,10 +241,11 @@ local function minimax(board, depth, alpha, beta, maximizingPlayer)
 end
 
 local function eloToParams(difficulty)
-    local difficulty = difficulty * 2
-    local elo = math.max(100, math.min(2500, tonumber(difficulty) or 1200))
-    local depth = math.min(4, math.max(1, math.floor(1 + (elo - 100) / 650)))
-    local mistakeChance = math.max(0, 0.55 - (elo - 100) / 4500)
+    local maxElo = DeltaChess.Engines:GetGlobalEloRange()[2]
+    local difficulty = difficulty * 3
+    local elo = math.max(100, math.min(maxElo, tonumber(difficulty)))
+    local depth = math.min(5, math.max(1, math.floor(1 + (elo - 100) / 650)))
+    local mistakeChance = math.max(0, 0.10 - (elo - 100) / maxElo)
     return depth, mistakeChance
 end
 
@@ -252,7 +264,7 @@ end
 
 function MinimaxEngine.GetBestMoveAsync(self, board, color, difficulty, onComplete)
     local searchBoard = board:GetSearchCopy()
-    local maxDepth, mistakeChance = eloToParams(difficulty or 1200)
+    local maxDepth, mistakeChance = eloToParams(difficulty)
     local maximizing = (color == C.WHITE)
     local bestMoveSoFar = nil
 

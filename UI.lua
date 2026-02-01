@@ -28,6 +28,17 @@ DeltaChess.UI.FILE_LABELS = {"a", "b", "c", "d", "e", "f", "g", "h"}
 local PIECE_TEXTURES = DeltaChess.UI.PIECE_TEXTURES
 local FILE_LABELS = DeltaChess.UI.FILE_LABELS
 
+-- Board layout constants (shared across functions)
+local SQUARE_SIZE = 50
+local BOARD_SIZE = SQUARE_SIZE * 8
+local LABEL_SIZE = 20
+local PLAYER_BAR_HEIGHT = 45
+local RIGHT_PANEL_WIDTH = 220
+
+-- Animation settings
+DeltaChess.UI.ANIMATION_DURATION = 0.2 -- seconds for piece movement animation
+DeltaChess.UI.animatingPiece = nil -- currently animating piece frame
+
 --------------------------------------------------------------------------------
 -- CLOCK CALCULATION FUNCTIONS
 --------------------------------------------------------------------------------
@@ -332,10 +343,12 @@ function DeltaChess.UI:GetInitialBoardState()
     end
     local backRow = {"rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"}
     for col = 1, 8 do
-        board[1][col] = {type = backRow[col], color = "black"}
-        board[2][col] = {type = "pawn", color = "black"}
-        board[7][col] = {type = "pawn", color = "white"}
-        board[8][col] = {type = backRow[col], color = "white"}
+        -- Row 1 = white back rank, Row 2 = white pawns
+        -- Row 7 = black pawns, Row 8 = black back rank
+        board[1][col] = {type = backRow[col], color = "white"}
+        board[2][col] = {type = "pawn", color = "white"}
+        board[7][col] = {type = "pawn", color = "black"}
+        board[8][col] = {type = backRow[col], color = "black"}
     end
     return board
 end
@@ -384,6 +397,298 @@ function DeltaChess.UI:ApplyMovesToBoard(board, moves, upToIndex)
     return board
 end
 
+--------------------------------------------------------------------------------
+-- PIECE MOVEMENT ANIMATION
+--------------------------------------------------------------------------------
+
+-- Animate a piece moving from one square to another
+-- frame: the chess board frame
+-- fromRow, fromCol: source square coordinates
+-- toRow, toCol: destination square coordinates
+-- piece: the piece data {type, color}
+-- onComplete: optional callback when animation finishes
+function DeltaChess.UI:AnimatePieceMove(frame, fromRow, fromCol, toRow, toCol, piece, onComplete)
+    if not frame or not frame.squares then
+        if onComplete then onComplete() end
+        return
+    end
+    
+    local fromSquare = frame.squares[fromRow] and frame.squares[fromRow][fromCol]
+    local toSquare = frame.squares[toRow] and frame.squares[toRow][toCol]
+    
+    if not fromSquare or not toSquare then
+        if onComplete then onComplete() end
+        return
+    end
+    
+    -- Get the texture path for the piece
+    local texturePath = PIECE_TEXTURES[piece.color] and PIECE_TEXTURES[piece.color][piece.type]
+    if not texturePath then
+        if onComplete then onComplete() end
+        return
+    end
+    
+    -- Create or reuse the floating animation frame
+    if not self.animatingPiece then
+        local animFrame = CreateFrame("Frame", "DeltaChessAnimatingPiece", UIParent)
+        animFrame:SetFrameStrata("TOOLTIP") -- Above everything
+        animFrame:SetSize(SQUARE_SIZE - 4, SQUARE_SIZE - 4)
+        
+        local tex = animFrame:CreateTexture(nil, "ARTWORK")
+        tex:SetAllPoints()
+        animFrame.texture = tex
+        
+        self.animatingPiece = animFrame
+    end
+    
+    local animFrame = self.animatingPiece
+    
+    -- Stop any existing animation and hide immediately
+    if animFrame.animGroup then
+        animFrame.animGroup:Stop()
+    end
+    animFrame:Hide()
+    
+    -- Set up the piece texture
+    animFrame.texture:SetTexture(texturePath)
+    
+    -- Apply the same scale as the board frame (for minimized mode)
+    local frameScale = frame:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    animFrame:SetScale(frameScale)
+    animFrame:SetSize(SQUARE_SIZE - 4, SQUARE_SIZE - 4)
+    
+    -- Calculate positions (get center of each square)
+    local fromX, fromY = fromSquare:GetCenter()
+    local toX, toY = toSquare:GetCenter()
+    
+    if not fromX or not toX then
+        if onComplete then onComplete() end
+        return
+    end
+    
+    -- Position at source (adjust for scale)
+    animFrame:ClearAllPoints()
+    animFrame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", fromX, fromY)
+    animFrame:Show()
+    
+    -- Hide the piece at destination during animation (it will be shown by UpdateBoard after)
+    -- Note: source piece is already gone from board state, so no need to hide it
+    
+    -- Create animation group
+    if not animFrame.animGroup then
+        animFrame.animGroup = animFrame:CreateAnimationGroup()
+        
+        local move = animFrame.animGroup:CreateAnimation("Translation")
+        move:SetOrder(1)
+        move:SetSmoothing("IN_OUT")
+        animFrame.moveAnim = move
+    end
+    
+    -- Calculate offset from current position to target
+    local offsetX = toX - fromX
+    local offsetY = toY - fromY
+    
+    -- Configure animation
+    animFrame.moveAnim:SetOffset(offsetX, offsetY)
+    animFrame.moveAnim:SetDuration(self.ANIMATION_DURATION)
+    
+    -- Store callback and destination info
+    animFrame.onComplete = onComplete
+    animFrame.destSquare = toSquare
+    
+    -- Set up completion handler
+    animFrame.animGroup:SetScript("OnFinished", function()
+        animFrame:Hide()
+        if animFrame.onComplete then
+            animFrame.onComplete()
+        end
+    end)
+    
+    -- Start animation
+    animFrame.animGroup:Play()
+end
+
+-- Animate a piece move on a replay board (or any board using RenderPieces)
+-- This version takes move data directly rather than reading from board.moves
+function DeltaChess.UI:AnimateReplayMove(frame, move, onComplete)
+    if not frame or not frame.squares or not move then
+        if onComplete then onComplete() end
+        return
+    end
+    
+    -- Restore any pieces that were hidden by a previous interrupted animation
+    if frame._hiddenPieces then
+        for _, info in ipairs(frame._hiddenPieces) do
+            if info.texture then
+                info.texture:SetAlpha(1)
+            end
+        end
+    end
+    frame._hiddenPieces = {} -- Reset for this animation
+    
+    -- Extract move coordinates
+    local fromRow = move.fromRow or (move.from and move.from.row)
+    local fromCol = move.fromCol or (move.from and move.from.col)
+    local toRow = move.toRow or (move.to and move.to.row)
+    local toCol = move.toCol or (move.to and move.to.col)
+    local castle = move.castle or move.castling
+    local pieceType = move.piece or move.pieceType or "pawn"
+    local pieceColor = move.color or "white"
+    
+    if not fromRow or not fromCol or not toRow or not toCol then
+        if onComplete then onComplete() end
+        return
+    end
+    
+    -- For promotion, use the promoted piece type for the animation
+    if move.promotion then
+        pieceType = move.promotion
+    end
+    
+    local piece = {type = pieceType, color = pieceColor}
+    local destSquare = frame.squares[toRow] and frame.squares[toRow][toCol]
+    
+    -- Hide destination piece during animation using alpha (prevents flicker)
+    if destSquare and destSquare.pieceTexture then
+        destSquare.pieceTexture:SetAlpha(0)
+        table.insert(frame._hiddenPieces, {texture = destSquare.pieceTexture})
+    end
+    
+    if castle then
+        -- Castling animation
+        local rookFromRow = fromRow
+        local rookToRow = fromRow
+        local rookFromCol, rookToCol
+        if castle == "kingside" then
+            rookFromCol = 8
+            rookToCol = 6
+        else
+            rookFromCol = 1
+            rookToCol = 4
+        end
+        
+        local rookPiece = {type = "rook", color = pieceColor}
+        local rookDestSquare = frame.squares[rookToRow] and frame.squares[rookToRow][rookToCol]
+        
+        if rookDestSquare and rookDestSquare.pieceTexture then
+            rookDestSquare.pieceTexture:SetAlpha(0)
+            table.insert(frame._hiddenPieces, {texture = rookDestSquare.pieceTexture})
+        end
+        
+        self:AnimateCastling(frame, fromRow, fromCol, toRow, toCol,
+            rookFromRow, rookFromCol, rookToRow, rookToCol,
+            piece, rookPiece,
+            function()
+                -- Restore alpha after animation (also clears tracking)
+                if destSquare and destSquare.pieceTexture then
+                    destSquare.pieceTexture:SetAlpha(1)
+                end
+                if rookDestSquare and rookDestSquare.pieceTexture then
+                    rookDestSquare.pieceTexture:SetAlpha(1)
+                end
+                frame._hiddenPieces = nil
+                if onComplete then onComplete() end
+            end)
+    else
+        -- Regular move animation
+        self:AnimatePieceMove(frame, fromRow, fromCol, toRow, toCol, piece,
+            function()
+                -- Restore alpha after animation (also clears tracking)
+                if destSquare and destSquare.pieceTexture then
+                    destSquare.pieceTexture:SetAlpha(1)
+                end
+                frame._hiddenPieces = nil
+                if onComplete then onComplete() end
+            end)
+    end
+end
+
+-- Animate a castling move (king + rook)
+function DeltaChess.UI:AnimateCastling(frame, kingFromRow, kingFromCol, kingToRow, kingToCol, rookFromRow, rookFromCol, rookToRow, rookToCol, kingPiece, rookPiece, onComplete)
+    -- Animate both pieces simultaneously
+    local completed = 0
+    local totalPieces = 2
+    
+    local function checkComplete()
+        completed = completed + 1
+        if completed >= totalPieces and onComplete then
+            onComplete()
+        end
+    end
+    
+    -- Create a second animation frame for the rook
+    if not self.animatingPiece2 then
+        local animFrame = CreateFrame("Frame", "DeltaChessAnimatingPiece2", UIParent)
+        animFrame:SetFrameStrata("TOOLTIP")
+        animFrame:SetSize(SQUARE_SIZE - 4, SQUARE_SIZE - 4)
+        
+        local tex = animFrame:CreateTexture(nil, "ARTWORK")
+        tex:SetAllPoints()
+        animFrame.texture = tex
+        
+        self.animatingPiece2 = animFrame
+    end
+    
+    -- Animate king using primary animation frame
+    self:AnimatePieceMove(frame, kingFromRow, kingFromCol, kingToRow, kingToCol, kingPiece, checkComplete)
+    
+    -- Animate rook using secondary frame
+    local rookFrame = self.animatingPiece2
+    local fromSquare = frame.squares[rookFromRow] and frame.squares[rookFromRow][rookFromCol]
+    local toSquare = frame.squares[rookToRow] and frame.squares[rookToRow][rookToCol]
+    
+    if fromSquare and toSquare then
+        local texturePath = PIECE_TEXTURES[rookPiece.color] and PIECE_TEXTURES[rookPiece.color][rookPiece.type]
+        if texturePath then
+            if rookFrame.animGroup then
+                rookFrame.animGroup:Stop()
+            end
+            rookFrame:Hide()
+            
+            rookFrame.texture:SetTexture(texturePath)
+            
+            -- Apply the same scale as the board frame (for minimized mode)
+            local frameScale = frame:GetEffectiveScale() / UIParent:GetEffectiveScale()
+            rookFrame:SetScale(frameScale)
+            rookFrame:SetSize(SQUARE_SIZE - 4, SQUARE_SIZE - 4)
+            
+            local fromX, fromY = fromSquare:GetCenter()
+            local toX, toY = toSquare:GetCenter()
+            
+            if fromX and toX then
+                rookFrame:ClearAllPoints()
+                rookFrame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", fromX, fromY)
+                rookFrame:Show()
+                
+                if not rookFrame.animGroup then
+                    rookFrame.animGroup = rookFrame:CreateAnimationGroup()
+                    local move = rookFrame.animGroup:CreateAnimation("Translation")
+                    move:SetOrder(1)
+                    move:SetSmoothing("IN_OUT")
+                    rookFrame.moveAnim = move
+                end
+                
+                local offsetX = toX - fromX
+                local offsetY = toY - fromY
+                
+                rookFrame.moveAnim:SetOffset(offsetX, offsetY)
+                rookFrame.moveAnim:SetDuration(self.ANIMATION_DURATION)
+                
+                rookFrame.animGroup:SetScript("OnFinished", function()
+                    rookFrame:Hide()
+                    checkComplete()
+                end)
+                
+                rookFrame.animGroup:Play()
+                return
+            end
+        end
+    end
+    
+    -- If rook animation failed, still call checkComplete
+    checkComplete()
+end
+
 -- Format move as algebraic notation
 function DeltaChess.UI:FormatMoveNotation(move)
     if not move then return "" end
@@ -404,12 +709,6 @@ end
 --------------------------------------------------------------------------------
 -- GAME BOARD (for active games)
 --------------------------------------------------------------------------------
-
-local SQUARE_SIZE = 50
-local BOARD_SIZE = SQUARE_SIZE * 8
-local LABEL_SIZE = 20
-local PLAYER_BAR_HEIGHT = 45
-local RIGHT_PANEL_WIDTH = 220
 
 -- Piece values for material calculation
 local PIECE_VALUES = {
@@ -728,6 +1027,7 @@ function DeltaChess:ShowChessBoard(gameId)
     frame.black = game.black
     frame.settings = game.settings
     frame.computerDifficulty = game.computerDifficulty
+    frame.computerEngine = game.computerEngine
     frame.startTime = game.startTime
     
     local leftMargin = 10
@@ -950,6 +1250,135 @@ function DeltaChess:ShowChessBoard(gameId)
     -- Check if there's a pending ACK for this game and show waiting overlay
     if not game.isVsComputer and DeltaChess:IsBoardLocked(gameId) then
         DeltaChess.UI:ShowWaitingOverlay(frame, true)
+    end
+end
+
+-- Update board with optional animation for the last move
+-- If animateLastMove is true and there's a last move, animate the piece movement
+function DeltaChess.UI:UpdateBoardAnimated(frame, animateLastMove)
+    if not animateLastMove then
+        self:UpdateBoard(frame)
+        return
+    end
+    
+    -- Restore any pieces that were hidden by a previous interrupted animation
+    if frame._hiddenPieces then
+        for _, info in ipairs(frame._hiddenPieces) do
+            if info.texture then
+                info.texture:SetAlpha(1)
+            end
+        end
+    end
+    frame._hiddenPieces = {} -- Reset for this animation
+    
+    local board = frame.board
+    local moves = board.moves
+    local lastMove = moves and moves[#moves]
+    
+    if not lastMove then
+        self:UpdateBoard(frame)
+        return
+    end
+    
+    -- Extract move coordinates
+    local fromRow = lastMove.fromRow or (lastMove.from and lastMove.from.row)
+    local fromCol = lastMove.fromCol or (lastMove.from and lastMove.from.col)
+    local toRow = lastMove.toRow or (lastMove.to and lastMove.to.row)
+    local toCol = lastMove.toCol or (lastMove.to and lastMove.to.col)
+    local castle = lastMove.castle or lastMove.castling
+    
+    if not fromRow or not fromCol or not toRow or not toCol then
+        self:UpdateBoard(frame)
+        return
+    end
+    
+    -- Get the piece that was moved (it's now at the destination)
+    local piece = board:GetPiece(toRow, toCol)
+    if not piece then
+        self:UpdateBoard(frame)
+        return
+    end
+    
+    -- Store current piece positions for animation
+    -- We need to show the board state BEFORE the move for animation
+    local destSquare = frame.squares[toRow] and frame.squares[toRow][toCol]
+    
+    -- For castling, also get rook positions
+    local rookFromRow, rookFromCol, rookToRow, rookToCol, rookPiece
+    if castle then
+        rookFromRow = fromRow
+        rookToRow = fromRow
+        if castle == "kingside" then
+            rookFromCol = 8
+            rookToCol = 6
+        else -- queenside
+            rookFromCol = 1
+            rookToCol = 4
+        end
+        rookPiece = board:GetPiece(rookToRow, rookToCol)
+    end
+    
+    -- Hide destination pieces BEFORE updating board (set alpha to 0)
+    -- This prevents the brief flash of the piece at destination
+    if destSquare and destSquare.pieceTexture then
+        destSquare.pieceTexture:SetAlpha(0)
+        table.insert(frame._hiddenPieces, {texture = destSquare.pieceTexture})
+    end
+    
+    local rookDestSquare
+    if castle and rookToRow and rookToCol then
+        rookDestSquare = frame.squares[rookToRow] and frame.squares[rookToRow][rookToCol]
+        if rookDestSquare and rookDestSquare.pieceTexture then
+            rookDestSquare.pieceTexture:SetAlpha(0)
+            table.insert(frame._hiddenPieces, {texture = rookDestSquare.pieceTexture})
+        end
+    end
+    
+    -- Update the board display (destination pieces are invisible due to alpha=0)
+    self:UpdateBoard(frame)
+    
+    -- Ensure alpha is still 0 after UpdateBoard (in case it reset)
+    if destSquare and destSquare.pieceTexture then
+        destSquare.pieceTexture:SetAlpha(0)
+    end
+    if rookDestSquare and rookDestSquare.pieceTexture then
+        rookDestSquare.pieceTexture:SetAlpha(0)
+    end
+    
+    if castle and rookPiece then
+        -- Animate castling (both king and rook)
+        self:AnimateCastling(frame, fromRow, fromCol, toRow, toCol, 
+            rookFromRow, rookFromCol, rookToRow, rookToCol,
+            piece, rookPiece,
+            function()
+                -- Restore alpha after animation (also clears tracking)
+                if destSquare and destSquare.pieceTexture then
+                    destSquare.pieceTexture:SetAlpha(1)
+                end
+                if rookDestSquare and rookDestSquare.pieceTexture then
+                    rookDestSquare.pieceTexture:SetAlpha(1)
+                end
+                frame._hiddenPieces = nil
+            end)
+    elseif castle then
+        -- Fallback: just restore alpha
+        if destSquare and destSquare.pieceTexture then
+            destSquare.pieceTexture:SetAlpha(1)
+        end
+        if rookDestSquare and rookDestSquare.pieceTexture then
+            rookDestSquare.pieceTexture:SetAlpha(1)
+        end
+        frame._hiddenPieces = nil
+    else
+        -- Regular move animation
+        self:AnimatePieceMove(frame, fromRow, fromCol, toRow, toCol, piece,
+            function()
+                -- Restore alpha after animation (also clears tracking)
+                if destSquare and destSquare.pieceTexture then
+                    destSquare.pieceTexture:SetAlpha(1)
+                end
+                frame._hiddenPieces = nil
+            end)
     end
 end
 
@@ -1383,7 +1812,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
             -- Default to queen promotion
             if pm.isVsComputer then
                 pm.board:MakeMove(pm.fromRow, pm.fromCol, pm.toRow, pm.toCol, "queen")
-                DeltaChess.UI:UpdateBoard(pm.frame)
+                DeltaChess.UI:UpdateBoardAnimated(pm.frame, true)
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
                 end
@@ -1420,7 +1849,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
 
             if isVsComputer then
                 board:MakeMove(fromRow, fromCol, toRow, toCol, pieceType)
-                DeltaChess.UI:UpdateBoard(frame)
+                DeltaChess.UI:UpdateBoardAnimated(frame, true)
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
                 end
@@ -1540,8 +1969,8 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
                 frame.selectedSquare = nil
                 frame.validMoves = {}
                 
-                -- Update display
-                DeltaChess.UI:UpdateBoard(frame)
+                -- Update display with animation
+                DeltaChess.UI:UpdateBoardAnimated(frame, true)
                 
                 -- Update minimap (now computer's turn, icon should be normal)
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then

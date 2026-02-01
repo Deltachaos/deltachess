@@ -7,6 +7,7 @@ local C = DeltaChess.Constants.COLOR
 local PT = DeltaChess.Constants.PIECE_TYPE
 
 local AI_INITIAL_DELAY_MS = 500
+local AI_AFTER_DELAY_MS = 500
 
 -- Get the engine for a game (or default)
 local function getEngine(game)
@@ -64,13 +65,36 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
                 end
             end
 
-            game.board:MakeMove(validMove.fromRow, validMove.fromCol, validMove.toRow, validMove.toCol, promotion)
-
-            DeltaChess:NotifyItIsYourTurn(gameId, "Computer")
-
-            if game.board.gameStatus ~= "active" then
-                DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
+            -- Dynamically calculate delay based on framerate to let the game recover
+            -- from heavy AI calculations before applying the move
+            local fps = GetFramerate() or 60
+            local targetFps = 60
+            local baseDelay = AI_AFTER_DELAY_MS / 1000
+            local delay
+            
+            if fps >= targetFps then
+                -- Good framerate, use base delay
+                delay = baseDelay
+            else
+                -- Scale delay inversely with FPS: lower FPS = longer delay
+                -- Formula: delay = baseDelay * (targetFps / fps)
+                -- This gives the system more time to recover when under stress
+                local scaleFactor = targetFps / math.max(fps, 10) -- Clamp fps to min 10 to avoid huge delays
+                delay = baseDelay * scaleFactor
             end
+            
+            -- Clamp delay between minimum (0.1s) and maximum (3s)
+            delay = math.max(0.1, math.min(delay, 2.0))
+
+            C_Timer.After(delay, function()
+                game.board:MakeMove(validMove.fromRow, validMove.fromCol, validMove.toRow, validMove.toCol, promotion)
+
+                DeltaChess:NotifyItIsYourTurn(gameId, "Computer")
+
+                if game.board.gameStatus ~= "active" then
+                    DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
+                end
+            end)
         end
         
         engine:GetBestMoveAsync(position, aiColor, difficulty, function(move)

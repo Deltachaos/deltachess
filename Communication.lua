@@ -399,9 +399,9 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
     -- Make the move on the board (timestamp is added automatically)
     game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
     
-    -- Update UI if board is open
+    -- Update UI if board is open (with animation for the player's move)
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
-        DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+        DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, true)
         
         -- Check for game end
         if game.board.gameStatus ~= "active" then
@@ -610,6 +610,7 @@ function DeltaChess:RestoreGameFromHistory(gameId)
             black = frame.black,
             settings = frame.settings,
             computerDifficulty = frame.computerDifficulty,
+            computerEngine = frame.computerEngine,
             startTime = frame.startTime
         }
         
@@ -630,7 +631,7 @@ function DeltaChess:RestoreGameFromHistory(gameId)
     return nil
 end
 
--- Take back last two moves (vs computer only)
+-- Take back move(s) vs computer: 1 move if player moved last, 2 if computer moved last
 function DeltaChess:TakeBackMove(gameId)
     local game = self.db.games[gameId]
     
@@ -647,15 +648,23 @@ function DeltaChess:TakeBackMove(gameId)
     local board = game.board
     local moves = board.moves
     
-    -- When game has ended, only the last move ended the game — take back 1 move.
-    -- When game is active, take back 2 moves (player + computer).
-    local gameEnded = (board.gameStatus ~= "active")
-    local movesToRemove = gameEnded and 1 or 2
-    
-    if #moves < movesToRemove then
+    if #moves == 0 then
         self:Print("Not enough moves to take back.")
         return
     end
+    
+    -- Determine who made the last move based on move count and player color
+    -- White moves on odd move numbers (1, 3, 5...), Black on even (2, 4, 6...)
+    local C = DeltaChess.Constants.COLOR
+    local lastMoveByWhite = (#moves % 2) == 1
+    local playerIsWhite = (game.playerColor == C.WHITE)
+    local playerMovedLast = (lastMoveByWhite == playerIsWhite)
+    
+    -- If player made the last move (e.g., stalemated computer): take back 1 move
+    -- If computer made the last move (e.g., checkmated player): take back 2 moves
+    -- This way the player can always try a different move
+    local movesToRemove = playerMovedLast and 1 or 2
+    movesToRemove = math.min(movesToRemove, #moves)
     
     for _ = 1, movesToRemove do
         table.remove(moves)
@@ -675,11 +684,9 @@ function DeltaChess:TakeBackMove(gameId)
     game.board.gameStatus = "active"
     game.status = "active"
     
-    -- Only when we took back 2 moves: replayed position ends with computer to move; set turn to player.
-    -- When we took back 1 move (game had ended), replay already has the correct turn.
-    if movesToRemove == 2 then
-        game.board.currentTurn = game.playerColor
-    end
+    -- After takeback, ensure it's the player's turn so they can make a different move.
+    -- The replay should already set currentTurn correctly, but we override to be safe.
+    game.board.currentTurn = game.playerColor
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then

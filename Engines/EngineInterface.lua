@@ -45,6 +45,11 @@ DeltaChess.Engines.defaultId = nil  -- No longer auto-set; default determined by
 --   GetEloRange() -> {min, max} | nil  (optional)
 --     Returns ELO range for difficulty slider, or nil to disable the slider.
 --
+--   GetAverageCpuTime(elo) -> number | nil  (optional)
+--     Returns estimated average CPU time in milliseconds for a move at the given ELO.
+--     Used to sort engines by efficiency (faster engines listed first).
+--     Return nil if unknown or not applicable.
+--
 --   GetBestMoveAsync(position, color, difficulty, onComplete)
 --     position   - Position object (see above). Use position:GetSearchCopy() for search.
 --     color      - Constants.COLOR.WHITE or Constants.COLOR.BLACK
@@ -200,6 +205,82 @@ function DeltaChess.Engines:GetEngineList()
     end
     -- Sort by max ELO descending (strongest first)
     table.sort(list, function(a, b)
+        return a.maxElo > b.maxElo
+    end)
+    return list
+end
+
+-- Get global ELO range across all engines (min of all mins, max of all maxes)
+-- Only considers engines that have ELO support
+-- Returns {min, max} or nil if no engines support ELO
+function DeltaChess.Engines:GetGlobalEloRange()
+    local globalMin, globalMax = nil, nil
+    for id, engine in pairs(self.registry) do
+        local range = engine.GetEloRange and engine:GetEloRange()
+        if range then
+            local minVal, maxVal = range[1], range[2]
+            if not globalMin or minVal < globalMin then
+                globalMin = minVal
+            end
+            if not globalMax or maxVal > globalMax then
+                globalMax = maxVal
+            end
+        end
+    end
+    if globalMin and globalMax then
+        return { globalMin, globalMax }
+    end
+    return nil
+end
+
+-- Get list of engines that support a given ELO value
+-- Engines without ELO support (GetEloRange returns nil) are always included
+-- Returns list sorted by CPU efficiency (fastest first), then by max ELO descending
+function DeltaChess.Engines:GetEnginesForElo(elo)
+    local list = {}
+    for id, engine in pairs(self.registry) do
+        local range = engine.GetEloRange and engine:GetEloRange()
+        local include = false
+        local maxElo = 0
+        
+        if not range then
+            -- Engine has no ELO support - always include
+            include = true
+            maxElo = 0  -- Sort these after ELO-supporting engines
+        else
+            -- Check if ELO is within this engine's range
+            local minVal, maxVal = range[1], range[2]
+            maxElo = maxVal
+            if elo >= minVal and elo <= maxVal then
+                include = true
+            end
+        end
+        
+        if include then
+            -- Get CPU time for this ELO (or a large default if not provided)
+            local cpuTime = engine.GetAverageCpuTime and engine:GetAverageCpuTime(elo) or 999999
+            table.insert(list, {
+                id = id,
+                name = engine.name or id,
+                description = engine.description or "",
+                maxElo = maxElo,
+                hasEloSupport = (range ~= nil),
+                cpuTime = cpuTime
+            })
+        end
+    end
+    -- Sort by CPU time ascending (most efficient first)
+    -- Engines with ELO support come before those without
+    -- Within same efficiency tier, sort by max ELO descending
+    table.sort(list, function(a, b)
+        -- Engines with ELO support come first
+        if a.hasEloSupport and not b.hasEloSupport then return true end
+        if not a.hasEloSupport and b.hasEloSupport then return false end
+        -- Sort by CPU time (faster first)
+        if a.cpuTime ~= b.cpuTime then
+            return a.cpuTime < b.cpuTime
+        end
+        -- Tie-breaker: max ELO descending
         return a.maxElo > b.maxElo
     end)
     return list

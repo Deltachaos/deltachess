@@ -15,7 +15,40 @@ local SunfishEngine = {
 }
 
 function SunfishEngine.GetEloRange(self)
-    return nil
+    return { 100, 1800 }
+end
+
+-- Estimated average CPU time in milliseconds for a move at given ELO
+-- Sunfish uses node limits which correlate roughly to time
+function SunfishEngine.GetAverageCpuTime(self, elo)
+    if elo <= 400 then return 400 end      -- ~500-1000 nodes
+    if elo <= 800 then return 600 end      -- ~1000-2000 nodes
+    if elo <= 1200 then return 1200 end    -- ~2000-3500 nodes
+    if elo <= 1500 then return 1800 end    -- ~3500-5000 nodes
+    return 2500                             -- ~5000-6000 nodes
+end
+
+-- Map ELO difficulty to maxn (maximum nodes to search)
+-- Lower ELO = fewer nodes = weaker play
+-- Higher ELO = more nodes = stronger play
+-- Sunfish is not very efficient, so we cap at 6000 nodes max
+local function difficultyToMaxn(difficulty)
+    -- ELO range: 100-1800
+    -- Node range: 500 (weakest) to 6000 (strongest)
+    if difficulty <= 100 then return 500 end
+    if difficulty >= 1800 then return 6000 end
+
+    -- Exponential scaling for more natural difficulty curve
+    -- 100 ELO -> 500 nodes, 1800 ELO -> 6000 nodes
+    local minElo, maxElo = 100, 1800
+    local minNodes, maxNodes = 500, 6000
+
+    local normalized = (difficulty - minElo) / (maxElo - minElo)  -- 0.0 to 1.0
+    -- Use exponential interpolation for smoother difficulty curve
+    local logMin = math.log(minNodes)
+    local logMax = math.log(maxNodes)
+    local logNodes = logMin + normalized * (logMax - logMin)
+    return math.floor(math.exp(logNodes))
 end
 
 -- Sunfish board: 120-char string, 0-based indices A1=91, H1=98, A8=21, H8=28
@@ -161,7 +194,9 @@ function SunfishEngine.GetBestMoveAsync(self, position, color, difficulty, onCom
             return
         end
 
-        Sunfish.searchAsync(sunfishPos, 5000, DeltaChess.Engines.YieldAfter, function(move, score)
+        local maxn = difficultyToMaxn(difficulty or 1200)
+
+        Sunfish.searchAsync(sunfishPos, maxn, DeltaChess.Engines.YieldAfter, function(move, score)
             local ourMove = sunfishMoveToOurs(move, color)
             onComplete(ourMove)
         end)
