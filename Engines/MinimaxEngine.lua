@@ -6,7 +6,7 @@ local C = DeltaChess.Constants.COLOR
 
 local MinimaxEngine = {
     id = "minimax",
-    name = "Delta Minimax Alpha-Beta",
+    name = "Minimax Alpha-Beta",
     description = "Classic minimax with alpha-beta pruning, iterative deepening, and piece-square tables",
     author = "Deltachaos",
     url = "https://github.com/Deltachaos/deltachess",
