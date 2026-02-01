@@ -2962,16 +2962,6 @@ function UpdateDisplay()
     end
     BB[1+iLine][1+iCol] = ch;
   end
-
-  print("");
-  for iLine=7,0,-1 do
-   s = "";
-   for iCol=0,7,1 do
-     s = s..BB[1+iLine][1+iCol];
-   end
-   print(s);
-  end
-
 end
 
 function AvailCaptur(side, ply)
@@ -3144,13 +3134,7 @@ end
 
 
 function MessageOut(msg, fNL)
-  Js_Message = Js_Message..msg;
-
-  -- fNL means new line
-  if(fNL) then
-    print(Js_Message);		-- prints buffer
-    Js_Message = "";
-  end
+	return
 end
 
 function Pagress(c, u)
@@ -4494,12 +4478,9 @@ end
 
 -- automatic game
 function autosample2()
- print("Thinking, autogame...");
  while((not Js_fGameOver) and (not Js_fAbandon) and (not Js_fMate_kc) and (not Js_fStalemate)) do
   Jst_Play();				-- next move
-  print("nodes " .. Js_cCompNodes);	-- to see performance
  end
- print(Js_pgn);
 end
 
 -- undo cases

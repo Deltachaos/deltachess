@@ -3014,7 +3014,6 @@ function GetMoveFromString(moveString)
             return moves[1+i];
         end
     end
-    print("busted! ->" .. moveString .. " fen:" + GetFen());
 end
 --
 
@@ -3050,9 +3049,7 @@ end
 
 -- Called on Ply finish
 function finishPlyCallback(bestMove, value, ply)
-    if (bestMove ~= nil and bestMove ~= 0) then
-        print(BuildPVMessage(bestMove, value, ply));
-    end
+    return
 end
 --
 
@@ -3060,7 +3057,6 @@ end
 function finishMoveCallback(bestMove, value, ply)
     if (bestMove ~= nil and bestMove ~= 0) then
         MakeMove(bestMove);
-        print(FormatMove(bestMove));
 
         g_foundmove = bestMove;
     end
@@ -3078,7 +3074,6 @@ local col=-1;
 	col = -col;
 	if(col>0) then
 	  mv = mv + 1;
-	  print( "Move: " .. string.format("%d",mv) .. ". ");
 	end
 
 	Search(8);

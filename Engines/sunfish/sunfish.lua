@@ -631,14 +631,10 @@ local function main()
       -- We query the user until she enters a legal move.
       local move = nil
       while true do
-	 print("Your move: ")
 	 local crdn = io.read()
 	 move = {parse(crdn:sub(1,2)), parse(crdn:sub(3,4))}
 	 if move[1] and move[2] and ttfind(pos:genMoves(), move) then
 	    break
-	 else
-	    -- Inform the user when invalid input (e.g. "help") is entered
-	    print("Invalid input. Please enter a move in the proper format (e.g. g8f6)")
 	 end
       end
       pos = pos:move(move)
@@ -652,11 +648,9 @@ local function main()
       -- print(move, score)
       assert(score)
       if score <= -MATE_VALUE then
-	 print("You won")
 	 break
       end
       if score >= MATE_VALUE then
-	 print("You lost")
 	 break
       end
 
@@ -664,7 +658,6 @@ local function main()
 
       -- The black player moves from a rotated position, so we have to
       -- 'back rotate' the move before printing it.
-      print("My move:", render(119-move[0 + __1]) .. render(119-move[1 + __1]))
       pos = pos:move(move)
    end
 end
