@@ -1,4 +1,4 @@
-## Interface: 120000, 120001
+## Interface: 120000, 120001, 50503, 11508
 ## Title: DeltaChess
 ## IconTexture: Interface\AddOns\DeltaChess\Textures\logo_small
 ## Notes: Play chess with other players or against the computer
