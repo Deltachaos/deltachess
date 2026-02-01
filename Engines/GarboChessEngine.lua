@@ -1,5 +1,6 @@
 -- GarboChessEngine.lua - Adapter for GarboChess engine
 -- Wraps Engines/garbochess/garbochess.lua to implement DeltaChess engine interface.
+-- The engine is now stateless/object-oriented, allowing parallel game analysis.
 
 local PT = DeltaChess.Constants.PIECE_TYPE
 local C = DeltaChess.Constants.COLOR
@@ -115,8 +116,6 @@ function GarboChessEngine.GetEloRange(self)
     return { 600, 2600 }
 end
 
-local garboInitialized = false
-
 function GarboChessEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)
     DeltaChess.Engines.YieldAfter(function()
         local Garbo = DeltaChess.GarboChess
@@ -125,34 +124,19 @@ function GarboChessEngine.GetBestMoveAsync(self, position, color, difficulty, on
             return
         end
 
-        local env = Garbo.env
+        -- Create a fresh state object for this analysis (enables parallel games)
+        local state = Garbo.createState()
 
-        if not garboInitialized then
-            Garbo.InitializeEval()
-            Garbo.ResetGame()
-            garboInitialized = true
-        end
-
-        -- Suppress GarboChess print output during search
-        local oldPlyCb, oldMoveCb = env.finishPlyCallback, env.finishMoveCallback
-        env.finishPlyCallback = function() end
-        env.finishMoveCallback = function(bestMove, value, ply)
-            if bestMove and bestMove ~= 0 then
-                env.g_foundmove = bestMove
-            end
-        end
-
+        -- Initialize from current position
         local fen = positionToFen(position)
-        Garbo.InitializeFromFen(fen)
+        Garbo.InitializeFromFen(state, fen)
 
         local ply = difficultyToPly(difficulty or 1200)
 
-        Garbo.SearchAsync(ply, DeltaChess.Engines.YieldAfter, function()
-            env.finishPlyCallback, env.finishMoveCallback = oldPlyCb, oldMoveCb
-
+        Garbo.SearchAsync(state, ply, DeltaChess.Engines.YieldAfter, function()
             local move = nil
-            if env.g_foundmove and env.g_foundmove ~= 0 then
-                local moveStr = Garbo.FormatMove(env.g_foundmove)
+            if state.foundmove and state.foundmove ~= 0 then
+                local moveStr = Garbo.FormatMove(state.foundmove)
                 move = parseMoveStr(moveStr)
             end
             onComplete(move)
