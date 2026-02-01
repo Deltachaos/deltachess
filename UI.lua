@@ -675,6 +675,13 @@ function DeltaChess:ShowChessBoard(gameId)
     frame:SetFrameLevel(100)
     frame.TitleText:SetText("DeltaChess")
     
+    -- Override the template's close button to avoid taint issues
+    if frame.CloseButton then
+        frame.CloseButton:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+    end
+    
     -- Compact width when minimized (board + margins, no right panel)
     local compactWidth = LABEL_SIZE + BOARD_SIZE + 15
     frame.isMinimized = false
