@@ -24,8 +24,8 @@ setfenv(1, _ENV)
 -- Use DeltaChess namespaced bit operations
 local bit = DeltaChess.BitOp
 
-g_timeout = 30;		-- can set maximum seconds for analysing
-g_maxfinCnt = 100000;	-- can set limit of moves to analyse
+g_timeout = 5;		-- can set maximum seconds for analysing
+g_maxfinCnt = 20000;	-- can set limit of moves to analyse (reduced for WoW script timeout)
 
 g_startTime = 0;
 g_finCnt = 0;

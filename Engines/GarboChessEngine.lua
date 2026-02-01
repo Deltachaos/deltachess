@@ -99,12 +99,13 @@ local function parseMoveStr(moveStr)
 end
 
 -- Map ELO difficulty to search ply (GarboChess uses ply for depth)
+-- Reduced depths to prevent WoW script timeout
 local function difficultyToPly(difficulty)
-    if difficulty <= 800 then return 3 end
-    if difficulty <= 1200 then return 4 end
-    if difficulty <= 1600 then return 5 end
-    if difficulty <= 2000 then return 6 end
-    return 7
+    if difficulty <= 800 then return 2 end
+    if difficulty <= 1200 then return 3 end
+    if difficulty <= 1600 then return 3 end
+    if difficulty <= 2000 then return 4 end
+    return 4
 end
 
 function GarboChessEngine.GetEloRange(self)

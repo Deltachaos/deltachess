@@ -179,7 +179,17 @@ local function undoTemporaryMove(board, move, state)
     board.squares[move.toRow][move.toCol] = state.captured
 end
 
+-- Node counter for limiting synchronous work
+local nodeCounter = { count = 0, limit = 5000 }
+
 local function minimax(board, depth, alpha, beta, maximizingPlayer)
+    -- Increment node counter and check limit
+    nodeCounter.count = nodeCounter.count + 1
+    if nodeCounter.count > nodeCounter.limit then
+        -- Return early with current evaluation to prevent script timeout
+        return evaluateBoard(board), nil
+    end
+    
     if depth == 0 then
         return evaluateBoard(board), nil
     end
@@ -288,6 +298,8 @@ function MinimaxEngine.GetBestMoveAsync(self, board, color, difficulty, onComple
             if currentDepth <= 1 then
                 eval = evaluateBoard(searchBoard)
             else
+                -- Reset node counter before each minimax call to prevent timeout
+                nodeCounter.count = 0
                 eval = minimax(searchBoard, currentDepth - 1, alpha, beta, not maximizing)
             end
             undoTemporaryMove(searchBoard, move, state)
