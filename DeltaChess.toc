@@ -20,8 +20,6 @@ Engines/sunfish/sunfish.lua
 Engines/SunfishEngine.lua
 Engines/garbochess/garbochess.lua
 Engines/GarboChessEngine.lua
-Engines/luajester/LuaJester.lua
-Engines/LuaJesterEngine.lua
 ChessAI.lua
 UI.lua
 Communication.lua

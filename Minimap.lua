@@ -4,6 +4,9 @@ DeltaChess.Minimap = {}
 
 local minimapButton
 
+-- Detect WoW version for compatibility (with nil checks for older clients)
+local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
+
 -- Initialize minimap button
 function DeltaChess.Minimap:Initialize()
     if minimapButton then return end
@@ -20,14 +23,21 @@ function DeltaChess.Minimap:Initialize()
     minimapButton:SetSize(31, 31)
     minimapButton:SetFrameStrata("MEDIUM")
     minimapButton:SetFrameLevel(8)
-    minimapButton:RegisterForClicks("AnyUp")
-    minimapButton:RegisterForDrag("LeftButton")
     
-    -- Icon
+    -- RegisterForClicks: Use explicit button types for Classic compatibility
+    if isRetail then
+        minimapButton:RegisterForClicks("AnyUp")
+    else
+        minimapButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
+    minimapButton:RegisterForDrag("LeftButton")
+    minimapButton:SetMovable(true)
+    
+    -- Icon (use .tga extension explicitly for Classic compatibility)
     local icon = minimapButton:CreateTexture(nil, "BACKGROUND")
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER", 0, 1)
-    icon:SetTexture("Interface\\AddOns\\DeltaChess\\Textures\\logo_small")
+    icon:SetTexture("Interface\\AddOns\\DeltaChess\\Textures\\logo_small.tga")
     minimapButton.icon = icon
     
     -- Border
@@ -130,15 +140,29 @@ function DeltaChess.Minimap:Initialize()
     
     self:UpdateDNDHighlight()
 
-    -- Periodically update "your turn" highlight
-    C_Timer.NewTicker(2, function()
-        DeltaChess.Minimap:UpdateYourTurnHighlight()
-    end)
+    -- Periodically update "your turn" highlight (with fallback for Classic compatibility)
+    if C_Timer and C_Timer.NewTicker then
+        C_Timer.NewTicker(2, function()
+            DeltaChess.Minimap:UpdateYourTurnHighlight()
+        end)
+    else
+        -- Fallback: create a separate frame for updates (avoids conflicts with drag OnUpdate)
+        local updateFrame = CreateFrame("Frame")
+        local elapsed = 0
+        updateFrame:SetScript("OnUpdate", function(self, delta)
+            elapsed = elapsed + delta
+            if elapsed >= 2 then
+                elapsed = 0
+                DeltaChess.Minimap:UpdateYourTurnHighlight()
+            end
+        end)
+    end
 end
 
-local ICON_NORMAL = "Interface\\AddOns\\DeltaChess\\Textures\\logo_small"
-local ICON_GREEN  = "Interface\\AddOns\\DeltaChess\\Textures\\logo_green"
-local ICON_RED    = "Interface\\AddOns\\DeltaChess\\Textures\\logo_red"
+-- Use .tga extension explicitly for Classic compatibility
+local ICON_NORMAL = "Interface\\AddOns\\DeltaChess\\Textures\\logo_small.tga"
+local ICON_GREEN  = "Interface\\AddOns\\DeltaChess\\Textures\\logo_green.tga"
+local ICON_RED    = "Interface\\AddOns\\DeltaChess\\Textures\\logo_red.tga"
 
 -- Update minimap icon texture (green = your turn has priority over red = DND)
 function DeltaChess.Minimap:UpdateYourTurnHighlight()
@@ -170,9 +194,12 @@ function DeltaChess.Minimap:UpdatePosition()
     local x = math.cos(angle)
     local y = math.sin(angle)
     
-    x = x * 105
-    y = y * 105
+    -- Use larger radius for Retail, smaller for Classic (minimap is smaller)
+    local radius = isRetail and 105 or 80
+    x = x * radius
+    y = y * radius
     
+    minimapButton:ClearAllPoints()
     minimapButton:SetPoint("CENTER", Minimap, "CENTER", x, y)
 end
 
