@@ -1268,6 +1268,52 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
     end
 
     local dialog = DeltaChess.frames.promotionDialog
+    
+    -- Store move info for default promotion if closed without selecting
+    dialog.pendingMove = {
+        frame = frame,
+        board = board,
+        fromRow = fromRow,
+        fromCol = fromCol,
+        toRow = toRow,
+        toCol = toCol,
+        isVsComputer = isVsComputer
+    }
+    
+    -- Default to queen if dialog is closed without selecting (e.g. via X button)
+    dialog:SetScript("OnHide", function(self)
+        local pm = self.pendingMove
+        if pm and pm.frame.promotionPending then
+            pm.frame.promotionPending = nil
+            self.pendingMove = nil
+            
+            -- Clear selection
+            pm.frame.selectedSquare = nil
+            pm.frame.validMoves = {}
+            for r = 1, 8 do
+                for c = 1, 8 do
+                    pm.frame.squares[r][c].highlight:Hide()
+                    pm.frame.squares[r][c].validMove:Hide()
+                end
+            end
+            
+            -- Default to queen promotion
+            if pm.isVsComputer then
+                pm.board:MakeMove(pm.fromRow, pm.fromCol, pm.toRow, pm.toCol, "queen")
+                DeltaChess.UI:UpdateBoard(pm.frame)
+                if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+                    DeltaChess.Minimap:UpdateYourTurnHighlight()
+                end
+                if pm.board.gameStatus ~= "active" then
+                    DeltaChess.UI:ShowGameEnd(pm.frame)
+                    return
+                end
+                DeltaChess.AI:MakeMove(pm.frame.gameId, 500)
+            else
+                DeltaChess:SendMoveWithConfirmation(pm.frame.gameId, pm.fromRow, pm.fromCol, pm.toRow, pm.toCol, "queen")
+            end
+        end
+    end)
     local pieceTypes = {"queen", "rook", "bishop", "knight"}
     local textures = PIECE_TEXTURES[playerColor]
 
@@ -1275,6 +1321,8 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
         local btn = dialog["pieceBtn_" .. pieceType]
         btn.texture:SetTexture(textures[pieceType])
         btn:SetScript("OnClick", function()
+            frame.promotionPending = nil
+            dialog.pendingMove = nil  -- Clear so OnHide doesn't also make a move
             dialog:Hide()
 
             -- Clear selection
@@ -1313,6 +1361,11 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
     local piece = board:GetPiece(row, col)
     local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
     local game = frame.game
+    
+    -- Check if board is locked for promotion selection
+    if frame.promotionPending then
+        return
+    end
     
     -- Check if board is locked (waiting for ACK)
     if not game.isVsComputer and DeltaChess:IsBoardLocked(frame.gameId) then
@@ -1385,6 +1438,7 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
 
             -- Promotion move: show piece selection first
             if clickedMove and clickedMove.promotion then
+                frame.promotionPending = true
                 DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, row, col, game.isVsComputer)
                 return
             end
