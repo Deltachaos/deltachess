@@ -2020,18 +2020,18 @@ local function AllCutNode(state, ply, depth, beta, allowNull)
 
         if (MakeMove(state, currentMove)) then
             local doFullSearch = true
+            local value
 
             if (state.inCheck) then
                 plyToSearch = plyToSearch + 1
             else
                 if (mp.stage == 5 and mp.atMove > 5 and ply >= 3) then
                     local reduced = plyToSearch - iif(mp.atMove > 14, 2, 1)
-                    local value = -AllCutNode(state, reduced, depth + 1, -(beta - 1), true)
+                    value = -AllCutNode(state, reduced, depth + 1, -(beta - 1), true)
                     doFullSearch = (value >= beta)
                 end
             end
 
-            local value
             if (doFullSearch) then
                 value = -AllCutNode(state, plyToSearch, depth + 1, -(beta - 1), true)
             end
