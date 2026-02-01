@@ -239,79 +239,6 @@ function iif(ask, ontrue, onfalse)
 end
 
 
-function GetFen()
-
-  local result = "";
-  local row = 0;
-  local empty = 0;
-  local col = 0
-  local piece = 0;
-
-  while(row < 8) do
-	if (row ~= 0) then
-            result = result .. '/';
-	end
-        empty = 0;
-	col = 0;
-        while(col < 8) do
-            piece = g_board[1+bit.lshift((row + 2),4) + col + 4];
-            if (piece == 0) then
-                empty = empty + 1;
-
-            else
-                if (empty ~= 0) then
-                    result = result .. string.format("%d", empty);
-		end
-                empty = 0;
-                pieceChar = PieceCharList[1+bit.band(piece, 0x7)];
-		if( bit.band(piece, colorWhite) ~= 0) then
-			result=result .. string.upper( pieceChar )
-		else
-			result=result .. pieceChar
-		end
-            end
-
-	    col=col+1
-	end
-        if (empty ~= 0) then
-            result = result .. string.format("%d", empty);
-        end
-	row = row + 1
-  end
-
-
-  result = result .. iif(colorWhite>0," w","b");
-  result = result .. " ";
-  if (g_castleRights == 0) then
-	result = result .. "-";
-  else
-	if (bit.band(g_castleRights, 1) ~= 0) then
-            result = result .. "K";
-	end
-        if (bit.band(g_castleRights, 2) ~= 0) then
-            result = result .. "Q";
-	end
-        if (bit.band(g_castleRights, 4) ~= 0) then
-            result = result .. "k";
-	end
-        if (bit.band(g_castleRights, 8) ~= 0) then
-            result = result .. "q";
-	end
-  end
-
-  result = result .. " ";
-
-  if (g_enPassentSquare < 1) then
-	result = result .. '-';
-  else
-        result = result .. FormatSquare(g_enPassentSquare);
-  end
-
-  return result;
-
-end
---
-
 --
 function InitializeEval()
 
@@ -1480,66 +1407,6 @@ function ResetGame()
 end
 --
 
---
-function Search(maxPly)
-
-    local alpha = minEval;
-    local beta = maxEval;
-
-    local bestMove = 0;
-    local value = 0;
-    local i = 1;
-    local tmp = 0;
-
-    g_globalPly = g_globalPly + 1;
-    g_nodeCount = 0;
-    g_qNodeCount = 0;
-    g_searchValid = true;
-    g_foundmove = 0;
-
-    g_finCnt = 0;
-    g_startTime = GetTime();
-
-    while( i <= maxPly and g_searchValid ) do
-        tmp = AlphaBeta(i, 0, alpha, beta);
-        if (not g_searchValid) then
-		break;
-	end
-
-        value = tmp;
-
-        if (value > alpha and value < beta) then
-            alpha = value - 500;
-            beta = value + 500;
-
-            if (alpha < minEval) then
-		alpha = minEval;
-	    end
-            if (beta > maxEval) then
-		beta = maxEval;
-	    end
-        else
-	  if (alpha ~= minEval) then
-            alpha = minEval;
-            beta = maxEval;
-            i = i - 1;
-	  end
-        end
-
-        if (g_hashTable[1+bit.band(g_hashKeyLow, g_hashMask)] ~= nil) then
-            bestMove = g_hashTable[1+bit.band(g_hashKeyLow, g_hashMask)].bestMove;
-        end
-
-	finishPlyCallback(bestMove, value, i);
-
-	i = i + 1;
-    end
-
-    finishMoveCallback(bestMove, value, i - 1);
-
-end
---
-
 -- Async version of Search that yields between ply iterations
 -- yieldFn: function to call to yield (e.g., C_Timer.After wrapper)
 -- onComplete: callback(bestMove) when done
@@ -1607,19 +1474,6 @@ function SearchAsync(maxPly, yieldFn, onComplete)
     end
 
     yieldFn(searchNextPly);
-end
---
-
---
-function PawnEval(color)
-    local pieceIdx = bit.lshift( bit.bor(color, 1) , 4 );
-    local from = g_pieceList[1+pieceIdx];
-    pieceIdx = pieceIdx + 1;
-
-    while (from ~= 0) do
-        from = g_pieceList[1+pieceIdx];
-	pieceIdx = pieceIdx + 1;
-    end
 end
 --
 
@@ -3006,18 +2860,6 @@ end
 --
 
 --
-function GetMoveFromString(moveString)
-    local i = 0;
-    local moves = GenerateValidMoves();
-    for i = 0, table.getn(moves)-1, 1 do
-        if (FormatMove(moves[1+i]) == moveString) then
-            return moves[1+i];
-        end
-    end
-end
---
-
---
 function PVFromHash(move, ply)
     local pvString = "";
     local hashNode = 0;
@@ -3038,15 +2880,6 @@ function PVFromHash(move, ply)
 end
 --
 
--- To display
-function BuildPVMessage(bestMove, value, ply)
-
-    local totalNodes = g_nodeCount + g_qNodeCount;
-    return "Ply:" .. ply .. " Score:" .. string.format("%d", value ) ..
-	" Nodes:" .. string.format("%d", totalNodes ) .. " " .. PVFromHash(bestMove, 15);
-end
---
-
 -- Called on Ply finish
 function finishPlyCallback(bestMove, value, ply)
     return
@@ -3062,28 +2895,6 @@ function finishMoveCallback(bestMove, value, ply)
     end
 end
 --
-
--- Produces a chess game   Lua vs Lua
-function autogame()
-
-local mv=0;
-local col=-1;
-
- while(true) do
-
-	col = -col;
-	if(col>0) then
-	  mv = mv + 1;
-	end
-
-	Search(8);
-
-	if(g_foundmove == 0) then
-		break;
-	end
- end
-
-end
 
 -- Export public API to DeltaChess namespace
 DeltaChess.GarboChess = {
