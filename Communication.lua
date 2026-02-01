@@ -587,6 +587,114 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     DeltaChess:NotifyItIsYourTurn(moveData.gameId, opponentName)
 end
 
+-- Restore game from history to active games
+function DeltaChess:RestoreGameFromHistory(gameId)
+    -- Check if game is already active
+    if self.db.games[gameId] then
+        return self.db.games[gameId]
+    end
+    
+    -- Try to restore from UI frame if available
+    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+        local frame = DeltaChess.UI.activeFrame
+        local playerColor = frame.playerColor or "white"
+        local computerColor = (playerColor == "white") and "black" or "white"
+        local game = {
+            id = gameId,
+            board = frame.board,
+            status = "active",
+            isVsComputer = frame.isVsComputer,
+            playerColor = playerColor,
+            computerColor = computerColor,
+            white = frame.white,
+            black = frame.black,
+            settings = frame.settings,
+            computerDifficulty = frame.computerDifficulty,
+            startTime = frame.startTime
+        }
+        
+        -- Restore to active games
+        self.db.games[gameId] = game
+        
+        -- Remove from history
+        for i = #self.db.history, 1, -1 do
+            if self.db.history[i].id == gameId then
+                table.remove(self.db.history, i)
+                break
+            end
+        end
+        
+        return game
+    end
+    
+    return nil
+end
+
+-- Take back last two moves (vs computer only)
+function DeltaChess:TakeBackMove(gameId)
+    local game = self.db.games[gameId]
+    
+    -- If game was ended and saved to history, restore it
+    if not game then
+        game = self:RestoreGameFromHistory(gameId)
+    end
+    
+    if not game or not game.isVsComputer then 
+        self:Print("Cannot take back: not a computer game.")
+        return 
+    end
+    
+    local board = game.board
+    local moves = board.moves
+    
+    -- When game has ended, only the last move ended the game — take back 1 move.
+    -- When game is active, take back 2 moves (player + computer).
+    local gameEnded = (board.gameStatus ~= "active")
+    local movesToRemove = gameEnded and 1 or 2
+    
+    if #moves < movesToRemove then
+        self:Print("Not enough moves to take back.")
+        return
+    end
+    
+    for _ = 1, movesToRemove do
+        table.remove(moves)
+    end
+    
+    -- Rebuild board from scratch
+    local newBoard = DeltaChess.Board:New()
+    for _, move in ipairs(moves) do
+        newBoard:MakeMove(move.from.row, move.from.col, move.to.row, move.to.col, move.promotion)
+    end
+    
+    -- Replace the board
+    game.board = newBoard
+    game.board.moves = moves  -- Preserve move history with timestamps
+    
+    -- Ensure game is active after takeback
+    game.board.gameStatus = "active"
+    game.status = "active"
+    
+    -- Only when we took back 2 moves: replayed position ends with computer to move; set turn to player.
+    -- When we took back 1 move (game had ended), replay already has the correct turn.
+    if movesToRemove == 2 then
+        game.board.currentTurn = game.playerColor
+    end
+    
+    -- Update UI
+    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+        local frame = DeltaChess.UI.activeFrame
+        frame.board = game.board
+        frame.game = game  -- Update game reference
+        frame.gameEndShown = false  -- Allow game end to show again if needed
+        frame.selectedSquare = nil   -- Deselect picked piece
+        frame.validMoves = {}
+        DeltaChess.UI:UpdateBoard(frame)
+    end
+    
+    self:Print("Took back last move.")
+end
+
 -- Resign game
 function DeltaChess:ResignGame(gameId)
     local game = self.db.games[gameId]

@@ -712,6 +712,14 @@ function DeltaChess:ShowChessBoard(gameId)
     frame.opponentChessColor = opponentChessColor
     frame.gameEndShown = false  -- Reset so game-end popup can fire for this game
     
+    -- Store game data for potential restoration after game end
+    frame.isVsComputer = game.isVsComputer
+    frame.white = game.white
+    frame.black = game.black
+    frame.settings = game.settings
+    frame.computerDifficulty = game.computerDifficulty
+    frame.startTime = game.startTime
+    
     local leftMargin = 10
     local topOffset = -30
     
@@ -860,15 +868,19 @@ function DeltaChess:ShowChessBoard(gameId)
     local drawButton = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
     drawButton:SetSize(buttonWidth, 25)
     drawButton:SetPoint("LEFT", resignButton, "RIGHT", buttonSpacing, 0)
-    drawButton:SetText("Draw")
-    drawButton:SetScript("OnClick", function()
-        DeltaChess:OfferDraw(gameId)
-    end)
     frame.drawButton = drawButton
     frame.isVsComputer = game.isVsComputer
     
     if game.isVsComputer then
-        drawButton:Disable()
+        drawButton:SetText("Back")
+        drawButton:SetScript("OnClick", function()
+            DeltaChess:TakeBackMove(gameId)
+        end)
+    else
+        drawButton:SetText("Draw")
+        drawButton:SetScript("OnClick", function()
+            DeltaChess:OfferDraw(gameId)
+        end)
     end
     
     local closeButton = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
@@ -1131,23 +1143,38 @@ function DeltaChess.UI:UpdateBoard(frame)
     
     if frame.historyText then
         frame.historyText:SetText(historyStr)
-        -- Size scroll child to text so scroll range is correct, then scroll to bottom
+        -- Size scroll child to text so scroll range is correct
         local textHeight = frame.historyText:GetStringHeight()
         if frame.historyScrollChild then
             frame.historyScrollChild:SetHeight(math.max(100, textHeight))
         end
+        -- Auto-scroll to bottom only when the move history text changed (new move added), not on every clock tick
         if frame.historyScroll then
-            frame.historyScroll:SetVerticalScroll(frame.historyScroll:GetVerticalScrollRange())
+            local lastStr = frame._lastHistoryStr
+            if lastStr ~= historyStr then
+                frame._lastHistoryStr = historyStr
+                -- Defer scroll to next frame so layout/height is updated before we read scroll range
+                C_Timer.After(0, function()
+                    if frame.historyScroll and frame.historyScroll:GetParent() then
+                        frame.historyScroll:SetVerticalScroll(frame.historyScroll:GetVerticalScrollRange())
+                    end
+                end)
+            end
         end
     end
     
-    -- Disable resign/draw when game is over
+    -- Disable resign/draw/pause when game is over (but keep Back enabled for vs computer)
     if board.gameStatus ~= "active" then
         if frame.resignButton then
             frame.resignButton:Disable()
         end
-        if frame.drawButton and not game.isVsComputer then
-            frame.drawButton:Disable()
+        if frame.drawButton then
+            if game.isVsComputer then
+                -- Keep Back button enabled even when game ends
+                frame.drawButton:Enable()
+            else
+                frame.drawButton:Disable()
+            end
         end
         if frame.closeButton then
             frame.closeButton:Disable()
