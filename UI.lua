@@ -78,8 +78,8 @@ function DeltaChess.UI:CalculateRemainingTime(game, color)
         end
     end
     
-    -- Add time for current thinking if it's this color's turn (not when paused)
-    if game.board.currentTurn == color and game.status == "active" then
+    -- Add time for current thinking if it's this color's turn
+    if game.board.currentTurn == color and (game.status == "active" or game.status == "paused") then
         if game._lastMoveCountWhenPaused and #moves > game._lastMoveCountWhenPaused then
             game.timeSpentClosed = nil
             game._lastMoveCountWhenPaused = nil
@@ -90,11 +90,17 @@ function DeltaChess.UI:CalculateRemainingTime(game, color)
         else
             lastMoveTimestamp = moves[#moves].timestamp or gameStartTime
         end
-        local currentThinkTime = time() - lastMoveTimestamp
-        if game.pausedByClose and game.pauseClosedAt then
+        local currentThinkTime
+        if game.status == "paused" and game.pauseStartTime then
+            -- Freeze at pause moment
+            currentThinkTime = math.max(0, game.pauseStartTime - lastMoveTimestamp)
+        elseif game.pausedByClose and game.pauseClosedAt then
             currentThinkTime = math.max(0, game.pauseClosedAt - lastMoveTimestamp)
-        elseif game.timeSpentClosed and game.timeSpentClosed > 0 then
-            currentThinkTime = math.max(0, currentThinkTime - game.timeSpentClosed)
+        else
+            currentThinkTime = time() - lastMoveTimestamp
+            if game.timeSpentClosed and game.timeSpentClosed > 0 then
+                currentThinkTime = math.max(0, currentThinkTime - game.timeSpentClosed)
+            end
         end
         timeUsed = timeUsed + math.max(0, currentThinkTime)
     end
@@ -139,15 +145,19 @@ function DeltaChess.UI:CalculateTotalThinkingTime(game, color)
         end
     end
     
-    -- Add current thinking time if it's this color's turn (not when paused)
-    if game.board.currentTurn == color and game.status == "active" then
+    -- Add current thinking time if it's this color's turn
+    if game.board.currentTurn == color and (game.status == "active" or game.status == "paused") then
         local lastMoveTimestamp = (#moves == 0) and gameStartTime or (moves[#moves].timestamp or gameStartTime)
-        local elapsed = time() - lastMoveTimestamp
-        -- When pausedByClose, freeze at pauseClosedAt; when reopened, subtract time spent closed
-        if game.pausedByClose and game.pauseClosedAt then
+        local elapsed
+        if game.status == "paused" and game.pauseStartTime then
+            elapsed = math.max(0, game.pauseStartTime - lastMoveTimestamp)
+        elseif game.pausedByClose and game.pauseClosedAt then
             elapsed = math.max(0, game.pauseClosedAt - lastMoveTimestamp)
-        elseif game.timeSpentClosed and game.timeSpentClosed > 0 then
-            elapsed = math.max(0, elapsed - game.timeSpentClosed)
+        else
+            elapsed = time() - lastMoveTimestamp
+            if game.timeSpentClosed and game.timeSpentClosed > 0 then
+                elapsed = math.max(0, elapsed - game.timeSpentClosed)
+            end
         end
         -- Reset timeSpentClosed when a new move has been made since we paused
         if game._lastMoveCountWhenPaused and #moves > game._lastMoveCountWhenPaused then
@@ -1004,14 +1014,20 @@ function DeltaChess.UI:UpdateBoard(frame)
         end
     end
     
-    -- Update Pause button state for human games
+    -- Update Pause/Unpause button state for human games
     if frame.closeButton and not game.isVsComputer then
         if game.status == "paused" then
-            frame.closeButton:SetText("Paused")
-            frame.closeButton:Disable()
+            frame.closeButton:SetText("Unpause")
+            frame.closeButton:Enable()
+            frame.closeButton:SetScript("OnClick", function()
+                DeltaChess:RequestUnpause(frame.gameId)
+            end)
         else
             frame.closeButton:SetText("Pause")
             frame.closeButton:Enable()
+            frame.closeButton:SetScript("OnClick", function()
+                DeltaChess:RequestPause(frame.gameId)
+            end)
         end
     end
     

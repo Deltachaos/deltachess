@@ -777,6 +777,7 @@ function DeltaChess:HandlePauseRequest(data)
         if data.accepted then
             game.status = "paused"
             game.pauseStartTime = time()
+            game._lastMoveCountWhenPaused = #game.board.moves
             self:Print("Opponent accepted. Game paused.")
         else
             self:Print("Opponent declined the pause request.")
@@ -797,13 +798,17 @@ function DeltaChess:RequestUnpause(gameId)
     self:Print("Unpause request sent to opponent.")
 end
 
--- Send unpause response
-function DeltaChess:SendUnpauseResponse(gameId, accepted)
+-- Send unpause response (caller should add timeSpentClosed before calling if accepting)
+function DeltaChess:SendUnpauseResponse(gameId, accepted, timeSpentClosedIncrement)
     local game = self.db.games[gameId]
     if not game then return end
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
-    self:SendCommMessage("ChessUnpause", self:Serialize({ gameId = gameId, accepted = accepted }), "WHISPER", opponent)
+    local payload = { gameId = gameId, accepted = accepted }
+    if accepted and timeSpentClosedIncrement then
+        payload.timeSpentClosedIncrement = timeSpentClosedIncrement
+    end
+    self:SendCommMessage("ChessUnpause", self:Serialize(payload), "WHISPER", opponent)
 end
 
 -- Handle unpause request/response
@@ -815,6 +820,11 @@ function DeltaChess:HandleUnpauseRequest(data)
         StaticPopup_Show("CHESS_UNPAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
     else
         if data.accepted then
+            if data.timeSpentClosedIncrement then
+                game.timeSpentClosed = (game.timeSpentClosed or 0) + data.timeSpentClosedIncrement
+            elseif game.pauseStartTime then
+                game.timeSpentClosed = (game.timeSpentClosed or 0) + (time() - game.pauseStartTime)
+            end
             game.status = "active"
             game.pauseStartTime = nil
             self:Print("Opponent accepted. Game resumed.")

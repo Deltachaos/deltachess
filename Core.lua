@@ -1672,6 +1672,7 @@ StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
         if game then
             game.status = "paused"
             game.pauseStartTime = time()
+            game._lastMoveCountWhenPaused = #game.board.moves
             DeltaChess:SendPauseResponse(popupData.gameId, true)
             DeltaChess:Print("Game paused.")
             if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
@@ -1696,9 +1697,11 @@ StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
     OnAccept = function(self, popupData)
         local game = DeltaChess.db.games[popupData.gameId]
         if game then
+            local increment = game.pauseStartTime and (time() - game.pauseStartTime) or 0
+            game.timeSpentClosed = (game.timeSpentClosed or 0) + increment
             game.status = "active"
             game.pauseStartTime = nil
-            DeltaChess:SendUnpauseResponse(popupData.gameId, true)
+            DeltaChess:SendUnpauseResponse(popupData.gameId, true, increment)
             DeltaChess:Print("Game resumed.")
             if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
                 DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
