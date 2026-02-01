@@ -93,36 +93,40 @@ end
 
 function LuaJesterEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)
     DeltaChess.Engines.YieldAfter(function()
-        if not InitGame or not SetFen or not ComputerMvtAsync then
+        local Jester = DeltaChess.LuaJester
+        if not Jester then
             onComplete(nil)
             return
         end
 
+        local env = Jester.env
+
         -- Suppress print output during search
-        local oldPrint = print
-        print = function() end
+        local oldPrint = env.print
+        env.print = function() end
 
         -- Always reinitialize to ensure clean state
-        InitGame()
+        Jester.InitGame()
 
         local fen = positionToFen(position)
-        SetFen(fen)
+        Jester.SetFen(fen)
 
         -- Set computer = side to move (the engine searches for this side)
         if color == C.WHITE then
-            Js_computer = Js_white
-            Js_player = Js_black
+            env.Js_computer = env.Js_white
+            env.Js_player = env.Js_black
         else
-            Js_computer = Js_black
-            Js_player = Js_white
+            env.Js_computer = env.Js_black
+            env.Js_player = env.Js_white
         end
-        Js_enemy = Js_player
+        env.Js_enemy = env.Js_player
 
-        ComputerMvtAsync(DeltaChess.Engines.YieldAfter, function()
-            print = oldPrint
+        Jester.ComputerMvtAsync(DeltaChess.Engines.YieldAfter, function()
+            env.print = oldPrint
 
             -- LuaJester stores final move in Js_root.f and Js_root.t (0-63 indices)
             local move = nil
+            local Js_root = env.Js_root
             if Js_root and Js_root.f and Js_root.t and Js_root.f ~= Js_root.t then
                 local fromRow, fromCol = idxToRowCol(Js_root.f)
                 local toRow, toCol = idxToRowCol(Js_root.t)

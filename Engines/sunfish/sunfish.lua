@@ -671,4 +671,4 @@ end
 
 
 -- Expose as library for DeltaChess SunfishEngine
-_G.Sunfish = { Position = Position, search = search, searchAsync = searchAsync }
+DeltaChess.Sunfish = { Position = Position, search = search, searchAsync = searchAsync }

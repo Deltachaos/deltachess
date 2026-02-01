@@ -115,37 +115,40 @@ local garboInitialized = false
 
 function GarboChessEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)
     DeltaChess.Engines.YieldAfter(function()
-        if not InitializeEval or not ResetGame or not InitializeFromFen or not FormatMove or not SearchAsync then
+        local Garbo = DeltaChess.GarboChess
+        if not Garbo then
             onComplete(nil)
             return
         end
 
+        local env = Garbo.env
+
         if not garboInitialized then
-            InitializeEval()
-            ResetGame()
+            Garbo.InitializeEval()
+            Garbo.ResetGame()
             garboInitialized = true
         end
 
         -- Suppress GarboChess print output during search
-        local oldPlyCb, oldMoveCb = finishPlyCallback, finishMoveCallback
-        finishPlyCallback = function() end
-        finishMoveCallback = function(bestMove, value, ply)
+        local oldPlyCb, oldMoveCb = env.finishPlyCallback, env.finishMoveCallback
+        env.finishPlyCallback = function() end
+        env.finishMoveCallback = function(bestMove, value, ply)
             if bestMove and bestMove ~= 0 then
-                g_foundmove = bestMove
+                env.g_foundmove = bestMove
             end
         end
 
         local fen = positionToFen(position)
-        InitializeFromFen(fen)
+        Garbo.InitializeFromFen(fen)
 
         local ply = difficultyToPly(difficulty or 1200)
 
-        SearchAsync(ply, DeltaChess.Engines.YieldAfter, function()
-            finishPlyCallback, finishMoveCallback = oldPlyCb, oldMoveCb
+        Garbo.SearchAsync(ply, DeltaChess.Engines.YieldAfter, function()
+            env.finishPlyCallback, env.finishMoveCallback = oldPlyCb, oldMoveCb
 
             local move = nil
-            if g_foundmove and g_foundmove ~= 0 then
-                local moveStr = FormatMove(g_foundmove)
+            if env.g_foundmove and env.g_foundmove ~= 0 then
+                local moveStr = Garbo.FormatMove(env.g_foundmove)
                 move = parseMoveStr(moveStr)
             end
             onComplete(move)

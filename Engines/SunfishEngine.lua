@@ -4,14 +4,6 @@
 local PT = DeltaChess.Constants.PIECE_TYPE
 local C = DeltaChess.Constants.COLOR
 
-local Sunfish = _G.Sunfish
-if not Sunfish then
-    return  -- Sunfish not loaded (Lua4chess/sunfish.lua must load first)
-end
-
-local Position = Sunfish.Position
-local search = Sunfish.search
-
 local SunfishEngine = {
     id = "sunfish",
     name = "Sunfish.lua",
@@ -124,6 +116,9 @@ end
 -- Convert our position to Sunfish Position (side to move = white/uppercase)
 -- When black to move, Sunfish expects rotated board per Position:rotate()
 local function positionToSunfish(position, colorToMove)
+    local Sunfish = DeltaChess.Sunfish
+    if not Sunfish then return nil end
+
     local board = positionToSunfishBoard(position)
     local wc, bc = getCastlingRights(position)
     local ep, kp = getEpKp(position)
@@ -133,7 +128,7 @@ local function positionToSunfish(position, colorToMove)
         kp = kp > 0 and (119 - kp) or 0
         wc, bc = bc, wc
     end
-    return Position.new(board, 0, wc, bc, ep, kp)
+    return Sunfish.Position.new(board, 0, wc, bc, ep, kp)
 end
 
 -- Convert Sunfish move {fromIdx, toIdx} (0-based indices) to our {fromRow, fromCol, toRow, toCol}
@@ -154,7 +149,17 @@ end
 
 function SunfishEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)
     DeltaChess.Engines.YieldAfter(function()
+        local Sunfish = DeltaChess.Sunfish
+        if not Sunfish then
+            onComplete(nil)
+            return
+        end
+
         local sunfishPos = positionToSunfish(position, color)
+        if not sunfishPos then
+            onComplete(nil)
+            return
+        end
 
         Sunfish.searchAsync(sunfishPos, 5000, DeltaChess.Engines.YieldAfter, function(move, score)
             local ourMove = sunfishMoveToOurs(move, color)

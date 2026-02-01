@@ -17,6 +17,13 @@
 -- interpreted chess - the optimal AI for videogames :)
 -- Very needed for scripting. Just could not find better.
 
+-- Sandbox environment to avoid global namespace pollution
+local _ENV = setmetatable({}, { __index = _G })
+setfenv(1, _ENV)
+
+-- Use DeltaChess namespaced bit operations
+local bit = DeltaChess.BitOp
+
 g_timeout = 30;		-- can set maximum seconds for analysing
 g_maxfinCnt = 100000;	-- can set limit of moves to analyse
 
@@ -3082,3 +3089,14 @@ local col=-1;
  end
 
 end
+
+-- Export public API to DeltaChess namespace
+DeltaChess.GarboChess = {
+    InitializeEval = InitializeEval,
+    ResetGame = ResetGame,
+    InitializeFromFen = InitializeFromFen,
+    FormatMove = FormatMove,
+    SearchAsync = SearchAsync,
+    -- Expose environment for callback/result access
+    env = _ENV
+}

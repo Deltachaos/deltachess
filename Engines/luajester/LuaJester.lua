@@ -24,6 +24,13 @@
 -- Lua (via javascript) work by http://chessforeva.blogspot.com
 -- sorry for hack, just very good source for lua
 
+-- Sandbox environment to avoid global namespace pollution
+local _ENV = setmetatable({}, { __index = _G })
+setfenv(1, _ENV)
+
+-- Use DeltaChess namespaced bit operations
+local bit = DeltaChess.BitOp
+
 
 function _BTREE()
 
@@ -4524,4 +4531,13 @@ InitGame();		-- Also to start a new game again
 
 UpdateDisplay();
 
+
+-- Export public API to DeltaChess namespace
+DeltaChess.LuaJester = {
+    InitGame = InitGame,
+    SetFen = SetFen,
+    ComputerMvtAsync = ComputerMvtAsync,
+    -- Expose environment for variable access
+    env = _ENV
+}
 
