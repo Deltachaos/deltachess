@@ -165,15 +165,22 @@ function DeltaChess.Engines:GetEloRange(engineId)
     return engine:GetEloRange()
 end
 
--- Get list of engine ids and display names for UI
+-- Get list of engine ids and display names for UI (sorted by max ELO, strongest first)
 function DeltaChess.Engines:GetEngineList()
     local list = {}
     for id, engine in pairs(self.registry) do
+        local eloRange = engine.GetEloRange and engine:GetEloRange()
+        local maxElo = eloRange and eloRange[2] or 0
         table.insert(list, {
             id = id,
             name = engine.name or id,
-            description = engine.description or ""
+            description = engine.description or "",
+            maxElo = maxElo
         })
     end
+    -- Sort by max ELO descending (strongest first)
+    table.sort(list, function(a, b)
+        return a.maxElo > b.maxElo
+    end)
     return list
 end

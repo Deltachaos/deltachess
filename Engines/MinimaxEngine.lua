@@ -6,12 +6,15 @@ local C = DeltaChess.Constants.COLOR
 
 local MinimaxEngine = {
     id = "minimax",
-    name = "Minimax Alpha-Beta",
-    description = "Classic minimax with alpha-beta pruning, iterative deepening, and piece-square tables"
+    name = "Delta Minimax Alpha-Beta",
+    description = "Classic minimax with alpha-beta pruning, iterative deepening, and piece-square tables",
+    author = "Deltachaos",
+    url = "https://github.com/Deltachaos/deltachess",
+    license = "GPL-3.0"
 }
 
 function MinimaxEngine.GetEloRange(self)
-    return { 100, 2500 }
+    return { 100, 1500 }
 end
 
 -- Piece values for evaluation
@@ -217,6 +220,7 @@ local function minimax(board, depth, alpha, beta, maximizingPlayer)
 end
 
 local function eloToParams(difficulty)
+    local difficulty = difficulty * 2
     local elo = math.max(100, math.min(2500, tonumber(difficulty) or 1200))
     local depth = math.min(4, math.max(1, math.floor(1 + (elo - 100) / 650)))
     local mistakeChance = math.max(0, 0.55 - (elo - 100) / 4500)

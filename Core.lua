@@ -316,7 +316,7 @@ function DeltaChess:ShowSupportDialog()
         local GITHUB_URL = "https://github.com/Deltachaos/deltachess"
         
         local frame = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(440, 320)
+        frame:SetSize(440, 500)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -372,18 +372,48 @@ function DeltaChess:ShowSupportDialog()
         githubEdit:SetScript("OnEditFocusLost", function(self) self:SetText(GITHUB_URL) end)
         githubEdit:SetScript("OnChar", function(self) self:SetText(GITHUB_URL) end)
         
-        -- License and chess piece artwork (at bottom)
-        local licenseLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        licenseLabel:SetPoint("BOTTOMLEFT", githubEdit, "BOTTOMLEFT", 0, -40)
-        licenseLabel:SetPoint("BOTTOMRIGHT", githubEdit, "BOTTOMRIGHT", 0, -40)
-        licenseLabel:SetText("|cFF00BFFFLicense:|r GNU GPL v3.0.")
-        licenseLabel:SetJustifyH("CENTER")
-
+        -- Chess Engines credits
+        local enginesTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        enginesTitle:SetPoint("TOPLEFT", githubEdit, "BOTTOMLEFT", 0, -15)
+        enginesTitle:SetText("|cFF00BFFFChess Engines:|r")
+        
+        local enginesCredits = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        enginesCredits:SetPoint("TOPLEFT", enginesTitle, "BOTTOMLEFT", 0, -5)
+        enginesCredits:SetWidth(400)
+        enginesCredits:SetJustifyH("LEFT")
+        
+        -- Build engine credits from registered engines
+        local creditLines = {}
+        for _, engine in pairs(DeltaChess.Engines.registry or {}) do
+            local line = engine.name or engine.id
+            if engine.author then
+                line = line .. " by " .. engine.author
+            end
+            if engine.portedBy then
+                line = line .. " (Lua port: " .. engine.portedBy .. ")"
+            end
+            if engine.license then
+                line = line .. " - " .. engine.license
+            end
+            if engine.url then
+                line = line .. "\n    " .. engine.url .. "\n"
+            end
+            table.insert(creditLines, line)
+        end
+        table.sort(creditLines)
+        enginesCredits:SetText(table.concat(creditLines, "\n"))
+        
+        -- Chess piece artwork (below engines list)
         local artworkLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        artworkLabel:SetPoint("BOTTOMLEFT", licenseLabel, "BOTTOMLEFT", 15, 14)
-        artworkLabel:SetPoint("BOTTOMRIGHT", licenseLabel, "BOTTOMRIGHT", -15, 14)
+        artworkLabel:SetPoint("TOPLEFT", enginesCredits, "BOTTOMLEFT", 0, -15)
         artworkLabel:SetText("|cFF00BFFFChess piece artwork:|r By Cburnett (Wikimedia Commons), CC BY-SA 3.0.")
-        artworkLabel:SetJustifyH("CENTER")
+        artworkLabel:SetJustifyH("LEFT")
+
+        -- License (below artwork)
+        local licenseLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        licenseLabel:SetPoint("TOPLEFT", artworkLabel, "BOTTOMLEFT", 0, -5)
+        licenseLabel:SetText("|cFF00BFFFLicense:|r GNU GPL v3.0.")
+        licenseLabel:SetJustifyH("LEFT")
 
         -- OK button
         local okBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -1492,7 +1522,7 @@ function DeltaChess:ShowComputerGameWindow()
     -- Create window if it doesn't exist
     if not self.frames.computerWindow then
         local frame = CreateFrame("Frame", "ChessComputerWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(300, 320)
+        frame:SetSize(300, 350)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -1552,7 +1582,7 @@ function DeltaChess:ShowComputerGameWindow()
             updateColorButtons()
         end)
         
-        yPos = yPos - 50
+        yPos = yPos - 40
 
         -- Engine selection
         local engineLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1564,13 +1594,43 @@ function DeltaChess:ShowComputerGameWindow()
         frame.selectedEngine = DeltaChess.Engines:GetEffectiveDefaultId()
 
         local engineDropdown = CreateFrame("Frame", "ChessEngineDropdown", frame, "UIDropDownMenuTemplate")
-        engineDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        UIDropDownMenu_SetWidth(engineDropdown, 200)
+        engineDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, yPos)
+        UIDropDownMenu_SetWidth(engineDropdown, 250)
         do
             local effId = DeltaChess.Engines:GetEffectiveDefaultId()
             local def = effId and DeltaChess.Engines:Get(effId)
             UIDropDownMenu_SetText(engineDropdown, (def and def.name) or "None")
         end
+        -- Engine description label (below dropdown)
+        local engineDescLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        engineDescLabel:SetPoint("TOPLEFT", engineDropdown, "BOTTOMLEFT", 20, 0)
+        engineDescLabel:SetWidth(250)
+        engineDescLabel:SetJustifyH("LEFT")
+        engineDescLabel:SetWordWrap(true)
+        engineDescLabel:SetTextColor(0.7, 0.7, 0.7)
+        frame.engineDescLabel = engineDescLabel
+        
+        -- Function to update engine description
+        local function updateEngineDescription(engineId)
+            local engine = DeltaChess.Engines:Get(engineId)
+            if engine then
+                local desc = engine.description or ""
+                if engine.author then
+                    desc = desc .. " (by " .. engine.author
+                    if engine.portedBy then
+                        desc = desc .. ", Lua port: " .. engine.portedBy
+                    end
+                    desc = desc .. ")"
+                elseif engine.portedBy then
+                    desc = desc .. " (Lua port: " .. engine.portedBy .. ")"
+                end
+                engineDescLabel:SetText(desc)
+            else
+                engineDescLabel:SetText("")
+            end
+        end
+        frame.updateEngineDescription = updateEngineDescription
+        
         UIDropDownMenu_Initialize(engineDropdown, function(self, level)
             local info = UIDropDownMenu_CreateInfo()
             for _, eng in ipairs(DeltaChess.Engines:GetEngineList()) do
@@ -1585,11 +1645,17 @@ function DeltaChess:ShowComputerGameWindow()
                     if frame.updateEloSliderForEngine then
                         frame.updateEloSliderForEngine(engineId)
                     end
+                    if frame.updateEngineDescription then
+                        frame.updateEngineDescription(engineId)
+                    end
                 end
                 UIDropDownMenu_AddButton(info)
             end
         end)
         frame.engineDropdown = engineDropdown
+        
+        -- Set initial engine description
+        updateEngineDescription(frame.selectedEngine)
 
         -- Update ELO slider based on selected engine (enable/disable, set range)
         local function updateEloSliderForEngine(engineId)
@@ -1621,7 +1687,7 @@ function DeltaChess:ShowComputerGameWindow()
         end
         frame.updateEloSliderForEngine = updateEloSliderForEngine
 
-        yPos = yPos - 45
+        yPos = yPos - 95
         
         -- Difficulty slider (ELO - range from engine)
         local diffLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1640,7 +1706,7 @@ function DeltaChess:ShowComputerGameWindow()
         
         local diffSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
         diffSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        diffSlider:SetSize(250, 17)
+        diffSlider:SetSize(260, 17)
         diffSlider:SetMinMaxValues(100, 2500)
         diffSlider:SetValue(1200)
         diffSlider:SetValueStep(100)
@@ -1775,6 +1841,8 @@ StaticPopupDialogs["CHESS_RESIGN_CONFIRM"] = {
     OnAccept = function(self, gameId)
         if gameId then
             DeltaChess:ResignGame(gameId)
+            -- Refresh history window to show game as completed
+            DeltaChess:RefreshMainMenuContent()
         end
     end,
     timeout = 0,
