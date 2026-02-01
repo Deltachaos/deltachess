@@ -101,6 +101,7 @@ end
 -- Map ELO difficulty to search ply (GarboChess uses ply for depth)
 -- Reduced depths to prevent WoW script timeout
 local function difficultyToPly(difficulty)
+    if difficulty <= 600 then return 1 end
     if difficulty <= 800 then return 2 end
     if difficulty <= 1200 then return 3 end
     if difficulty <= 1600 then return 3 end
@@ -111,7 +112,7 @@ local function difficultyToPly(difficulty)
 end
 
 function GarboChessEngine.GetEloRange(self)
-    return { 800, 2600 }
+    return { 600, 2600 }
 end
 
 local garboInitialized = false
