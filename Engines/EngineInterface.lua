@@ -185,38 +185,6 @@ function DeltaChess.Engines:ValidateMove(board, move)
     return false
 end
 
--- Get a random legal move (last resort fallback)
-function DeltaChess.Engines:GetRandomMove(board, color)
-    if not board then return nil end
-    
-    -- Collect all legal moves for this color
-    local allMoves = {}
-    for row = 1, 8 do
-        for col = 1, 8 do
-            local piece = board:GetPiece(row, col)
-            if piece and piece.color == color then
-                local moves = board:GetValidMoves(row, col)
-                if moves then
-                    for _, m in ipairs(moves) do
-                        table.insert(allMoves, {
-                            fromRow = row,
-                            fromCol = col,
-                            toRow = m.row,
-                            toCol = m.col,
-                            promotion = m.promotion
-                        })
-                    end
-                end
-            end
-        end
-    end
-    
-    if #allMoves == 0 then return nil end
-    
-    -- Pick a random move
-    return allMoves[math.random(1, #allMoves)]
-end
-
 -- Get list of engine ids and display names for UI (sorted by max ELO, strongest first)
 function DeltaChess.Engines:GetEngineList()
     local list = {}

@@ -44,7 +44,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
 
         local difficulty = game.computerDifficulty  -- nil if engine doesn't support ELO
         local position = DeltaChess.Engines.CreateBoardAdapter(game.board)
-        local primaryEngineId = engine.id
+        local engineName = engine.name or engine.id
         local moveApplied = false  -- Flag to prevent double-moves from timeout vs callback race
         
         -- Function to apply a validated move
@@ -73,60 +73,6 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             end
         end
         
-        -- Function to use a random move as last resort
-        local function useRandomMove()
-            if moveApplied then return end
-            local randomMove = DeltaChess.Engines:GetRandomMove(game.board, aiColor)
-            if randomMove then
-                DeltaChess:Print("|cFFFF0000Using random move.|r")
-                applyMove(randomMove)
-            else
-                DeltaChess:Print("|cFFFF0000Computer has no valid moves!|r")
-            end
-        end
-        
-        -- Function to try minimax as fallback (with its own timeout)
-        local function tryMinimaxFallback()
-            if moveApplied then return end
-            local minimaxEngine = DeltaChess.Engines:Get("minimax")
-            if not minimaxEngine or not minimaxEngine.GetBestMoveAsync then
-                useRandomMove()
-                return
-            end
-            
-            DeltaChess:Print("|cFFFF0000Falling back to Minimax engine...|r")
-            local fallbackPosition = DeltaChess.Engines.CreateBoardAdapter(game.board)
-            
-            -- Timeout for minimax fallback (30 seconds)
-            C_Timer.After(30, function()
-                if not moveApplied then
-                    DeltaChess:Print("|cFFFF0000Minimax engine timed out.|r")
-                    useRandomMove()
-                end
-            end)
-            
-            minimaxEngine:GetBestMoveAsync(fallbackPosition, aiColor, difficulty, function(fallbackMove)
-                if moveApplied then return end
-                if fallbackMove and DeltaChess.Engines:ValidateMove(game.board, fallbackMove) then
-                    applyMove(fallbackMove)
-                else
-                    useRandomMove()
-                end
-            end)
-        end
-        
-        -- Timeout for primary engine (30 seconds)
-        C_Timer.After(30, function()
-            if not moveApplied then
-                DeltaChess:Print("|cFFFF0000Engine '" .. (engine.name or primaryEngineId) .. "' timed out.|r")
-                if primaryEngineId ~= "minimax" then
-                    tryMinimaxFallback()
-                else
-                    useRandomMove()
-                end
-            end
-        end)
-        
         engine:GetBestMoveAsync(position, aiColor, difficulty, function(move)
             if moveApplied then return end
             if not game or game.status ~= "active" then return end
@@ -137,21 +83,11 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
                 if DeltaChess.Engines:ValidateMove(game.board, move) then
                     applyMove(move)
                 else
-                    -- Invalid move from primary engine, fall back to minimax
-                    DeltaChess:Print("|cFFFF0000Engine '" .. (engine.name or primaryEngineId) .. "' returned invalid move.|r")
-                    if primaryEngineId ~= "minimax" then
-                        tryMinimaxFallback()
-                    else
-                        useRandomMove()
-                    end
+                    DeltaChess:Print("|cFFFF0000ERROR: Engine '" .. engineName .. "' returned invalid move: " .. 
+                        move.fromRow .. "," .. move.fromCol .. " -> " .. move.toRow .. "," .. move.toCol .. "|r")
                 end
             else
-                -- Engine returned no move, try minimax or random
-                if primaryEngineId ~= "minimax" then
-                    tryMinimaxFallback()
-                else
-                    useRandomMove()
-                end
+                DeltaChess:Print("|cFFFF0000ERROR: Engine '" .. engineName .. "' returned no move.|r")
             end
         end)
     end)
