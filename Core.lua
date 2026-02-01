@@ -639,7 +639,8 @@ function DeltaChess:RefreshMainMenuContent()
                 resignBtn:SetPoint("RIGHT", resumeBtn, "LEFT", -3, 0)
                 resignBtn:SetText("Resign")
                 resignBtn:SetScript("OnClick", function()
-                    DeltaChess:ResignGame(game.id)
+                    DeltaChess._resignConfirmGameId = game.id
+                    StaticPopup_Show("CHESS_RESIGN_CONFIRM", nil, nil, game.id)
                     DeltaChess:RefreshMainMenuContent()
                 end)
             else
@@ -1658,6 +1659,42 @@ StaticPopupDialogs["CHESS_CHALLENGE_RECEIVED"] = {
         DeltaChess:DeclineChallenge(data)
     end,
     timeout = 60,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+StaticPopupDialogs["CHESS_RESIGN_CONFIRM"] = {
+    text = "Are you sure you want to resign?",
+    button1 = "Resign",
+    button2 = "Cancel",
+    OnShow = function(dialog)
+        -- Show above the board (board uses FULLSCREEN_DIALOG level 100)
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(200)
+        -- Disable resign button so it cannot be clicked again
+        local gameId = DeltaChess._resignConfirmGameId
+        if gameId and DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame.resignButton then
+            DeltaChess.UI.activeFrame.resignButton:Disable()
+        end
+    end,
+    OnHide = function()
+        local gameId = DeltaChess._resignConfirmGameId
+        DeltaChess._resignConfirmGameId = nil
+        -- Re-enable resign button on the board if this game's dialog was closed
+        if gameId and DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame.resignButton then
+            local game = DeltaChess.db.games[gameId]
+            if game and game.board and game.board.gameStatus == "active" then
+                DeltaChess.UI.activeFrame.resignButton:Enable()
+            end
+        end
+    end,
+    OnAccept = function(self, gameId)
+        if gameId then
+            DeltaChess:ResignGame(gameId)
+        end
+    end,
+    timeout = 0,
     whileDead = true,
     hideOnEscape = true,
     preferredIndex = 3,

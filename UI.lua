@@ -864,7 +864,8 @@ function DeltaChess:ShowChessBoard(gameId)
     resignButton:SetPoint("BOTTOMLEFT", rightPanel, "BOTTOMLEFT", 0, 5)
     resignButton:SetText("Resign")
     resignButton:SetScript("OnClick", function()
-        DeltaChess:ResignGame(gameId)
+        DeltaChess._resignConfirmGameId = gameId
+        StaticPopup_Show("CHESS_RESIGN_CONFIRM", nil, nil, gameId)
     end)
     frame.resignButton = resignButton
     
@@ -1182,6 +1183,44 @@ function DeltaChess.UI:UpdateBoard(frame)
         if frame.closeButton then
             frame.closeButton:Disable()
         end
+    else
+        -- Re-enable resign, pause, and draw when game is active (e.g. after takeback)
+        if frame.resignButton then
+            frame.resignButton:Enable()
+        end
+        if frame.drawButton then
+            if game.isVsComputer then
+                frame.drawButton:SetText("Back")
+                frame.drawButton:SetScript("OnClick", function()
+                    DeltaChess:TakeBackMove(frame.gameId)
+                end)
+            end
+            frame.drawButton:Enable()
+        end
+        if frame.closeButton then
+            frame.closeButton:Enable()
+            if game.isVsComputer then
+                frame.closeButton:SetText("Pause")
+                frame.closeButton:SetScript("OnClick", function()
+                    game.pausedByClose = true
+                    game.pauseClosedAt = time()
+                    game._lastMoveCountWhenPaused = #game.board.moves
+                    frame:Hide()
+                end)
+            else
+                if game.status == "paused" then
+                    frame.closeButton:SetText("Unpause")
+                    frame.closeButton:SetScript("OnClick", function()
+                        DeltaChess:RequestUnpause(frame.gameId)
+                    end)
+                else
+                    frame.closeButton:SetText("Pause")
+                    frame.closeButton:SetScript("OnClick", function()
+                        DeltaChess:RequestPause(frame.gameId)
+                    end)
+                end
+            end
+        end
     end
     
     -- Check for game end
@@ -1394,6 +1433,11 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
     
     -- Check if board is locked for promotion selection
     if frame.promotionPending then
+        return
+    end
+    
+    -- Block moves while resign confirmation dialog is open
+    if DeltaChess._resignConfirmGameId and frame.gameId == DeltaChess._resignConfirmGameId then
         return
     end
     
