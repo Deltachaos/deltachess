@@ -504,6 +504,7 @@ function DeltaChess:RefreshMainMenuContent()
             playerColor = playerColor,
             settings = game.settings,
             computerDifficulty = game.computerDifficulty,
+            computerEngine = game.computerEngine,
             pausedByClose = game.pausedByClose,
             windowShown = windowShown
         })
@@ -526,6 +527,7 @@ function DeltaChess:RefreshMainMenuContent()
             playerColor = game.playerColor,
             settings = game.settings,
             computerDifficulty = game.computerDifficulty,
+            computerEngine = game.computerEngine,
             moves = game.moves
         })
     end
@@ -580,9 +582,21 @@ function DeltaChess:RefreshMainMenuContent()
             local whiteHex = string.format("|cFF%02X%02X%02X", whiteR * 255, whiteG * 255, whiteB * 255)
             local blackHex = string.format("|cFF%02X%02X%02X", blackR * 255, blackG * 255, blackB * 255)
             
-            -- Format names (remove realm for display)
+            -- Format names (remove realm for display, show engine name for computer games)
             local whiteName = (game.white or "?"):match("^([^%-]+)") or game.white or "?"
             local blackName = (game.black or "?"):match("^([^%-]+)") or game.black or "?"
+            
+            -- Replace "Computer" with "Computer (engine)" for vs computer games
+            if game.isVsComputer and game.computerEngine then
+                local engine = DeltaChess.Engines:Get(game.computerEngine)
+                local engineName = engine and engine.name or game.computerEngine
+                if whiteName == "Computer" then
+                    whiteName = "Computer (" .. engineName .. ")"
+                end
+                if blackName == "Computer" then
+                    blackName = "Computer (" .. engineName .. ")"
+                end
+            end
             
             info:SetText(string.format("%s%s|r vs %s%s|r", whiteHex, whiteName, blackHex, blackName))
             
@@ -776,12 +790,19 @@ function DeltaChess:ShowReplayWindow(gameData)
     opponentBg:SetAllPoints()
     opponentBg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
     
-    -- Opponent name with class color
+    -- Opponent name with class color (show "Computer (engine - ELO)" for computer games)
+    local displayOpponentName = opponentName:match("^([^%-]+)") or opponentName
+    if gameData.isVsComputer and opponentName == "Computer" and gameData.computerEngine then
+        local engine = DeltaChess.Engines:Get(gameData.computerEngine)
+        local engineName = engine and engine.name or gameData.computerEngine
+        local eloStr = gameData.computerDifficulty and (" - " .. gameData.computerDifficulty .. " ELO") or ""
+        displayOpponentName = "Computer (" .. engineName .. eloStr .. ")"
+    end
     local opR, opG, opB = DeltaChess.UI:GetPlayerColor(opponentName, opponentClass)
     local opponentNameText = opponentBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     opponentNameText:SetPoint("LEFT", opponentBar, "LEFT", 5, 8)
     opponentNameText:SetTextColor(opR, opG, opB)
-    opponentNameText:SetText(opponentName:match("^([^%-]+)") or opponentName)
+    opponentNameText:SetText(displayOpponentName)
     
     -- Opponent captured pieces container
     local opponentCapturedContainer = CreateFrame("Frame", nil, opponentBar)
@@ -807,12 +828,19 @@ function DeltaChess:ShowReplayWindow(gameData)
     playerBg:SetAllPoints()
     playerBg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
     
-    -- Player name with class color
+    -- Player name with class color (show "Computer (engine - ELO)" for computer games)
+    local displayMyName = myName:match("^([^%-]+)") or myName
+    if gameData.isVsComputer and myName == "Computer" and gameData.computerEngine then
+        local engine = DeltaChess.Engines:Get(gameData.computerEngine)
+        local engineName = engine and engine.name or gameData.computerEngine
+        local eloStr = gameData.computerDifficulty and (" - " .. gameData.computerDifficulty .. " ELO") or ""
+        displayMyName = "Computer (" .. engineName .. eloStr .. ")"
+    end
     local plR, plG, plB = DeltaChess.UI:GetPlayerColor(myName, myClass)
     local playerNameText = playerBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     playerNameText:SetPoint("LEFT", playerBar, "LEFT", 5, 8)
     playerNameText:SetTextColor(plR, plG, plB)
-    playerNameText:SetText(myName:match("^([^%-]+)") or myName)
+    playerNameText:SetText(displayMyName)
     
     -- Player captured pieces container
     local playerCapturedContainer = CreateFrame("Frame", nil, playerBar)

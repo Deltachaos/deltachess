@@ -735,12 +735,19 @@ function DeltaChess:ShowChessBoard(gameId)
     opponentBg:SetAllPoints()
     opponentBg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
     
-    -- Opponent name with class color
+    -- Opponent name with class color (show "Computer (engine - ELO)" for computer games)
+    local displayOpponentName = opponentName:match("^([^%-]+)") or opponentName
+    if game.isVsComputer and opponentName == "Computer" and game.computerEngine then
+        local engine = DeltaChess.Engines:Get(game.computerEngine)
+        local engineName = engine and engine.name or game.computerEngine
+        local eloStr = game.computerDifficulty and (" - " .. game.computerDifficulty .. " ELO") or ""
+        displayOpponentName = "Computer (" .. engineName .. eloStr .. ")"
+    end
     local opR, opG, opB = DeltaChess.UI:GetPlayerColor(opponentName, opponentClass)
     local opponentNameText = opponentBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     opponentNameText:SetPoint("LEFT", opponentBar, "LEFT", 5, 8)
     opponentNameText:SetTextColor(opR, opG, opB)
-    opponentNameText:SetText(opponentName:match("^([^%-]+)") or opponentName)
+    opponentNameText:SetText(displayOpponentName)
     
     -- Opponent clock (if enabled) or thinking time (when no clock)
     if game.settings.useClock then

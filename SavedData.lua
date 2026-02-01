@@ -17,7 +17,8 @@ function DeltaChess:SaveGameToHistory(game, result)
         settings = game.settings,
         isVsComputer = game.isVsComputer,
         playerColor = game.playerColor,
-        computerDifficulty = game.computerDifficulty
+        computerDifficulty = game.computerDifficulty,
+        computerEngine = game.computerEngine
     }
     
     -- Copy moves in a format suitable for replay
