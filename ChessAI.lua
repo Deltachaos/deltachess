@@ -45,11 +45,15 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
         local difficulty = game.computerDifficulty or 1200
         local position = DeltaChess.Engines.CreateBoardAdapter(game.board)
         local primaryEngineId = engine.id
+        local moveApplied = false  -- Flag to prevent double-moves from timeout vs callback race
         
         -- Function to apply a validated move
         local function applyMove(validMove)
+            if moveApplied then return end
             if not game or game.status ~= "active" then return end
             if game.board.currentTurn ~= aiColor then return end
+            
+            moveApplied = true
             
             local piece = game.board:GetPiece(validMove.fromRow, validMove.fromCol)
             local promotion = validMove.promotion
@@ -71,6 +75,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
         
         -- Function to use a random move as last resort
         local function useRandomMove()
+            if moveApplied then return end
             local randomMove = DeltaChess.Engines:GetRandomMove(game.board, aiColor)
             if randomMove then
                 DeltaChess:Print("|cFFFF0000Using random move.|r")
@@ -80,8 +85,9 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             end
         end
         
-        -- Function to try minimax as fallback
+        -- Function to try minimax as fallback (with its own timeout)
         local function tryMinimaxFallback()
+            if moveApplied then return end
             local minimaxEngine = DeltaChess.Engines:Get("minimax")
             if not minimaxEngine or not minimaxEngine.GetBestMoveAsync then
                 useRandomMove()
@@ -90,7 +96,17 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             
             DeltaChess:Print("|cFFFF0000Falling back to Minimax engine...|r")
             local fallbackPosition = DeltaChess.Engines.CreateBoardAdapter(game.board)
+            
+            -- Timeout for minimax fallback (30 seconds)
+            C_Timer.After(30, function()
+                if not moveApplied then
+                    DeltaChess:Print("|cFFFF0000Minimax engine timed out.|r")
+                    useRandomMove()
+                end
+            end)
+            
             minimaxEngine:GetBestMoveAsync(fallbackPosition, aiColor, difficulty, function(fallbackMove)
+                if moveApplied then return end
                 if fallbackMove and DeltaChess.Engines:ValidateMove(game.board, fallbackMove) then
                     applyMove(fallbackMove)
                 else
@@ -99,7 +115,20 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             end)
         end
         
+        -- Timeout for primary engine (30 seconds)
+        C_Timer.After(30, function()
+            if not moveApplied then
+                DeltaChess:Print("|cFFFF0000Engine '" .. (engine.name or primaryEngineId) .. "' timed out.|r")
+                if primaryEngineId ~= "minimax" then
+                    tryMinimaxFallback()
+                else
+                    useRandomMove()
+                end
+            end
+        end)
+        
         engine:GetBestMoveAsync(position, aiColor, difficulty, function(move)
+            if moveApplied then return end
             if not game or game.status ~= "active" then return end
             if game.board.currentTurn ~= aiColor then return end
 
