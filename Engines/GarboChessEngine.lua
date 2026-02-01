@@ -105,11 +105,13 @@ local function difficultyToPly(difficulty)
     if difficulty <= 1200 then return 3 end
     if difficulty <= 1600 then return 3 end
     if difficulty <= 2000 then return 4 end
+    if difficulty <= 2200 then return 5 end
+    if difficulty <= 2400 then return 6 end
     return 4
 end
 
 function GarboChessEngine.GetEloRange(self)
-    return { 800, 2000 }
+    return { 800, 2600 }
 end
 
 local garboInitialized = false

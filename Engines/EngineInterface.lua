@@ -3,7 +3,7 @@
 
 DeltaChess.Engines = DeltaChess.Engines or {}
 DeltaChess.Engines.registry = DeltaChess.Engines.registry or {}
-DeltaChess.Engines.defaultId = nil  -- Set to first registered engine when engines load
+DeltaChess.Engines.defaultId = nil  -- No longer auto-set; default determined by highest ELO engine
 
 --------------------------------------------------------------------------------
 -- CONSTANTS
@@ -113,9 +113,6 @@ function DeltaChess.Engines:Register(engine)
         return false
     end
     self.registry[engine.id] = engine
-    if not self.defaultId then
-        self.defaultId = engine.id
-    end
     return true
 end
 
@@ -129,14 +126,14 @@ function DeltaChess.Engines:GetDefaultId()
     return self.defaultId
 end
 
--- Get effective default: defaultId if it exists, else first engine from list (sorted by id), else nil
+-- Get effective default: defaultId if it exists, else the engine with the highest max ELO, else nil
 function DeltaChess.Engines:GetEffectiveDefaultId()
     if self.defaultId and self.registry[self.defaultId] then
         return self.defaultId
     end
+    -- GetEngineList returns engines sorted by max ELO descending (strongest first)
     local list = self:GetEngineList()
     if #list > 0 then
-        table.sort(list, function(a, b) return a.id < b.id end)
         return list[1].id
     end
     return nil

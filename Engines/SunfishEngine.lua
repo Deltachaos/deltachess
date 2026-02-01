@@ -15,7 +15,7 @@ local SunfishEngine = {
 }
 
 function SunfishEngine.GetEloRange(self)
-    return { 800, 1600 }  -- Sunfish strength range
+    return nil
 end
 
 -- Sunfish board: 120-char string, 0-based indices A1=91, H1=98, A8=21, H8=28

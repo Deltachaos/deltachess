@@ -88,7 +88,7 @@ local function idxToRowCol(idx)
 end
 
 function LuaJesterEngine.GetEloRange(self)
-    return { 1000, 1800 }
+    return nil
 end
 
 function LuaJesterEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)

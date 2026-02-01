@@ -1627,6 +1627,7 @@ function DeltaChess:ShowComputerGameWindow()
         do
             local effId = DeltaChess.Engines:GetEffectiveDefaultId()
             local def = effId and DeltaChess.Engines:Get(effId)
+            UIDropDownMenu_SetSelectedValue(engineDropdown, effId)
             UIDropDownMenu_SetText(engineDropdown, (def and def.name) or "None")
         end
         -- Engine description label (below dropdown)
