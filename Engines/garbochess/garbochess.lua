@@ -1533,6 +1533,76 @@ function Search(maxPly)
 end
 --
 
+-- Async version of Search that yields between ply iterations
+-- yieldFn: function to call to yield (e.g., C_Timer.After wrapper)
+-- onComplete: callback(bestMove) when done
+function SearchAsync(maxPly, yieldFn, onComplete)
+
+    local alpha = minEval;
+    local beta = maxEval;
+
+    local bestMove = 0;
+    local value = 0;
+    local i = 1;
+    local tmp = 0;
+
+    g_globalPly = g_globalPly + 1;
+    g_nodeCount = 0;
+    g_qNodeCount = 0;
+    g_searchValid = true;
+    g_foundmove = 0;
+
+    g_finCnt = 0;
+    g_startTime = GetTime();
+
+    local function searchNextPly()
+        if not (i <= maxPly and g_searchValid) then
+            finishMoveCallback(bestMove, value, i - 1);
+            if onComplete then onComplete(bestMove) end
+            return
+        end
+
+        tmp = AlphaBeta(i, 0, alpha, beta);
+        if (not g_searchValid) then
+            finishMoveCallback(bestMove, value, i - 1);
+            if onComplete then onComplete(bestMove) end
+            return
+        end
+
+        value = tmp;
+
+        if (value > alpha and value < beta) then
+            alpha = value - 500;
+            beta = value + 500;
+
+            if (alpha < minEval) then
+                alpha = minEval;
+            end
+            if (beta > maxEval) then
+                beta = maxEval;
+            end
+        else
+            if (alpha ~= minEval) then
+                alpha = minEval;
+                beta = maxEval;
+                i = i - 1;
+            end
+        end
+
+        if (g_hashTable[1+bit.band(g_hashKeyLow, g_hashMask)] ~= nil) then
+            bestMove = g_hashTable[1+bit.band(g_hashKeyLow, g_hashMask)].bestMove;
+        end
+
+        finishPlyCallback(bestMove, value, i);
+
+        i = i + 1;
+        yieldFn(searchNextPly);
+    end
+
+    yieldFn(searchNextPly);
+end
+--
+
 --
 function PawnEval(color)
     local pieceIdx = bit.lshift( bit.bor(color, 1) , 4 );

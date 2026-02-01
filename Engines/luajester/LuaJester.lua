@@ -2316,6 +2316,225 @@ function ChoiceMov(side, iop)
   Js_depth_Seek = 0;
 end
 
+-- Async version of ChoiceMov that yields between depth iterations
+-- yieldFn: function to call to yield (e.g., C_Timer.After wrapper)
+-- onComplete: callback() when done
+function ChoiceMovAsync(side, iop, yieldFn, onComplete)
+
+  local tempb = _INT();
+  local tempc = _INT();
+  local tempsf = _INT();
+  local tempst = _INT();
+  local rpt = _INT();
+  local score = _INT();
+
+  local alpha = 0;
+  local beta = 0;
+  local i = 0;
+  local xside = Js_otherTroop[1+side];
+  local m_f = 0;
+  local m_t = 0;
+
+  Js_flag.timeout = false;
+
+  if (iop ~= 2) then
+    Js_player = side;
+  end
+
+  WatchPosit();
+
+  PositPts(side, score);
+
+  if (Js_depth_Seek == 0) then
+
+    for i=0,10000,1 do
+       Js_storage[1+i] = 0;
+    end
+
+    Js_origSquare = -1;
+    Js_destSquare = -1;
+    Js_ptValue = 0;
+    if (iop ~= 2) then
+      Js_hint = 0;
+    end
+
+    for i = 0, Js_maxDepth-1, 1 do
+      Js_variants[1+i] = 0;
+      Js_eliminate0[1+i] = 0;
+      Js_eliminate1[1+i] = 0;
+      Js_eliminate2[1+i] = 0;
+      Js_eliminate3[1+i] = 0;
+    end
+
+    alpha = score.i - Js_N9;
+    beta = score.i + Js_N9;
+    rpt.i = 0;
+    Js_treePoint[1+1] = 0;
+    Js_root = Js_Tree[1+0];
+    AvailMov(side, 1);
+
+    for i = Js_treePoint[1+1], Js_treePoint[1+2]-1, 1 do
+      Peek(i, Js_treePoint[1+2] - 1);
+    end
+
+    Js_cNodes = 0;
+    Js_cCompNodes = 0;
+
+    Js_scoreDither = 0;
+    Js_dxDither = 20;
+  end
+
+  -- Async depth iteration loop
+  local function searchNextDepth()
+    if not ((not Js_flag.timeout) and (Js_depth_Seek < Js_maxDepthSeek)) then
+      -- Finalization phase
+      score.i = Js_root.score;
+
+      if (iop == 2) then
+        if onComplete then onComplete() end
+        return;
+      end
+
+      Js_hint = Js_variants[1+2];
+
+      if ((score.i == -9999) or (score.i == 9998)) then
+        Js_flag.mate = true;
+        Js_fMate_kc = true;
+      end
+
+      if ((score.i > -9999) and (rpt.i <= 2)) then
+
+        if (score.i < Js_realBestScore) then
+
+          m_f = bit.rshift(Js_realBestMove,8);
+          m_t = bit.band(Js_realBestMove,0xFF);
+          for i=0,2000,1 do
+
+            if((m_f == Js_Tree[1+i].f) and (m_t == Js_Tree[1+i].t) and (Js_realBestScore == Js_Tree[1+i].score)) then
+
+              Js_root = Js_Tree[1+i];
+
+              break;
+            end
+          end
+        end
+
+        Js_myPiece = Js_rgszPiece[1+Js_board[1+Js_root.f]];
+
+        ValidateMov(side, Js_root, tempb, tempc, tempsf, tempst, Js_gainScore);
+        if (InChecking(Js_computer)) then
+          UnValidateMov(side, Js_root, tempb, tempc, tempsf, tempst);
+          Js_fAbandon = true;
+        else
+          Lalgb(Js_root.f, Js_root.t, Js_root.flags);
+          PlayMov();
+        end
+
+      else
+       if (Js_bDraw == 0) then
+        Lalgb(0, 0, 0);
+        if (not Js_flag.mate) then
+          Js_fAbandon = true;
+        else
+          Js_fUserWin_kc = true;
+        end
+       end
+      end
+
+      if (Js_flag.mate) then
+        Js_hint = 0;
+      end
+      if ((Js_board[1+Js_root.t] == Js_pawn) or (bit.band(Js_root.flags, Js_capture) ~= 0) or
+        (bit.band(Js_root.flags, Js_castle_msk) ~= 0)) then
+        Js_fiftyMoves = Js_nGameMoves;
+      end
+      Js_movesList[1+Js_nGameMoves].score = score.i;
+
+      if (Js_nGameMoves > 500) then
+        Js_flag.mate = true;
+      end
+      Js_player = xside;
+      Js_depth_Seek = 0;
+
+      if onComplete then onComplete() end
+      return;
+    end
+
+    -- One depth iteration
+    Js_depth_Seek = Js_depth_Seek + 1;
+
+    score.i = Seek(side, 1, Js_depth_Seek, alpha, beta, Js_variants, rpt);
+    for i = 1, Js_depth_Seek, 1 do
+      Js_eliminate0[1+i] = Js_variants[1+i];
+    end
+    if (score.i < alpha) then
+      score.i = Seek(side, 1, Js_depth_Seek, -9000, score.i, Js_variants, rpt);
+    end
+    if ((score.i > beta) and (bit.band(Js_root.flags, Js__idem) == 0)) then
+      score.i = Seek(side, 1, Js_depth_Seek, score.i, 9000, Js_variants, rpt);
+    end
+
+    score.i = Js_root.score;
+
+    for i = Js_treePoint[1+1] + 1, Js_treePoint[1+2]-1, 1 do
+      Peek(i, Js_treePoint[1+2] - 1);
+    end
+
+    for i = 1, Js_depth_Seek, 1 do
+      Js_eliminate0[1+i] = Js_variants[1+i];
+    end
+
+    if (bit.band(Js_root.flags, Js__idem) ~= 0) then
+      Js_flag.timeout = true;
+    end
+
+    if (Js_Tree[1+1].score < -9000) then
+      Js_flag.timeout = true;
+    end
+
+    if (not Js_flag.timeout) then
+      Js_scoreTP[1+0] = score.i;
+      Js_scoreDither = iif( (Js_scoreDither == 0),  score.i, ((Js_scoreDither + score.i) / 2) );
+    end
+    Js_dxDither = (20 + math.abs(Js_scoreDither / 12));
+    beta = score.i + Js__beta;
+    if (Js_scoreDither < score.i) then
+      alpha = Js_scoreDither - Js__alpha - Js_dxDither;
+    else
+      alpha = score.i - Js__alpha - Js_dxDither;
+    end
+
+    -- Yield and continue to next depth
+    yieldFn(searchNextDepth);
+  end
+
+  yieldFn(searchNextDepth);
+end
+
+-- Async version of ComputerMvt
+-- yieldFn: function to call to yield
+-- onComplete: callback() when done
+function ComputerMvtAsync(yieldFn, onComplete)
+
+  if (Js_flag.mate) then
+    if onComplete then onComplete() end
+    return;
+  end
+  Js_startTime = GetTime();
+
+  ChoiceMovAsync(Js_computer, 1, yieldFn, function()
+    IfCheck();
+    if (not Js_fUserWin_kc) then
+      ShowMov(Js_asciiMove[1+0]);
+    end
+    if (not CheckMatrl()) then
+      Js_bDraw = 1;
+    end
+    ShowStat();
+    if onComplete then onComplete() end
+  end)
+end
+
 function MultiMov(ply, sq, side, xside)
 
   local piece = Js_board[1+sq];

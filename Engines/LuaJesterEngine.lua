@@ -93,7 +93,7 @@ end
 
 function LuaJesterEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)
     DeltaChess.Engines.YieldAfter(function()
-        if not InitGame or not SetFen or not ComputerMvt then
+        if not InitGame or not SetFen or not ComputerMvtAsync then
             onComplete(nil)
             return
         end
@@ -118,23 +118,23 @@ function LuaJesterEngine.GetBestMoveAsync(self, position, color, difficulty, onC
         end
         Js_enemy = Js_player
 
-        ComputerMvt()
+        ComputerMvtAsync(DeltaChess.Engines.YieldAfter, function()
+            print = oldPrint
 
-        print = oldPrint
-
-        -- LuaJester stores final move in Js_root.f and Js_root.t (0-63 indices)
-        local move = nil
-        if Js_root and Js_root.f and Js_root.t and Js_root.f ~= Js_root.t then
-            local fromRow, fromCol = idxToRowCol(Js_root.f)
-            local toRow, toCol = idxToRowCol(Js_root.t)
-            move = {
-                fromRow = fromRow,
-                fromCol = fromCol,
-                toRow   = toRow,
-                toCol   = toCol
-            }
-        end
-        onComplete(move)
+            -- LuaJester stores final move in Js_root.f and Js_root.t (0-63 indices)
+            local move = nil
+            if Js_root and Js_root.f and Js_root.t and Js_root.f ~= Js_root.t then
+                local fromRow, fromCol = idxToRowCol(Js_root.f)
+                local toRow, toCol = idxToRowCol(Js_root.t)
+                move = {
+                    fromRow = fromRow,
+                    fromCol = fromCol,
+                    toRow   = toRow,
+                    toCol   = toCol
+                }
+            end
+            onComplete(move)
+        end)
     end)
 end
 

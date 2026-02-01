@@ -155,9 +155,11 @@ end
 function SunfishEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)
     DeltaChess.Engines.YieldAfter(function()
         local sunfishPos = positionToSunfish(position, color)
-        local move, score = search(sunfishPos, 5000)  -- Limit nodes for responsiveness
-        local ourMove = sunfishMoveToOurs(move, color)
-        onComplete(ourMove)
+
+        Sunfish.searchAsync(sunfishPos, 5000, DeltaChess.Engines.YieldAfter, function(move, score)
+            local ourMove = sunfishMoveToOurs(move, color)
+            onComplete(ourMove)
+        end)
     end)
 end
 

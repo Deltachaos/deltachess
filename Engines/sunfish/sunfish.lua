@@ -497,6 +497,72 @@ local function search(pos, maxn)
    return nil, score
 end
 
+-- Async version of search that yields between depth iterations
+-- yieldFn: function to call to yield (e.g., C_Timer.After wrapper)
+-- onComplete: callback(move, score) when done
+local function searchAsync(pos, maxn, yieldFn, onComplete)
+   -- Iterative deepening MTD-bi search
+   maxn = maxn or NODES_SEARCHED
+   nodes = 0 -- the global value "nodes"
+   local score
+   local depth = 1
+
+   local function searchNextDepth()
+      if depth > 98 then
+         -- If the game hasn't finished we can retrieve our move from the
+         -- transposition table.
+         local entry = tp_get(pos)
+         if entry ~= nil then
+            if onComplete then onComplete(entry.move, score) end
+         else
+            if onComplete then onComplete(nil, score) end
+         end
+         return
+      end
+
+      -- The inner loop is a binary search on the score of the position.
+      -- Inv: lower <= score <= upper
+      -- However this may be broken by values from the transposition table,
+      -- as they don't have the same concept of p(score). Hence we just use
+      -- 'lower < upper - margin' as the loop condition.
+      local lower, upper = -3*MATE_VALUE, 3*MATE_VALUE
+      while lower < upper - 3 do
+         local gamma = math.floor((lower+upper+1)/2)
+         score = bound(pos, gamma, depth)
+         -- print(nodes, gamma, score)
+         assert(score)
+         if score >= gamma then
+            lower = score
+         end
+         if score < gamma then
+            upper = score
+         end
+      end
+      assert(score)
+
+      -- print(string.format("Searched %d nodes. Depth %d. Score %d(%d/%d)", nodes, depth, score, lower, upper))
+
+      -- We stop deepening if the global N counter shows we have spent too
+      -- long, or if we have already won the game.
+      if nodes >= maxn or math.abs(score) >= MATE_VALUE then
+         -- If the game hasn't finished we can retrieve our move from the
+         -- transposition table.
+         local entry = tp_get(pos)
+         if entry ~= nil then
+            if onComplete then onComplete(entry.move, score) end
+         else
+            if onComplete then onComplete(nil, score) end
+         end
+         return
+      end
+
+      depth = depth + 1
+      yieldFn(searchNextDepth)
+   end
+
+   yieldFn(searchNextDepth)
+end
+
 
 -------------------------------------------------------------------------------
 -- User interface
@@ -605,4 +671,4 @@ end
 
 
 -- Expose as library for DeltaChess SunfishEngine
-_G.Sunfish = { Position = Position, search = search }
+_G.Sunfish = { Position = Position, search = search, searchAsync = searchAsync }

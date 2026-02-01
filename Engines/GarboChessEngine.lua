@@ -115,7 +115,7 @@ local garboInitialized = false
 
 function GarboChessEngine.GetBestMoveAsync(self, position, color, difficulty, onComplete)
     DeltaChess.Engines.YieldAfter(function()
-        if not InitializeEval or not ResetGame or not InitializeFromFen or not Search or not FormatMove then
+        if not InitializeEval or not ResetGame or not InitializeFromFen or not FormatMove or not SearchAsync then
             onComplete(nil)
             return
         end
@@ -139,16 +139,17 @@ function GarboChessEngine.GetBestMoveAsync(self, position, color, difficulty, on
         InitializeFromFen(fen)
 
         local ply = difficultyToPly(difficulty or 1200)
-        Search(ply)
 
-        finishPlyCallback, finishMoveCallback = oldPlyCb, oldMoveCb
+        SearchAsync(ply, DeltaChess.Engines.YieldAfter, function()
+            finishPlyCallback, finishMoveCallback = oldPlyCb, oldMoveCb
 
-        local move = nil
-        if g_foundmove and g_foundmove ~= 0 then
-            local moveStr = FormatMove(g_foundmove)
-            move = parseMoveStr(moveStr)
-        end
-        onComplete(move)
+            local move = nil
+            if g_foundmove and g_foundmove ~= 0 then
+                local moveStr = FormatMove(g_foundmove)
+                move = parseMoveStr(moveStr)
+            end
+            onComplete(move)
+        end)
     end)
 end
 
