@@ -350,14 +350,16 @@ function DeltaChess.UI:ApplyMovesToBoard(board, moves, upToIndex)
             local toRow = move.toRow or (move.to and move.to.row)
             local toCol = move.toCol or (move.to and move.to.col)
             
-            if move.castling then
+            -- Accept both .castle and .castling for backwards compatibility with old saved games
+            local castle = move.castle or move.castling
+            if castle and fromRow then
                 local row = fromRow
-                if move.castling == "kingside" then
+                if castle == "kingside" then
                     board[row][7] = board[row][5]
                     board[row][6] = board[row][8]
                     board[row][5] = nil
                     board[row][8] = nil
-                else
+                elseif castle == "queenside" then
                     board[row][3] = board[row][5]
                     board[row][4] = board[row][1]
                     board[row][5] = nil
@@ -543,10 +545,11 @@ function DeltaChess.UI:FormatMoveAlgebraic(move)
         pawn = ""
     }
     
-    -- Handle castling
-    if move.castle == "kingside" then
+    -- Handle castling (accept .castle or .castling for history/replay moves)
+    local castle = move.castle or move.castling
+    if castle == "kingside" then
         return "O-O"
-    elseif move.castle == "queenside" then
+    elseif castle == "queenside" then
         return "O-O-O"
     end
     

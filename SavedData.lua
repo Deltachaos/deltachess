@@ -32,7 +32,7 @@ function DeltaChess:SaveGameToHistory(game, result)
             captured = move.captured and true or false,
             capturedType = move.captured and (move.captured.type or move.capturedType) or nil,
             promotion = move.promotion,
-            castling = move.castling,
+            castle = move.castle,
             enPassant = move.enPassant,
             timestamp = move.timestamp
         }
