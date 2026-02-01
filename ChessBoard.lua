@@ -2,11 +2,14 @@
 
 DeltaChess.Board = {}
 
+local C = DeltaChess.Constants.COLOR
+local PT = DeltaChess.Constants.PIECE_TYPE
+
 -- Initialize a new chess board
 function DeltaChess.Board:New()
     local board = {
         squares = {},
-        currentTurn = "white",
+        currentTurn = C.WHITE,
         moves = {},
         capturedPieces = {white = {}, black = {}},
         gameStatus = "active",
@@ -39,29 +42,29 @@ function DeltaChess.Board:InitializeBoard()
     
     -- Place pawns
     for col = 1, 8 do
-        self.squares[2][col] = {type = "pawn", color = "white"}
-        self.squares[7][col] = {type = "pawn", color = "black"}
+        self.squares[2][col] = {type = PT.PAWN, color = C.WHITE}
+        self.squares[7][col] = {type = PT.PAWN, color = C.BLACK}
     end
     
     -- Place pieces for white
-    self.squares[1][1] = {type = "rook", color = "white"}
-    self.squares[1][2] = {type = "knight", color = "white"}
-    self.squares[1][3] = {type = "bishop", color = "white"}
-    self.squares[1][4] = {type = "queen", color = "white"}
-    self.squares[1][5] = {type = "king", color = "white"}
-    self.squares[1][6] = {type = "bishop", color = "white"}
-    self.squares[1][7] = {type = "knight", color = "white"}
-    self.squares[1][8] = {type = "rook", color = "white"}
+    self.squares[1][1] = {type = PT.ROOK, color = C.WHITE}
+    self.squares[1][2] = {type = PT.KNIGHT, color = C.WHITE}
+    self.squares[1][3] = {type = PT.BISHOP, color = C.WHITE}
+    self.squares[1][4] = {type = PT.QUEEN, color = C.WHITE}
+    self.squares[1][5] = {type = PT.KING, color = C.WHITE}
+    self.squares[1][6] = {type = PT.BISHOP, color = C.WHITE}
+    self.squares[1][7] = {type = PT.KNIGHT, color = C.WHITE}
+    self.squares[1][8] = {type = PT.ROOK, color = C.WHITE}
     
     -- Place pieces for black
-    self.squares[8][1] = {type = "rook", color = "black"}
-    self.squares[8][2] = {type = "knight", color = "black"}
-    self.squares[8][3] = {type = "bishop", color = "black"}
-    self.squares[8][4] = {type = "queen", color = "black"}
-    self.squares[8][5] = {type = "king", color = "black"}
-    self.squares[8][6] = {type = "bishop", color = "black"}
-    self.squares[8][7] = {type = "knight", color = "black"}
-    self.squares[8][8] = {type = "rook", color = "black"}
+    self.squares[8][1] = {type = PT.ROOK, color = C.BLACK}
+    self.squares[8][2] = {type = PT.KNIGHT, color = C.BLACK}
+    self.squares[8][3] = {type = PT.BISHOP, color = C.BLACK}
+    self.squares[8][4] = {type = PT.QUEEN, color = C.BLACK}
+    self.squares[8][5] = {type = PT.KING, color = C.BLACK}
+    self.squares[8][6] = {type = PT.BISHOP, color = C.BLACK}
+    self.squares[8][7] = {type = PT.KNIGHT, color = C.BLACK}
+    self.squares[8][8] = {type = PT.ROOK, color = C.BLACK}
 end
 
 -- Get piece at position
@@ -70,6 +73,45 @@ function DeltaChess.Board:GetPiece(row, col)
         return nil
     end
     return self.squares[row][col]
+end
+
+-- Return a deep copy of board.squares (engines must use this to avoid mutating the original)
+function DeltaChess.Board:GetSquaresCopy()
+    local copy = {}
+    for row = 1, 8 do
+        copy[row] = {}
+        for col = 1, 8 do
+            local piece = self.squares[row] and self.squares[row][col]
+            copy[row][col] = piece and { type = piece.type, color = piece.color } or nil
+        end
+    end
+    return copy
+end
+
+-- Return a full board copy for engine search; engines may mutate this copy freely
+function DeltaChess.Board:GetSearchCopy()
+    local enPassantCopy = nil
+    if self.enPassantSquare then
+        enPassantCopy = { row = self.enPassantSquare.row, col = self.enPassantSquare.col }
+    end
+    local copy = {
+        squares = self:GetSquaresCopy(),
+        currentTurn = self.currentTurn,
+        enPassantSquare = enPassantCopy,
+        whiteKingMoved = self.whiteKingMoved,
+        blackKingMoved = self.blackKingMoved,
+        whiteRookKingsideMoved = self.whiteRookKingsideMoved,
+        whiteRookQueensideMoved = self.whiteRookQueensideMoved,
+        blackRookKingsideMoved = self.blackRookKingsideMoved,
+        blackRookQueensideMoved = self.blackRookQueensideMoved,
+        moves = {},
+        capturedPieces = { white = {}, black = {} },
+        gameStatus = "active",
+        halfMoveClock = self.halfMoveClock,
+        fullMoveNumber = self.fullMoveNumber
+    }
+    setmetatable(copy, { __index = DeltaChess.Board })
+    return copy
 end
 
 -- Check if square is valid

@@ -1492,7 +1492,7 @@ function DeltaChess:ShowComputerGameWindow()
     -- Create window if it doesn't exist
     if not self.frames.computerWindow then
         local frame = CreateFrame("Frame", "ChessComputerWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(300, 280)
+        frame:SetSize(300, 320)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -1553,11 +1553,81 @@ function DeltaChess:ShowComputerGameWindow()
         end)
         
         yPos = yPos - 50
+
+        -- Engine selection
+        local engineLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        engineLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
+        engineLabel:SetText("Engine:")
+
+        yPos = yPos - 25
+
+        frame.selectedEngine = DeltaChess.Engines:GetEffectiveDefaultId()
+
+        local engineDropdown = CreateFrame("Frame", "ChessEngineDropdown", frame, "UIDropDownMenuTemplate")
+        engineDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
+        UIDropDownMenu_SetWidth(engineDropdown, 200)
+        do
+            local effId = DeltaChess.Engines:GetEffectiveDefaultId()
+            local def = effId and DeltaChess.Engines:Get(effId)
+            UIDropDownMenu_SetText(engineDropdown, (def and def.name) or "None")
+        end
+        UIDropDownMenu_Initialize(engineDropdown, function(self, level)
+            local info = UIDropDownMenu_CreateInfo()
+            for _, eng in ipairs(DeltaChess.Engines:GetEngineList()) do
+                local engineId, engineName = eng.id, eng.name
+                info.text = engineName
+                info.value = engineId
+                info.checked = (frame.selectedEngine == engineId)
+                info.func = function()
+                    UIDropDownMenu_SetSelectedValue(engineDropdown, engineId)
+                    UIDropDownMenu_SetText(engineDropdown, engineName)
+                    frame.selectedEngine = engineId
+                    if frame.updateEloSliderForEngine then
+                        frame.updateEloSliderForEngine(engineId)
+                    end
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        frame.engineDropdown = engineDropdown
+
+        -- Update ELO slider based on selected engine (enable/disable, set range)
+        local function updateEloSliderForEngine(engineId)
+            local range = DeltaChess.Engines:GetEloRange(engineId)
+            local diffSlider = frame.diffSlider
+            local diffValue = frame.diffValueText
+            local diffLabel = frame.diffLabel
+            local diffDesc = frame.diffDesc
+            if range then
+                local minVal, maxVal = range[1], range[2]
+                diffSlider:SetMinMaxValues(minVal, maxVal)
+                diffSlider:SetValue(math.max(minVal, math.min(maxVal, frame.selectedDifficulty or 1200)))
+                frame.selectedDifficulty = diffSlider:GetValue()
+                diffValue:SetText(tostring(frame.selectedDifficulty))
+                diffSlider.Low:SetText(tostring(minVal))
+                diffSlider.High:SetText(tostring(maxVal))
+                diffSlider:Enable()
+                diffValue:SetTextColor(1, 1, 1, 1)
+                if diffLabel then diffLabel:SetTextColor(1, 0.82, 0, 1) end
+                if diffDesc then diffDesc:SetTextColor(0.5, 0.5, 0.5, 1) end
+            else
+                diffSlider:Disable()
+                diffValue:SetText("N/A")
+                diffValue:SetTextColor(0.5, 0.5, 0.5, 1)
+                if diffLabel then diffLabel:SetTextColor(0.5, 0.5, 0.5, 1) end
+                if diffDesc then diffDesc:SetTextColor(0.4, 0.4, 0.4, 1) end
+                frame.selectedDifficulty = nil  -- Engine has no ELO
+            end
+        end
+        frame.updateEloSliderForEngine = updateEloSliderForEngine
+
+        yPos = yPos - 45
         
-        -- Difficulty slider (ELO 100-2500)
+        -- Difficulty slider (ELO - range from engine)
         local diffLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         diffLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         diffLabel:SetText("AI Strength (ELO):")
+        frame.diffLabel = diffLabel
         
         yPos = yPos - 25
         
@@ -1578,10 +1648,13 @@ function DeltaChess:ShowComputerGameWindow()
         diffSlider.Low:SetText("100")
         diffSlider.High:SetText("2500")
         diffSlider:SetScript("OnValueChanged", function(self, value)
+            local range = DeltaChess.Engines:GetEloRange(frame.selectedEngine)
+            if not range then return end
+            local minVal, maxVal = range[1], range[2]
             local elo = math.floor((value + 50) / 100) * 100
-            elo = math.max(100, math.min(2500, elo))
+            elo = math.max(minVal, math.min(maxVal, elo))
             frame.selectedDifficulty = elo
-            diffValue:SetText(tostring(elo))
+            frame.diffValueText:SetText(tostring(elo))
         end)
         frame.diffSlider = diffSlider
         
@@ -1593,6 +1666,7 @@ function DeltaChess:ShowComputerGameWindow()
         diffDesc:SetWidth(260)
         diffDesc:SetJustifyH("LEFT")
         diffDesc:SetText("|cFF888888100-400: Beginner | 400-1000: Club | 1000-1600: Advanced | 1600+: Expert|r")
+        frame.diffDesc = diffDesc
         
         -- Start button
         local startBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -1606,7 +1680,11 @@ function DeltaChess:ShowComputerGameWindow()
             end
             
             frame:Hide()
-            DeltaChess:StartComputerGame(color, frame.selectedDifficulty or 1200)
+            local difficulty = frame.selectedDifficulty
+            if difficulty == nil then
+                difficulty = 1200  -- Fallback for engines with no ELO (e.g. Random)
+            end
+            DeltaChess:StartComputerGame(color, difficulty, frame.selectedEngine)
         end)
         
         local cancelBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -1621,13 +1699,18 @@ function DeltaChess:ShowComputerGameWindow()
     end
     
     -- Reset to defaults
-    self.frames.computerWindow.selectedColor = "white"
-    self.frames.computerWindow.selectedDifficulty = 1200
-    if self.frames.computerWindow.diffSlider then
-        self.frames.computerWindow.diffSlider:SetValue(1200)
+    local frame = self.frames.computerWindow
+    frame.selectedColor = "white"
+    frame.selectedEngine = DeltaChess.Engines:GetEffectiveDefaultId()
+    frame.selectedDifficulty = 1200
+    if frame.engineDropdown then
+        local effId = DeltaChess.Engines:GetEffectiveDefaultId()
+        local def = effId and DeltaChess.Engines:Get(effId)
+        UIDropDownMenu_SetSelectedValue(frame.engineDropdown, frame.selectedEngine)
+        UIDropDownMenu_SetText(frame.engineDropdown, (def and def.name) or "None")
     end
-    if self.frames.computerWindow.diffValueText then
-        self.frames.computerWindow.diffValueText:SetText("1200")
+    if frame.updateEloSliderForEngine then
+        frame.updateEloSliderForEngine(frame.selectedEngine)
     end
     
     -- Update color button states

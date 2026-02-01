@@ -11,7 +11,11 @@
 ## X-WoWI-ID: 27027
 
 Core.lua
+Constants.lua
 ChessBoard.lua
+Engines/EngineInterface.lua
+Engines/MinimaxEngine.lua
+Engines/RandomEngine.lua
 ChessAI.lua
 UI.lua
 Communication.lua
