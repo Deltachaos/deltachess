@@ -219,7 +219,7 @@ function DeltaChess:ShowMainMenu()
     -- Create main menu frame if it doesn't exist
     if not self.frames.mainMenu then
         local frame = CreateFrame("Frame", "ChessMainMenu", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(400, 500)
+        frame:SetSize(460, 560)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -228,26 +228,35 @@ function DeltaChess:ShowMainMenu()
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
         frame:SetFrameStrata("FULLSCREEN_DIALOG") -- High z-index
         frame:SetFrameLevel(100)
-        frame.TitleText:SetText("DeltaChess")
+        frame.TitleText:SetText("DeltaChess (by Deltachaos)")
         
         -- Game History title
         local historyTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         historyTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -35)
         historyTitle:SetText("Game History")
         
+        -- Support & License button (aligned right)
+        local supportBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        supportBtn:SetSize(120, 22)
+        supportBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -15, -32)
+        supportBtn:SetText("Support & License")
+        supportBtn:SetScript("OnClick", function()
+            DeltaChess:ShowSupportDialog()
+        end)
+        
         -- History scroll frame
         local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
         scrollFrame:SetPoint("TOPLEFT", historyTitle, "BOTTOMLEFT", 0, -10)
-        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -40, 80)
+        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -40, 110)
         
         local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-        scrollChild:SetSize(340, 1)
+        scrollChild:SetSize(400, 1)
         scrollFrame:SetScrollChild(scrollChild)
         frame.scrollChild = scrollChild
         
         -- DND checkbox (above bottom buttons)
         local dndCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-        dndCheck:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 48)
+        dndCheck:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 75)
         dndCheck.text:SetText("Do Not Disturb (no challenge popups)")
         dndCheck:SetChecked(DeltaChess.db.settings.dnd)
         dndCheck:SetScript("OnClick", function(self)
@@ -258,25 +267,38 @@ function DeltaChess:ShowMainMenu()
         end)
         frame.dndCheck = dndCheck
         
-        -- Challenge Player button (bottom left)
+        -- Challenge Player button (above blingtron ad)
         local challengeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        challengeBtn:SetSize(170, 30)
-        challengeBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 10)
+        challengeBtn:SetSize(211, 28)
+        challengeBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 42)
         challengeBtn:SetText("Challenge Player")
         challengeBtn:SetScript("OnClick", function()
             frame:Hide()
             DeltaChess:ShowChallengeWindow()
         end)
         
-        -- Play vs Computer button (bottom right)
+        -- Play vs Computer button
         local computerBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        computerBtn:SetSize(170, 30)
-        computerBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -15, 10)
+        computerBtn:SetSize(211, 28)
+        computerBtn:SetPoint("LEFT", challengeBtn, "RIGHT", 8, 0)
         computerBtn:SetText("Play vs Computer")
         computerBtn:SetScript("OnClick", function()
             frame:Hide()
             DeltaChess:ShowComputerGameWindow()
         end)
+        
+        -- Blingtron.app advertisement (very bottom, below buttons)
+        local blingtronBg = frame:CreateTexture(nil, "BACKGROUND")
+        blingtronBg:SetColorTexture(0.1, 0.15, 0.2, 0.8)
+        blingtronBg:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 20, 10)
+        blingtronBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 10)
+        blingtronBg:SetHeight(36)
+        
+        local blingtronText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        blingtronText:SetPoint("CENTER", blingtronBg, "CENTER", 0, 0)
+        blingtronText:SetText("|cFF00BFFFSponsored by: |r|cFFFFFFFFhttps://blingtron.app|r - Discord bot for weekly vault & raid reminders")
+        blingtronText:SetJustifyH("CENTER")
+        blingtronText:SetWidth(430)
         
         self.frames.mainMenu = frame
     end
@@ -285,6 +307,108 @@ function DeltaChess:ShowMainMenu()
     self:RefreshMainMenuContent()
     
     self.frames.mainMenu:Show()
+end
+
+-- Support dialog with copyable links
+function DeltaChess:ShowSupportDialog()
+    if not self.frames.supportDialog then
+        local PATREON_URL = "https://patreon.com/c/blingtronapp"
+        local GITHUB_URL = "https://github.com/Deltachaos/deltachess"
+        
+        local frame = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
+        frame:SetSize(440, 320)
+        frame:SetPoint("CENTER")
+        frame:SetMovable(true)
+        frame:EnableMouse(true)
+        frame:RegisterForDrag("LeftButton")
+        frame:SetScript("OnDragStart", frame.StartMoving)
+        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        frame:SetFrameLevel(250)
+        frame.TitleText:SetText("DeltaChess - Support & License")
+        
+        local thankYou = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        thankYou:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -40)
+        thankYou:SetText("Thank you for playing DeltaChess! Your support is greatly appreciated.")
+        thankYou:SetWidth(400)
+        
+        local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        desc:SetPoint("TOPLEFT", thankYou, "BOTTOMLEFT", 0, -10)
+        desc:SetText("Support me on Patreon or check out my other wow project:")
+        desc:SetWidth(400)
+
+        local blingtron = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        blingtron:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -10)
+        blingtron:SetText("|r|cFF00BFFFhttps://blingtron.app|r - Discord bot for weekly vault & raid reminders")
+        blingtron:SetWidth(400)
+        
+        -- Patreon label
+        local patreonLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        patreonLabel:SetPoint("TOPLEFT", blingtron, "BOTTOMLEFT", 0, -10)
+        patreonLabel:SetText("|cFF00BFFFPatreon:|r")
+        
+        -- Patreon EditBox (read-only, selectable for copy)
+        local patreonEdit = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+        patreonEdit:SetSize(360, 22)
+        patreonEdit:SetPoint("TOPLEFT", patreonLabel, "BOTTOMLEFT", 0, -4)
+        patreonEdit:SetAutoFocus(false)
+        patreonEdit:SetText(PATREON_URL)
+        patreonEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        patreonEdit:SetScript("OnEditFocusLost", function(self) self:SetText(PATREON_URL) end)
+        patreonEdit:SetScript("OnChar", function(self) self:SetText(PATREON_URL) end)
+        
+        -- GitHub label
+        local githubLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        githubLabel:SetPoint("TOPLEFT", patreonEdit, "BOTTOMLEFT", 0, -15)
+        githubLabel:SetText("|cFF00BFFFGitHub:|r")
+        
+        -- GitHub EditBox
+        local githubEdit = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+        githubEdit:SetSize(360, 22)
+        githubEdit:SetPoint("TOPLEFT", githubLabel, "BOTTOMLEFT", 0, -4)
+        githubEdit:SetAutoFocus(false)
+        githubEdit:SetText(GITHUB_URL)
+        githubEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        githubEdit:SetScript("OnEditFocusLost", function(self) self:SetText(GITHUB_URL) end)
+        githubEdit:SetScript("OnChar", function(self) self:SetText(GITHUB_URL) end)
+        
+        -- License and chess piece artwork (at bottom)
+        local licenseLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        licenseLabel:SetPoint("BOTTOMLEFT", githubEdit, "BOTTOMLEFT", 0, -40)
+        licenseLabel:SetPoint("BOTTOMRIGHT", githubEdit, "BOTTOMRIGHT", 0, -40)
+        licenseLabel:SetText("|cFF00BFFFLicense:|r GNU GPL v3.0.")
+        licenseLabel:SetJustifyH("CENTER")
+
+        local artworkLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        artworkLabel:SetPoint("BOTTOMLEFT", licenseLabel, "BOTTOMLEFT", 15, 14)
+        artworkLabel:SetPoint("BOTTOMRIGHT", licenseLabel, "BOTTOMRIGHT", -15, 14)
+        artworkLabel:SetText("|cFF00BFFFChess piece artwork:|r By Cburnett (Wikimedia Commons), CC BY-SA 3.0.")
+        artworkLabel:SetJustifyH("CENTER")
+
+        -- OK button
+        local okBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        okBtn:SetSize(100, 28)
+        okBtn:SetPoint("BOTTOM", frame, "BOTTOM", 0, 15)
+        okBtn:SetText("OK")
+        okBtn:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+        
+        frame:SetScript("OnHide", function()
+            patreonEdit:ClearFocus()
+            githubEdit:ClearFocus()
+        end)
+        frame:SetScript("OnKeyDown", function(self, key)
+            if key == "ESCAPE" then
+                self:Hide()
+            end
+        end)
+        frame:EnableKeyboard(true)
+        
+        self.frames.supportDialog = frame
+    end
+    
+    self.frames.supportDialog:Show()
 end
 
 -- Refresh just the main menu content (without showing/hiding window)
@@ -394,7 +518,7 @@ function DeltaChess:RefreshMainMenuContent()
             local game = allGames[i]
             
             local entry = CreateFrame("Button", nil, scrollChild)
-            entry:SetSize(340, 60)
+            entry:SetSize(400, 60)
             entry:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -yOffset)
             
             -- Background
