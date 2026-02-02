@@ -280,6 +280,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         
         if data.accepted then
             self:Print(sender .. " accepted your challenge!")
+            DeltaChess.Sound:PlayChallengeAccepted()
             
             -- Create the game on challenger's side
             if self.pendingChallenge then
@@ -330,6 +331,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
             end
         else
             self:Print(sender .. " declined your challenge.")
+            DeltaChess.Sound:PlayChallengeDeclined()
             self.pendingChallenge = nil
         end
         
@@ -507,6 +509,9 @@ function DeltaChess:AcceptChallenge(challengeData)
     -- Save game
     self.db.games[gameId] = game
     
+    -- Play sound for accepting challenge
+    DeltaChess.Sound:PlayChallengeAccepted()
+    
     -- Send response with the same game ID, our timestamp, and our class
     local response = {
         accepted = true,
@@ -531,6 +536,9 @@ function DeltaChess:DeclineChallenge(challengeData)
     }
     
     self:SendCommMessage("ChessResponse", self:Serialize(response), "WHISPER", challengeData.challenger)
+    
+    -- Play sound for declining
+    DeltaChess.Sound:PlayChallengeDeclined()
     
     self:Print("Challenge declined.")
 end

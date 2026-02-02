@@ -1928,11 +1928,13 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
         else
             DeltaChess:Print("It's not your turn!")
         end
+        DeltaChess.Sound:PlayInvalidMove()
         return
     end
     
     if board.gameStatus ~= "active" then
         DeltaChess:Print("Game has ended!")
+        DeltaChess.Sound:PlayInvalidMove()
         return
     end
     
@@ -2045,6 +2047,12 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
                 frame.squares[move.row][move.col].validMove:Show()
             end
         else
+            -- Clicked on invalid square (not a valid move, not own piece)
+            -- Play invalid move sound if clicking on opponent piece or occupied square
+            if piece then
+                DeltaChess.Sound:PlayInvalidMove()
+            end
+            
             -- Deselect
             frame.selectedSquare = nil
             frame.validMoves = {}

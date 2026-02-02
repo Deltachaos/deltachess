@@ -11,23 +11,23 @@ local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and (WOW_PROJECT_ID == 
 local SoundConfig = {
     -- When the player makes a move
     playerMove = {
-        retail = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,-- 286130,
-        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,--286130
+        retail = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,
+        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,
     },
     -- When the opponent makes a move
     opponentMove = {
-        retail = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF,--316466,
-        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF,-- 316466
+        retail = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF,
+        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF,
     },
     -- When the player captures a piece
     playerCapture = {
-        retail = 314203,
-        classic = 314203
+        retail = 286130,
+        classic = 286130,
     },
     -- When the opponent captures a piece
     opponentCapture = {
-        retail = 325715,
-        classic = 325715
+        retail = 316466,
+        classic = 316466,
     },
     -- When the player is in check (king threatened)
     playerInCheck = {
@@ -36,33 +36,44 @@ local SoundConfig = {
     },
     -- When the player puts opponent in check
     opponentInCheck = {
+        retail = 3201,
+        classic = 3201
+    },
+
+    -- Challenge received
+    challengeReceived = {
+        retail = 162940,
+        classic = 162940
+    },
+    -- Challenge accepted
+    challengeAccepted = {
         retail = 26905,
         classic = 26905
     },
+    -- Challenge declined
+    challengeDeclined = {
+        retail = 882,
+        classic = 882
+    },
     -- When the player wins
     playerWin = {
-        retail = SOUNDKIT.IG_QUEST_LIST_COMPLETE,
-        classic = SOUNDKIT.IG_QUEST_LIST_COMPLETE
+        retail = 37656,
+        classic = 37656
     },
     -- When the player loses
     playerLose = {
-        retail = SOUNDKIT.IG_QUEST_LOG_ABANDON_QUEST,
-        classic = SOUNDKIT.IG_QUEST_LOG_ABANDON_QUEST
+        retail = 43503,
+        classic = 43503
     },
     -- Stalemate/Draw
     stalemate = {
         retail = SOUNDKIT.IG_QUEST_LOG_ABANDON_QUEST,
         classic = SOUNDKIT.IG_QUEST_LOG_ABANDON_QUEST
     },
-    -- Challenge received
-    challengeReceived = {
-        retail = SOUNDKIT.READY_CHECK,
-        classic = SOUNDKIT.READY_CHECK
-    },
-    -- Challenge accepted
-    challengeAccepted = {
-        retail = 26905,
-        classic = 26905
+    -- Invalid/illegal move attempted
+    invalidMove = {
+        retail = 47355,
+        classic = 47355
     }
 }
 
@@ -146,6 +157,16 @@ function DeltaChess.Sound:PlayChallengeAccepted()
     self:Play("challengeAccepted")
 end
 
+-- Play sound for invalid/illegal move attempt
+function DeltaChess.Sound:PlayInvalidMove()
+    self:Play("invalidMove")
+end
+
+-- Play sound when a challenge is declined
+function DeltaChess.Sound:PlayChallengeDeclined()
+    self:Play("challengeDeclined")
+end
+
 -- Helper function to determine player color in a game
 -- @param game table - The game object
 -- @return string - "white" or "black"
@@ -178,8 +199,8 @@ function DeltaChess.Sound:PlayMoveSound(game, isPlayerMove, wasCapture, board)
         self:PlayOpponentMove(wasCapture)
     end
     
-    -- Then check for check status
-    if board then
+    -- Then check for check status (but not if game ended - let game end sound play instead)
+    if board and board.gameStatus == "active" then
         local playerInCheck = board:IsInCheck(playerColor)
         local opponentInCheck = board:IsInCheck(opponentColor)
         
