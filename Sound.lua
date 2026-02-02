@@ -12,43 +12,42 @@ local SoundConfig = {
     -- When the player makes a move
     playerMove = {
         retail = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,
-        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON,
+        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON
     },
     -- When the opponent makes a move
     opponentMove = {
         retail = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF,
-        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF,
+        classic = SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF
     },
     -- When the player captures a piece
     playerCapture = {
-        retail = 286130,
-        classic = 286130,
+        retail = 867,
+        classic = 867
     },
     -- When the opponent captures a piece
     opponentCapture = {
-        retail = 316466,
-        classic = 316466,
+        retail = 868,
+        classic = 868
     },
     -- When the player is in check (king threatened)
     playerInCheck = {
         retail = 15262,
-        classic = 15262
+        classic = 8959
     },
     -- When the player puts opponent in check
     opponentInCheck = {
         retail = 3201,
         classic = 3201
     },
-
     -- Challenge received
     challengeReceived = {
         retail = 162940,
-        classic = 162940
+        classic = 881
     },
     -- Challenge accepted
     challengeAccepted = {
         retail = 26905,
-        classic = 26905
+        classic = 3486
     },
     -- Challenge declined
     challengeDeclined = {
@@ -58,12 +57,12 @@ local SoundConfig = {
     -- When the player wins
     playerWin = {
         retail = 37656,
-        classic = 37656
+        classic = 8173
     },
     -- When the player loses
     playerLose = {
         retail = 43503,
-        classic = 43503
+        classic = 18871
     },
     -- Stalemate/Draw
     stalemate = {
@@ -73,7 +72,7 @@ local SoundConfig = {
     -- Invalid/illegal move attempted
     invalidMove = {
         retail = 47355,
-        classic = 47355
+        classic = 853
     }
 }
 
