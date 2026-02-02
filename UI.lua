@@ -1812,6 +1812,15 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
             -- Default to queen promotion
             if pm.isVsComputer then
                 pm.board:MakeMove(pm.fromRow, pm.fromCol, pm.toRow, pm.toCol, "queen")
+                
+                -- Play sound for player's promotion move
+                local lastMove = pm.board.moves and pm.board.moves[#pm.board.moves]
+                local wasCapture = lastMove and lastMove.captured ~= nil
+                local game = pm.frame.game
+                if game then
+                    DeltaChess.Sound:PlayMoveSound(game, true, wasCapture, pm.board)
+                end
+                
                 DeltaChess.UI:UpdateBoardAnimated(pm.frame, true)
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
@@ -1849,6 +1858,15 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromRow, fromCol, toRow, toCol
 
             if isVsComputer then
                 board:MakeMove(fromRow, fromCol, toRow, toCol, pieceType)
+                
+                -- Play sound for player's promotion move
+                local lastMove = board.moves and board.moves[#board.moves]
+                local wasCapture = lastMove and lastMove.captured ~= nil
+                local game = frame.game
+                if game then
+                    DeltaChess.Sound:PlayMoveSound(game, true, wasCapture, board)
+                end
+                
                 DeltaChess.UI:UpdateBoardAnimated(frame, true)
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
@@ -1964,6 +1982,11 @@ function DeltaChess.UI:OnSquareClick(frame, row, col)
             if game.isVsComputer then
                 -- Make the move immediately for computer games
                 board:MakeMove(fromRow, fromCol, row, col)
+                
+                -- Play sound for player's move
+                local lastMove = board.moves and board.moves[#board.moves]
+                local wasCapture = lastMove and lastMove.captured ~= nil
+                DeltaChess.Sound:PlayMoveSound(game, true, wasCapture, board)
                 
                 -- Clear selection
                 frame.selectedSquare = nil
@@ -2136,6 +2159,9 @@ function DeltaChess.UI:ShowGameEnd(frame)
                      (game.timeoutPlayer == game.white and game.black or game.white) .. " wins!"
         playerResult = (game.timeoutPlayer == playerName) and "lost" or "won"
     end
+    
+    -- Play game end sound
+    DeltaChess.Sound:PlayGameEndSound(game, board)
     
     -- Save the game to history (only if still in active games)
     if DeltaChess.db.games[frame.gameId] then

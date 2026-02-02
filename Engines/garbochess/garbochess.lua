@@ -979,17 +979,21 @@ local function GenerateAllMoves(state, moveStack)
 
     if (not state.inCheck) then
         local castleRights = state.castleRights
+        local expectedRook = bit.bor(pieceRook, state.toMove)
         if (state.toMove == 0) then
             castleRights = bit.rshift(castleRights, 2)
         end
         if (bit.band(castleRights, 1) > 0) then
-            if (state.board[1 + (from + 1)] == pieceEmpty and state.board[1 + (from + 2)] == pieceEmpty) then
+            -- Kingside castle: verify rook is at from + 3 (h-file)
+            if (state.board[1 + (from + 1)] == pieceEmpty and state.board[1 + (from + 2)] == pieceEmpty and
+                    state.board[1 + (from + 3)] == expectedRook) then
                 moveStack[1 + table.getn(moveStack)] = GenerateMove2(from, from + 0x02, moveflagCastleKing)
             end
         end
         if (bit.band(castleRights, 2) > 0) then
+            -- Queenside castle: verify rook is at from - 4 (a-file)
             if (state.board[1 + (from - 1)] == pieceEmpty and state.board[1 + (from - 2)] == pieceEmpty and
-                    state.board[1 + (from - 3)] == pieceEmpty) then
+                    state.board[1 + (from - 3)] == pieceEmpty and state.board[1 + (from - 4)] == expectedRook) then
                 moveStack[1 + table.getn(moveStack)] = GenerateMove2(from, from - 0x02, moveflagCastleQueen)
             end
         end
@@ -1058,6 +1062,11 @@ MakeMove = function(state, move)
             end
 
             local rook = state.board[1 + (to + 1)]
+            -- Defensive check: verify rook is present (should not happen with proper move generation)
+            if (bit.band(rook, 0x7) ~= pieceRook) then
+                state.moveCount = state.moveCount - 1
+                return false
+            end
 
             state.hashKeyLow = bit.bxor(state.hashKeyLow, g_zobristLow[1 + (to + 1)][1 + bit.band(rook, 0xF)])
             state.hashKeyHigh = bit.bxor(state.hashKeyHigh, g_zobristHigh[1 + (to + 1)][1 + bit.band(rook, 0xF)])
@@ -1080,6 +1089,11 @@ MakeMove = function(state, move)
             end
 
             local rook = state.board[1 + (to - 2)]
+            -- Defensive check: verify rook is present (should not happen with proper move generation)
+            if (bit.band(rook, 0x7) ~= pieceRook) then
+                state.moveCount = state.moveCount - 1
+                return false
+            end
 
             state.hashKeyLow = bit.bxor(state.hashKeyLow, g_zobristLow[1 + (to - 2)][1 + bit.band(rook, 0xF)])
             state.hashKeyHigh = bit.bxor(state.hashKeyHigh, g_zobristHigh[1 + (to - 2)][1 + bit.band(rook, 0xF)])

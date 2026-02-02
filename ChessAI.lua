@@ -89,6 +89,11 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             C_Timer.After(delay, function()
                 game.board:MakeMove(validMove.fromRow, validMove.fromCol, validMove.toRow, validMove.toCol, promotion)
 
+                -- Play sound for AI's move (opponent move from player's perspective)
+                local lastMove = game.board.moves and game.board.moves[#game.board.moves]
+                local wasCapture = lastMove and lastMove.captured ~= nil
+                DeltaChess.Sound:PlayMoveSound(game, false, wasCapture, game.board)
+
                 DeltaChess:NotifyItIsYourTurn(gameId, "Computer")
 
                 if game.board.gameStatus ~= "active" then

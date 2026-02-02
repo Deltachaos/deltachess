@@ -12,6 +12,7 @@
 
 Core.lua
 Constants.lua
+Sound.lua
 ChessBoard.lua
 Engines/EngineInterface.lua
 Engines/BitOp.lua

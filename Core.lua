@@ -204,7 +204,7 @@ function DeltaChess:NotifyItIsYourTurn(gameId, opponentDisplayName)
         DeltaChess.Minimap:UpdateYourTurnHighlight()
     end
     
-    PlaySound(SOUNDKIT.ACHIEVEMENT_MENU_OPEN)
+    -- Sound is now handled by the Sound module in HandleOpponentMove/ChessAI
 end
 
 --------------------------------------------------------------------------------

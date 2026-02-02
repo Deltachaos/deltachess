@@ -270,7 +270,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         self.pendingReceivedChallenge = data
         
         -- Play sound to alert player
-        PlaySound(SOUNDKIT.READY_CHECK)
+        DeltaChess.Sound:PlayChallengeReceived()
         
         StaticPopup_Show("CHESS_CHALLENGE_RECEIVED", sender, settingsText, data)
         
@@ -409,8 +409,10 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
         end
     end
     
-    -- Play sound
-    PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+    -- Play sound based on move type (player's own move)
+    local lastMove = game.board.moves and game.board.moves[#game.board.moves]
+    local wasCapture = lastMove and lastMove.captured ~= nil
+    DeltaChess.Sound:PlayMoveSound(game, true, wasCapture, game.board)
 end
 
 -- Send move that requires confirmation before being applied locally
@@ -582,6 +584,11 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     
     -- Make the move on our board (timestamp is added automatically)
     game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
+    
+    -- Play sound for opponent's move
+    local lastMove = game.board.moves and game.board.moves[#game.board.moves]
+    local wasCapture = lastMove and lastMove.captured ~= nil
+    DeltaChess.Sound:PlayMoveSound(game, false, wasCapture, game.board)
     
     local opponentName = sender:match("^([^%-]+)") or sender
     DeltaChess:NotifyItIsYourTurn(moveData.gameId, opponentName)
