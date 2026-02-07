@@ -41,7 +41,46 @@ jobs:
 
       - name: Clean unused files
         run: |
-          ls -la .
+          # Build list of files to keep: DeltaChess.toc + every path listed in .toc (non-comment, non-empty lines)
+          keep_files="DeltaChess.toc"
+          while IFS= read -r line; do
+            line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            [[ -z "$line" ]] && continue
+            keep_files="${keep_files}"$'\n'"${line}"
+          done < <(grep -v '^#' DeltaChess.toc | grep -v '^[[:space:]]*$')
+          # Also keep paths (files and directories) listed in .package (and the .package file itself)
+          keep_extra=""
+          if [[ -f .package ]]; then
+            keep_extra=".package"
+            while IFS= read -r line; do
+              line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+              [[ -z "$line" ]] && continue
+              keep_extra="${keep_extra}"$'\n'"${line}"
+            done < <(grep -v '^#' .package | grep -v '^[[:space:]]*$')
+          fi
+          # Delete any file not in keep list (exclude .git and .github)
+          find . -type f ! -path './.git/*' ! -path './.github/*' | while read -r f; do
+            rel="${f#./}"
+            keep=0
+            echo "$keep_files" | grep -Fxq "$rel" && keep=1
+            if [[ $keep -eq 0 && -n "$keep_extra" ]]; then
+              echo "$keep_extra" | grep -Fxq "$rel" && keep=1
+              if [[ $keep -eq 0 ]]; then
+                while IFS= read -r p; do
+                  [[ -z "$p" ]] && continue
+                  if [[ -d "$p" && "$rel" == "$p"/* ]]; then keep=1; break; fi
+                done <<< "$keep_extra"
+              fi
+            fi
+            if [[ $keep -eq 0 ]]; then
+              echo "Removing: $rel"
+              rm -- "$f"
+            fi
+          done
+          # Remove empty directories (except .git and .github)
+          for _ in $(seq 1 20); do
+            find . -depth -type d ! -path './.git*' ! -path './.github*' -empty -exec rmdir {} \; 2>/dev/null || true
+          done
 
       - name: Create Package (untagged)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
