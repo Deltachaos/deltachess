@@ -1339,7 +1339,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         yPos = yPos - 24
         
         local pastBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        pastBtn:SetSize(105, 24)
+        pastBtn:SetSize(102, 24)
         pastBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         pastBtn:SetText("Recent")
         pastBtn:SetScript("OnClick", function()
@@ -1349,7 +1349,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         end)
         
         local guildBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        guildBtn:SetSize(105, 24)
+        guildBtn:SetSize(102, 24)
         guildBtn:SetPoint("LEFT", pastBtn, "RIGHT", 5, 0)
         guildBtn:SetText("Guild")
         guildBtn:SetScript("OnClick", function()
@@ -1359,7 +1359,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         end)
         
         local friendsBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        friendsBtn:SetSize(105, 24)
+        friendsBtn:SetSize(102, 24)
         friendsBtn:SetPoint("LEFT", guildBtn, "RIGHT", 5, 0)
         friendsBtn:SetText("Friends")
         friendsBtn:SetScript("OnClick", function()
@@ -1396,17 +1396,17 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         frame.selectedColor = "random"
         
         local whiteBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        whiteBtn:SetSize(100, 25)
+        whiteBtn:SetSize(102, 25)
         whiteBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         whiteBtn:SetText("White")
         
         local blackBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        blackBtn:SetSize(100, 25)
+        blackBtn:SetSize(102, 25)
         blackBtn:SetPoint("LEFT", whiteBtn, "RIGHT", 5, 0)
         blackBtn:SetText("Black")
         
         local randomBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        randomBtn:SetSize(100, 25)
+        randomBtn:SetSize(102, 25)
         randomBtn:SetPoint("LEFT", blackBtn, "RIGHT", 5, 0)
         randomBtn:SetText("Random")
         

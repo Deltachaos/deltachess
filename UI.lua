@@ -799,8 +799,8 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     addY(-25)
 
     local timeSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-    timeSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(0))
-    timeSlider:SetSize(300, 17)
+    timeSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
+    timeSlider:SetSize(305, 17)
     timeSlider:SetMinMaxValues(1, 60)
     timeSlider:SetValue(10)
     timeSlider:SetValueStep(1)
@@ -827,8 +827,8 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     addY(-25)
 
     local incSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-    incSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(0))
-    incSlider:SetSize(300, 17)
+    incSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
+    incSlider:SetSize(305, 17)
     incSlider:SetMinMaxValues(0, 30)
     incSlider:SetValue(0)
     incSlider:SetValueStep(1)
@@ -858,15 +858,15 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         addY(-30)
 
         local handicapSideLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        handicapSideLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(0))
+        handicapSideLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(-10))
         handicapSideLabel:SetText("Side with less time:")
         table.insert(handicapElements, handicapSideLabel)
         addY(-25)
 
         parent.handicapSide = "white"
         local handicapDropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-        handicapDropdown:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX, addY(0))
-        UIDropDownMenu_SetWidth(handicapDropdown, 180)
+        handicapDropdown:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX - 15, addY(5))
+        UIDropDownMenu_SetWidth(handicapDropdown, 300)
         UIDropDownMenu_Initialize(handicapDropdown, function(self, level)
             local info = UIDropDownMenu_CreateInfo()
             for _, side in ipairs({ "white", "black" }) do
@@ -886,7 +886,7 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         addY(-30)
 
         local handicapMinLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        handicapMinLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(0))
+        handicapMinLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(-10))
         handicapMinLabel:SetText("Minutes less:")
         local handicapMinutesValue = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         handicapMinutesValue:SetPoint("LEFT", handicapMinLabel, "RIGHT", 10, 0)
@@ -897,8 +897,8 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         addY(-25)
 
         local handicapMinutesSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-        handicapMinutesSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(0))
-        handicapMinutesSlider:SetSize(200, 17)
+        handicapMinutesSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
+        handicapMinutesSlider:SetSize(305, 17)
         handicapMinutesSlider:SetMinMaxValues(0, 30)
         handicapMinutesSlider:SetValue(0)
         handicapMinutesSlider:SetValueStep(1)
@@ -928,11 +928,11 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
 
     -- Height contributions for each collapsible section (sum of addY calls)
     -- Clock settings: 40 (gap) + 25 (timeLabel) + 45 (timeSlider) + 25 (incLabel) + 45 (incSlider) = 180
-    local clockSettingsH = 180
+    local clockSettingsH = 150
     -- Handicap checkbox row (part of clockElements): 30
     if showHandicap then clockSettingsH = clockSettingsH + 30 end
     -- Handicap settings: 25 (sideLabel) + 30 (dropdown) + 25 (minLabel) + 45 (minutesSlider) = 125
-    local handicapSettingsH = showHandicap and 125 or 0
+    local handicapSettingsH = showHandicap and 115 or 0
 
     local onResize = config.onResize  -- optional callback: function(extraHeight)
 
