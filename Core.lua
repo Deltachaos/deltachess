@@ -1317,7 +1317,8 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     -- Create challenge window if it doesn't exist
     if not self.frames.challengeWindow then
         local frame = CreateFrame("Frame", "ChessChallengeWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(350, 560)
+        local BASE_CHALLENGE_HEIGHT = 320
+        frame:SetSize(350, BASE_CHALLENGE_HEIGHT)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -1442,6 +1443,9 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
             offsetX = 12,
             startY = yPos,
             showHandicap = true,
+            onResize = function(extraHeight)
+                frame:SetHeight(BASE_CHALLENGE_HEIGHT + extraHeight)
+            end,
         })
         
         -- Buttons at bottom
@@ -1532,6 +1536,10 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         self.frames.challengeWindow.handicapSide = "white"
         UIDropDownMenu_SetText(self.frames.challengeWindow.handicapSideDropdown, "White")
         self.frames.challengeWindow.handicapMinutesSlider:SetValue(0)
+    end
+    -- Update visibility and frame height to match reset checkbox states
+    if self.frames.challengeWindow.UpdateClockLayout then
+        self.frames.challengeWindow.UpdateClockLayout()
     end
     
     -- Update color buttons

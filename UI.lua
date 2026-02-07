@@ -783,6 +783,9 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     parent.clockCheck = clockCheck
     addY(-40)
 
+    -- Clock settings container (hidden until checkbox is checked)
+    local clockElements = {}
+
     -- Time per player
     local timeLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     timeLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(0))
@@ -791,6 +794,8 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     timeValue:SetPoint("LEFT", timeLabel, "RIGHT", 10, 0)
     timeValue:SetText("10")
     parent.timeValue = timeValue
+    table.insert(clockElements, timeLabel)
+    table.insert(clockElements, timeValue)
     addY(-25)
 
     local timeSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
@@ -806,6 +811,7 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         timeValue:SetText(tostring(math.floor(value)))
     end)
     parent.timeSlider = timeSlider
+    table.insert(clockElements, timeSlider)
     addY(-45)
 
     -- Increment per move
@@ -816,6 +822,8 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     incValue:SetPoint("LEFT", incLabel, "RIGHT", 10, 0)
     incValue:SetText("0")
     parent.incValue = incValue
+    table.insert(clockElements, incLabel)
+    table.insert(clockElements, incValue)
     addY(-25)
 
     local incSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
@@ -831,20 +839,28 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         incValue:SetText(tostring(math.floor(value)))
     end)
     parent.incSlider = incSlider
+    table.insert(clockElements, incSlider)
     addY(-45)
+
+    -- Handicap elements (only when clock is enabled AND handicap is checked)
+    local handicapElements = {}
+    local handicapCheck
 
     if showHandicap then
         -- Handicap: one side gets less time
-        local handicapCheck = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+        handicapCheck = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
         handicapCheck:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX, addY(0))
         handicapCheck.text:SetText("Handicap (one side gets less time)")
         handicapCheck:SetChecked(false)
         parent.handicapCheck = handicapCheck
+        -- Handicap checkbox is part of clockElements (only visible when clock is enabled)
+        table.insert(clockElements, handicapCheck)
         addY(-30)
 
         local handicapSideLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         handicapSideLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(0))
         handicapSideLabel:SetText("Side with less time:")
+        table.insert(handicapElements, handicapSideLabel)
         addY(-25)
 
         parent.handicapSide = "white"
@@ -866,6 +882,7 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         end)
         UIDropDownMenu_SetText(handicapDropdown, "White")
         parent.handicapSideDropdown = handicapDropdown
+        table.insert(handicapElements, handicapDropdown)
         addY(-30)
 
         local handicapMinLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -875,6 +892,8 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         handicapMinutesValue:SetPoint("LEFT", handicapMinLabel, "RIGHT", 10, 0)
         handicapMinutesValue:SetText("0")
         parent.handicapMinutesValue = handicapMinutesValue
+        table.insert(handicapElements, handicapMinLabel)
+        table.insert(handicapElements, handicapMinutesValue)
         addY(-25)
 
         local handicapMinutesSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
@@ -890,8 +909,65 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
             handicapMinutesValue:SetText(tostring(math.floor(value)))
         end)
         parent.handicapMinutesSlider = handicapMinutesSlider
+        table.insert(handicapElements, handicapMinutesSlider)
         addY(-45)
     end
+
+    -- Helper to show/hide a list of elements
+    local function setElementsShown(elements, shown)
+        for _, el in ipairs(elements) do
+            if el.SetShown then
+                el:SetShown(shown)
+            elseif shown then
+                el:Show()
+            else
+                el:Hide()
+            end
+        end
+    end
+
+    -- Height contributions for each collapsible section (sum of addY calls)
+    -- Clock settings: 40 (gap) + 25 (timeLabel) + 45 (timeSlider) + 25 (incLabel) + 45 (incSlider) = 180
+    local clockSettingsH = 180
+    -- Handicap checkbox row (part of clockElements): 30
+    if showHandicap then clockSettingsH = clockSettingsH + 30 end
+    -- Handicap settings: 25 (sideLabel) + 30 (dropdown) + 25 (minLabel) + 45 (minutesSlider) = 125
+    local handicapSettingsH = showHandicap and 125 or 0
+
+    local onResize = config.onResize  -- optional callback: function(extraHeight)
+
+    -- Unified layout update: shows/hides elements and calls onResize with total extra height
+    parent.UpdateClockLayout = function()
+        local clockChecked = clockCheck:GetChecked()
+        setElementsShown(clockElements, clockChecked)
+
+        local handicapChecked = false
+        if not clockChecked then
+            setElementsShown(handicapElements, false)
+        elseif handicapCheck then
+            handicapChecked = handicapCheck:GetChecked()
+            setElementsShown(handicapElements, handicapChecked)
+        end
+
+        if onResize then
+            local extra = 0
+            if clockChecked then
+                extra = extra + clockSettingsH
+                if handicapChecked then
+                    extra = extra + handicapSettingsH
+                end
+            end
+            onResize(extra)
+        end
+    end
+
+    clockCheck:SetScript("OnClick", function() parent.UpdateClockLayout() end)
+    if handicapCheck then
+        handicapCheck:SetScript("OnClick", function() parent.UpdateClockLayout() end)
+    end
+
+    -- Start with everything hidden (checkboxes default to unchecked)
+    parent.UpdateClockLayout()
 
     return yPos
 end
