@@ -693,6 +693,15 @@ function DeltaChess:RefreshMainMenuContent()
                     StaticPopup_Show("CHESS_RESIGN_CONFIRM", nil, nil, gameId)
                     DeltaChess:RefreshMainMenuContent()
                 end)
+                
+                -- PGN button for active/paused games
+                local pgnBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
+                pgnBtn:SetSize(40, 22)
+                pgnBtn:SetPoint("RIGHT", resignBtn, "LEFT", -3, 0)
+                pgnBtn:SetText("PGN")
+                pgnBtn:SetScript("OnClick", function()
+                    DeltaChess:ShowPGNWindow(board)
+                end)
             else
                 -- Delete button for completed games
                 local deleteBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
@@ -712,6 +721,15 @@ function DeltaChess:RefreshMainMenuContent()
                 replayBtn:SetScript("OnClick", function()
                     self.frames.mainMenu:Hide()
                     DeltaChess:ShowReplayWindow(board)
+                end)
+                
+                -- PGN button for completed games
+                local pgnBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
+                pgnBtn:SetSize(40, 22)
+                pgnBtn:SetPoint("RIGHT", replayBtn, "LEFT", -3, 0)
+                pgnBtn:SetText("PGN")
+                pgnBtn:SetScript("OnClick", function()
+                    DeltaChess:ShowPGNWindow(board)
                 end)
             end
             
@@ -977,6 +995,86 @@ function DeltaChess:ShowReplayWindow(board)
     UpdateReplayBoard()
     
     frame:Show()
+end
+
+--------------------------------------------------------------------------------
+-- PGN WINDOW
+--------------------------------------------------------------------------------
+function DeltaChess:ShowPGNWindow(board)
+    if not board or not board.GetPGN then return end
+    local pgn = board:GetPGN()
+    if not pgn or pgn == "" then pgn = "(no PGN)" end
+
+    -- Create PGN window once and reuse
+    if not self.frames.pgnWindow then
+        local frame = CreateFrame("Frame", "ChessPGNFrame", UIParent, "BasicFrameTemplateWithInset")
+        frame:SetSize(450, 380)
+        frame:SetPoint("CENTER")
+        frame:SetMovable(true)
+        frame:EnableMouse(true)
+        frame:RegisterForDrag("LeftButton")
+        frame:SetScript("OnDragStart", frame.StartMoving)
+        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        frame:SetFrameLevel(250)  -- Above main menu (100) so PGN window stays on top
+        frame.TitleText:SetText("PGN")
+
+        -- Background behind the scroll area (ARTWORK layer so it draws above the frame's own background)
+        local editBg = frame:CreateTexture(nil, "ARTWORK", nil, -1)
+        editBg:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -32)
+        editBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -35, 10)
+        editBg:SetColorTexture(0.1, 0.1, 0.15, 0.95)
+
+        -- ScrollFrame = viewport; the EditBox IS the scroll child (standard WoW pattern)
+        local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+        scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -32)
+        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -35, 10)
+
+        local editBox = CreateFrame("EditBox", nil, scrollFrame)
+        editBox:SetMultiLine(true)
+        editBox:SetAutoFocus(false)
+        editBox:SetFontObject(GameFontHighlightSmall)
+        editBox:SetTextInsets(6, 6, 6, 6)
+        editBox:SetMaxLetters(99999)
+        editBox:SetWidth(400)
+        editBox:SetScript("OnEscapePressed", function()
+            frame:Hide()
+        end)
+        -- Update scroll range when text changes so scrollbar knows content height
+        editBox:SetScript("OnTextChanged", function(self)
+            local sf = self:GetParent()
+            sf:UpdateScrollChildRect()
+        end)
+        -- Mouse wheel on EditBox forwards to ScrollFrame
+        editBox:SetScript("OnCursorChanged", function(self, x, y, w, h)
+            local sf = self:GetParent()
+            local vs = sf:GetVerticalScroll()
+            local sfHeight = sf:GetHeight()
+            -- y is negative offset from top of editbox
+            local cursorTop = -y
+            local cursorBottom = cursorTop + h
+            if cursorTop < vs then
+                sf:SetVerticalScroll(cursorTop)
+            elseif cursorBottom > vs + sfHeight then
+                sf:SetVerticalScroll(cursorBottom - sfHeight)
+            end
+        end)
+
+        scrollFrame:SetScrollChild(editBox)
+
+        frame.pgnScrollFrame = scrollFrame
+        frame.pgnEditBox = editBox
+        self.frames.pgnWindow = frame
+    end
+
+    local frame = self.frames.pgnWindow
+    frame:SetFrameLevel(250)  -- Ensure on top each time we show
+    frame.pgnEditBox:SetText(pgn)
+    frame.pgnEditBox:SetCursorPosition(0)
+    frame.pgnScrollFrame:SetVerticalScroll(0)
+    frame:Show()
+    frame.pgnEditBox:HighlightText()
+    frame.pgnEditBox:SetFocus()
 end
 
 --------------------------------------------------------------------------------
