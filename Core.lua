@@ -1458,7 +1458,7 @@ function DeltaChess:ShowComputerGameWindow()
     -- Create window if it doesn't exist
     if not self.frames.computerWindow then
         local frame = CreateFrame("Frame", "ChessComputerWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(320, 520)
+        frame:SetSize(320, 350)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
@@ -1519,16 +1519,6 @@ function DeltaChess:ShowComputerGameWindow()
         end)
         
         yPos = yPos - 40
-
-        -- Clock config (shared panel with handicap)
-        yPos = DeltaChess.UI:CreateClockConfigPanel(frame, {
-            anchorFrame = frame,
-            anchorPoint = "TOPLEFT",
-            anchorRelPoint = "TOPLEFT",
-            offsetX = 12,
-            startY = yPos,
-            showHandicap = true,
-        })
 
         -- AI Strength slider (ELO) - moved above engine selection
         -- Uses global ELO range across all engines
@@ -1727,15 +1717,7 @@ function DeltaChess:ShowComputerGameWindow()
             if color == "random" then
                 color = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
             end
-            local handicapMinutes = (frame.handicapCheck and frame.handicapCheck:GetChecked() and frame.handicapMinutesSlider) and math.floor(frame.handicapMinutesSlider:GetValue()) or 0
-            local handicapSide = (frame.handicapSide == "white" or frame.handicapSide == "black") and frame.handicapSide or nil
-            local settings = {
-                useClock = frame.clockCheck:GetChecked(),
-                timeMinutes = math.floor(frame.timeSlider:GetValue()),
-                incrementSeconds = math.floor(frame.incSlider:GetValue()),
-                handicapMinutes = (handicapMinutes > 0) and handicapMinutes or nil,
-                handicapSide = handicapSide,
-            }
+            local settings = { useClock = false }
             frame:Hide()
             DeltaChess:StartComputerGame(color, frame.selectedDifficulty, frame.selectedEngine, settings)
         end)
@@ -1757,15 +1739,6 @@ function DeltaChess:ShowComputerGameWindow()
     frame.selectedColor = COLOR.WHITE
     frame.selectedEngine = DeltaChess.Engines:GetEffectiveDefaultId()
     frame.selectedDifficulty = 1200
-    frame.clockCheck:SetChecked(false)
-    frame.timeSlider:SetValue(10)
-    frame.incSlider:SetValue(0)
-    if frame.handicapCheck then
-        frame.handicapCheck:SetChecked(false)
-        frame.handicapSide = "white"
-        UIDropDownMenu_SetText(frame.handicapSideDropdown, "White")
-        frame.handicapMinutesSlider:SetValue(0)
-    end
     
     -- Reset slider to global range and default value
     local globalRange = DeltaChess.Engines:GetGlobalEloRange()
