@@ -1,5 +1,12 @@
 -- Communication.lua - Network communication between players
 
+local COLOR = DeltaChess.Constants.COLOR
+local STATUS = {
+    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
+    ENDED = DeltaChess.Constants.STATUS_ENDED,
+}
+
 -- Pending messages waiting for acknowledgment
 DeltaChess.pendingAck = {}
 DeltaChess.messageIdCounter = 0
@@ -16,7 +23,7 @@ function DeltaChess:LockBoard(gameId, messageId, messageType, moveData)
         messageId = messageId,
         messageType = messageType,
         moveData = moveData,
-        timestamp = time()
+        timestamp = DeltaChess.Util.TimeNow()
     }
     
     -- Update UI to show waiting state
@@ -62,7 +69,7 @@ end
 -- Generate unique message ID
 function DeltaChess:GenerateMessageId()
     self.messageIdCounter = self.messageIdCounter + 1
-    return string.format("%s_%d_%d", UnitName("player"), time(), self.messageIdCounter)
+    return string.format("%s_%d_%d", UnitName("player"), DeltaChess.Util.TimeNow(), self.messageIdCounter)
 end
 
 -- Send addon message with optional ACK requirement
@@ -98,7 +105,7 @@ function DeltaChess:GenerateGameId()
         local idx = math.random(1, #chars)
         uuid = uuid .. chars:sub(idx, idx)
     end
-    return string.format("%s_%d_%s", UnitName("player"), time(), uuid)
+    return string.format("%s_%d_%s", UnitName("player"), DeltaChess.Util.TimeNow(), uuid)
 end
 
 -- Compact challenge serialization (within 255-byte addon message limit)
@@ -107,7 +114,7 @@ local function escapeForLua(s)
 end
 
 function DeltaChess:SerializeChallenge(gs)
-    return string.format('{g="%s",c="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s"}',
+    return string.format('{g="%s",c="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s",hm=%s,hs="%s"}',
         escapeForLua(gs.gameId),
         escapeForLua(gs.challenger),
         escapeForLua(gs.opponent),
@@ -116,7 +123,9 @@ function DeltaChess:SerializeChallenge(gs)
         gs.timeMinutes or 10,
         gs.incrementSeconds or 0,
         gs.challengerTimestamp or 0,
-        escapeForLua(gs.challengerClass))
+        escapeForLua(gs.challengerClass),
+        gs.handicapMinutes and tostring(gs.handicapMinutes) or "nil",
+        (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or "")
 end
 
 function DeltaChess:DeserializeChallenge(str)
@@ -134,7 +143,9 @@ function DeltaChess:DeserializeChallenge(str)
             timeMinutes = t.tm,
             incrementSeconds = t.inc,
             challengerTimestamp = t.ct,
-            challengerClass = t.ccl
+            challengerClass = t.ccl,
+            handicapMinutes = t.hm,
+            handicapSide = (t.hs == "white" or t.hs == "black") and t.hs or nil
         }
     end)
     return ok and result, ok and result or nil
@@ -145,7 +156,7 @@ function DeltaChess:SendChallenge(gameSettings)
     -- Generate game ID upfront so both sides use the same ID
     gameSettings.gameId = self:GenerateGameId()
     -- Include challenger's timestamp for clock sync
-    gameSettings.challengerTimestamp = time()
+    gameSettings.challengerTimestamp = DeltaChess.Util.TimeNow()
     -- Include challenger's class for color display
     local _, challengerClass = UnitClass("player")
     gameSettings.challengerClass = challengerClass
@@ -252,7 +263,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         end
         
         -- Build settings text for popup
-        local colorText = data.challengerColor == "white" and "Black" or "White"
+        local colorText = data.challengerColor == COLOR.WHITE and "Black" or "White"
         local clockText = data.useClock and "Yes" or "No"
         local timeText = ""
         if data.useClock then
@@ -290,7 +301,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
                 
                 -- Determine class info based on colors
                 local whiteClass, blackClass
-                if challengeData.challengerColor == "white" then
+                if challengeData.challengerColor == COLOR.WHITE then
                     whiteClass = myClass
                     blackClass = data.acceptorClass
                 else
@@ -298,32 +309,33 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
                     blackClass = myClass
                 end
                 
-                local game = {
-                    id = data.gameId,
-                    white = challengeData.challengerColor == "white" and myName or sender,
-                    black = challengeData.challengerColor == "black" and myName or sender,
-                    whiteClass = whiteClass,
-                    blackClass = blackClass,
-                    board = DeltaChess.Board:New(),
-                    status = "active",
-                    settings = {
+                -- Create board with all metadata
+                local board = DeltaChess.CreateGameBoard(
+                    data.gameId,
+                    challengeData.challengerColor == COLOR.WHITE and myName or sender,  -- white
+                    challengeData.challengerColor == COLOR.BLACK and myName or sender,  -- black
+                    {  -- settings
                         useClock = challengeData.useClock,
                         timeMinutes = challengeData.timeMinutes,
                         incrementSeconds = challengeData.incrementSeconds
                     },
-                    startTime = time(),
-                    -- Store timestamps for clock calculation
-                    clockData = {
-                        challengerTimestamp = challengeData.challengerTimestamp,
-                        acceptorTimestamp = data.acceptorTimestamp,
-                        gameStartTimestamp = data.acceptorTimestamp, -- Game starts when accepted
-                        initialTimeSeconds = (challengeData.timeMinutes or 10) * 60,
-                        incrementSeconds = challengeData.incrementSeconds or 0
+                    {  -- extra metadata
+                        whiteClass = whiteClass,
+                        blackClass = blackClass,
+                        clockData = {
+                            challengerTimestamp = challengeData.challengerTimestamp,
+                            acceptorTimestamp = data.acceptorTimestamp,
+                            gameStartTimestamp = data.acceptorTimestamp,
+                            initialTimeSeconds = (challengeData.timeMinutes or 10) * 60,
+                            incrementSeconds = challengeData.incrementSeconds or 0,
+                            handicapMinutes = challengeData.handicapMinutes,
+                            handicapSide = challengeData.handicapSide
+                        }
                     }
-                }
+                )
                 
-                -- Save game
-                self.db.games[data.gameId] = game
+                -- Store board directly
+                DeltaChess.StoreBoard(data.gameId, board)
                 self.pendingChallenge = nil
                 
                 -- Open game board
@@ -395,32 +407,32 @@ end
 
 -- Apply move after ACK confirmation
 function DeltaChess:ApplyConfirmedMove(gameId, moveData)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
-    -- Make the move on the board (timestamp is added automatically)
-    game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
+    board:MakeMoveUci(moveData.uci, { timestamp = moveData.timestamp or DeltaChess.Util.TimeNow() })
     
     -- Update UI if board is open (with animation for the player's move)
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
         DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, true)
         
         -- Check for game end
-        if game.board.gameStatus ~= "active" then
+        if DeltaChess.GetGameStatus(board) ~= STATUS.ACTIVE then
             DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
         end
     end
     
     -- Play sound based on move type (player's own move)
-    local lastMove = game.board.moves and game.board.moves[#game.board.moves]
-    local wasCapture = lastMove and lastMove.captured ~= nil
-    DeltaChess.Sound:PlayMoveSound(game, true, wasCapture, game.board)
+    local lastMove = board:GetLastMove()
+    local wasCapture = lastMove and lastMove:IsCapture()
+    DeltaChess.Sound:PlayMoveSound(board, true, wasCapture, board)
 end
 
 -- Send move that requires confirmation before being applied locally
-function DeltaChess:SendMoveWithConfirmation(gameId, fromRow, fromCol, toRow, toCol, promotion)
-    local game = self.db.games[gameId]
-    if not game then return end
+-- uci: UCI move string (e.g., "e2e4", "e7e8q")
+function DeltaChess:SendMoveWithConfirmation(gameId, uci)
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
     -- Check if already waiting for ACK
     if self:IsBoardLocked(gameId) then
@@ -433,15 +445,9 @@ function DeltaChess:SendMoveWithConfirmation(gameId, fromRow, fromCol, toRow, to
     
     local moveData = {
         gameId = gameId,
-        fromRow = fromRow,
-        fromCol = fromCol,
-        toRow = toRow,
-        toCol = toCol,
-        timestamp = time()
+        uci = uci,
+        timestamp = DeltaChess.Util.TimeNow()
     }
-    if promotion then
-        moveData.promotion = promotion
-    end
     
     -- Generate message ID and send
     local messageId = self:GenerateMessageId()
@@ -461,19 +467,19 @@ function DeltaChess:AcceptChallenge(challengeData)
     StaticPopup_Hide("CHESS_CHALLENGE_RECEIVED")
     
     -- Use the game ID from the challenger (shared ID)
-    local gameId = challengeData.gameId or (tostring(time()) .. "_" .. math.random(1000, 9999))
+    local gameId = challengeData.gameId or (tostring(DeltaChess.Util.TimeNow()) .. "_" .. math.random(1000, 9999))
     
     -- Determine colors - swap: if challenger is white, we are black
     local myName = self:GetFullPlayerName(UnitName("player"))
-    local myColor = challengeData.challengerColor == "white" and "black" or "white"
+    local myColor = challengeData.challengerColor == COLOR.WHITE and COLOR.BLACK or COLOR.WHITE
     
     -- Acceptor's timestamp and class
-    local acceptorTimestamp = time()
+    local acceptorTimestamp = DeltaChess.Util.TimeNow()
     local _, acceptorClass = UnitClass("player")
     
     -- Determine class info based on colors
     local whiteClass, blackClass
-    if challengeData.challengerColor == "white" then
+    if challengeData.challengerColor == COLOR.WHITE then
         whiteClass = challengeData.challengerClass
         blackClass = acceptorClass
     else
@@ -481,33 +487,33 @@ function DeltaChess:AcceptChallenge(challengeData)
         blackClass = challengeData.challengerClass
     end
     
-    -- Create game with timestamp-based clock tracking
-    local game = {
-        id = gameId,
-        white = challengeData.challengerColor == "white" and challengeData.challenger or myName,
-        black = challengeData.challengerColor == "black" and challengeData.challenger or myName,
-        whiteClass = whiteClass,
-        blackClass = blackClass,
-        board = DeltaChess.Board:New(),
-        status = "active",
-        settings = {
+    -- Create board with all metadata
+    local board = DeltaChess.CreateGameBoard(
+        gameId,
+        challengeData.challengerColor == COLOR.WHITE and challengeData.challenger or myName,  -- white
+        challengeData.challengerColor == COLOR.BLACK and challengeData.challenger or myName,  -- black
+        {  -- settings
             useClock = challengeData.useClock,
             timeMinutes = challengeData.timeMinutes,
             incrementSeconds = challengeData.incrementSeconds
         },
-        startTime = time(),
-        -- Store timestamps for clock calculation
-        clockData = {
-            challengerTimestamp = challengeData.challengerTimestamp,
-            acceptorTimestamp = acceptorTimestamp,
-            gameStartTimestamp = acceptorTimestamp, -- Game starts when accepted
-            initialTimeSeconds = (challengeData.timeMinutes or 10) * 60,
-            incrementSeconds = challengeData.incrementSeconds or 0
+        {  -- extra metadata
+            whiteClass = whiteClass,
+            blackClass = blackClass,
+            clockData = {
+                challengerTimestamp = challengeData.challengerTimestamp,
+                acceptorTimestamp = acceptorTimestamp,
+                gameStartTimestamp = acceptorTimestamp,
+                initialTimeSeconds = (challengeData.timeMinutes or 10) * 60,
+                incrementSeconds = challengeData.incrementSeconds or 0,
+                handicapMinutes = challengeData.handicapMinutes,
+                handicapSide = challengeData.handicapSide
+            }
         }
-    }
+    )
     
-    -- Save game
-    self.db.games[gameId] = game
+    -- Store board directly
+    DeltaChess.StoreBoard(gameId, board)
     
     -- Play sound for accepting challenge
     DeltaChess.Sound:PlayChallengeAccepted()
@@ -549,12 +555,13 @@ function DeltaChess:StartGame(gameId)
 end
 
 -- Send move to opponent
-function DeltaChess:SendMove(gameId, fromRow, fromCol, toRow, toCol)
-    local game = self.db.games[gameId]
-    if not game then return end
+-- uci: UCI move string (e.g., "e2e4", "e7e8q")
+function DeltaChess:SendMove(gameId, uci)
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
     -- Don't send moves in computer games
-    if game.isVsComputer then return end
+    if board:OneOpponentIsEngine() then return end
     
     -- Check if already waiting for ACK
     if self:IsBoardLocked(gameId) then
@@ -567,11 +574,8 @@ function DeltaChess:SendMove(gameId, fromRow, fromCol, toRow, toCol)
     
     local moveData = {
         gameId = gameId,
-        fromRow = fromRow,
-        fromCol = fromCol,
-        toRow = toRow,
-        toCol = toCol,
-        timestamp = time()
+        uci = uci,
+        timestamp = DeltaChess.Util.TimeNow()
     }
     
     -- Send with ACK requirement
@@ -582,21 +586,20 @@ end
 
 -- Handle opponent's move
 function DeltaChess:HandleOpponentMove(moveData, sender)
-    local game = self.db.games[moveData.gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(moveData.gameId)
+    if not board then return end
     
     -- Send acknowledgment first
     if moveData.messageId and sender then
         self:SendAck(moveData.messageId, sender)
     end
     
-    -- Make the move on our board (timestamp is added automatically)
-    game.board:MakeMove(moveData.fromRow, moveData.fromCol, moveData.toRow, moveData.toCol, moveData.promotion)
+    board:MakeMoveUci(moveData.uci, { timestamp = moveData.timestamp or DeltaChess.Util.TimeNow() })
     
     -- Play sound for opponent's move
-    local lastMove = game.board.moves and game.board.moves[#game.board.moves]
-    local wasCapture = lastMove and lastMove.captured ~= nil
-    DeltaChess.Sound:PlayMoveSound(game, false, wasCapture, game.board)
+    local lastMove = board:GetLastMove()
+    local wasCapture = lastMove and lastMove:IsCapture()
+    DeltaChess.Sound:PlayMoveSound(board, false, wasCapture, board)
     
     local opponentName = sender:match("^([^%-]+)") or sender
     DeltaChess:NotifyItIsYourTurn(moveData.gameId, opponentName)
@@ -605,63 +608,56 @@ end
 -- Restore game from history to active games
 function DeltaChess:RestoreGameFromHistory(gameId)
     -- Check if game is already active
-    if self.db.games[gameId] then
-        return self.db.games[gameId]
+    if DeltaChess.GetBoard(gameId) then
+        return DeltaChess.GetBoard(gameId)
     end
     
     -- Try to restore from UI frame if available
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
         local frame = DeltaChess.UI.activeFrame
-        local playerColor = frame.playerColor or "white"
-        local computerColor = (playerColor == "white") and "black" or "white"
-        local game = {
-            id = gameId,
-            board = frame.board,
-            status = "active",
-            isVsComputer = frame.isVsComputer,
-            playerColor = playerColor,
-            computerColor = computerColor,
-            white = frame.white,
-            black = frame.black,
-            settings = frame.settings,
-            computerDifficulty = frame.computerDifficulty,
-            computerEngine = frame.computerEngine,
-            startTime = frame.startTime
-        }
+        local board = frame.board
+        
+        -- Ensure board has required metadata
+        if not board:GetGameStatus() then
+            board:StartGame()
+        end
+        if not board:GetGameMeta("id") then
+            board:SetGameMeta("id", gameId)
+        end
         
         -- Restore to active games
-        self.db.games[gameId] = game
+        DeltaChess.StoreBoard(gameId, board)
         
         -- Remove from history
         for i = #self.db.history, 1, -1 do
-            if self.db.history[i].id == gameId then
+            if self:GetHistoryEntryId(self.db.history[i]) == gameId then
                 table.remove(self.db.history, i)
                 break
             end
         end
         
-        return game
+        return board
     end
     
     return nil
 end
 
--- Take back move(s) vs computer: 1 move if player moved last, 2 if computer moved last
+-- Take back move(s) vs computer: 1 move if player moved last, 2 if computer moved last.
+-- Uses the same snapshot strategy as replay (GetBoardAtIndex).
 function DeltaChess:TakeBackMove(gameId)
-    local game = self.db.games[gameId]
+    local board = DeltaChess.GetBoard(gameId)
     
     -- If game was ended and saved to history, restore it
-    if not game then
-        game = self:RestoreGameFromHistory(gameId)
+    if not board then
+        board = self:RestoreGameFromHistory(gameId)
     end
     
-    if not game or not game.isVsComputer then 
+    if not board or not board:OneOpponentIsEngine() then 
         self:Print("Cannot take back: not a computer game.")
         return 
     end
     
-    local board = game.board
-    local moves = board.moves
+    local moves = board:GetMoveHistory()
     
     if #moves == 0 then
         self:Print("Not enough moves to take back.")
@@ -670,9 +666,9 @@ function DeltaChess:TakeBackMove(gameId)
     
     -- Determine who made the last move based on move count and player color
     -- White moves on odd move numbers (1, 3, 5...), Black on even (2, 4, 6...)
-    local C = DeltaChess.Constants.COLOR
     local lastMoveByWhite = (#moves % 2) == 1
-    local playerIsWhite = (game.playerColor == C.WHITE)
+    local playerColor = board:GetPlayerColor()
+    local playerIsWhite = (playerColor == COLOR.WHITE)
     local playerMovedLast = (lastMoveByWhite == playerIsWhite)
     
     -- If player made the last move (e.g., stalemated computer): take back 1 move
@@ -680,34 +676,25 @@ function DeltaChess:TakeBackMove(gameId)
     -- This way the player can always try a different move
     local movesToRemove = playerMovedLast and 1 or 2
     movesToRemove = math.min(movesToRemove, #moves)
+    local targetIndex = #moves - movesToRemove  -- 1-based: number of moves to keep
     
-    for _ = 1, movesToRemove do
-        table.remove(moves)
+    -- Get board snapshot at that index (same strategy as replay)
+    local newBoard = board:GetBoardAtIndex(targetIndex)
+    if not newBoard then
+        self:Print("Cannot take back: failed to get board snapshot.")
+        return
     end
     
-    -- Rebuild board from scratch
-    local newBoard = DeltaChess.Board:New()
-    for _, move in ipairs(moves) do
-        newBoard:MakeMove(move.from.row, move.from.col, move.to.row, move.to.col, move.promotion)
-    end
-    
-    -- Replace the board
-    game.board = newBoard
-    game.board.moves = moves  -- Preserve move history with timestamps
-    
-    -- Ensure game is active after takeback
-    game.board.gameStatus = "active"
-    game.status = "active"
-    
-    -- After takeback, ensure it's the player's turn so they can make a different move.
-    -- The replay should already set currentTurn correctly, but we override to be safe.
-    game.board.currentTurn = game.playerColor
+    -- Snapshot is paused (from GetBoardAtIndex); unpause, don't start
+    newBoard:StartGame()
+
+    -- Replace the board in storage
+    DeltaChess.StoreBoard(gameId, newBoard)
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
         local frame = DeltaChess.UI.activeFrame
-        frame.board = game.board
-        frame.game = game  -- Update game reference
+        frame.board = newBoard
         frame.gameEndShown = false  -- Allow game end to show again if needed
         frame.selectedSquare = nil   -- Deselect picked piece
         frame.validMoves = {}
@@ -719,17 +706,14 @@ end
 
 -- Resign game
 function DeltaChess:ResignGame(gameId)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
-    -- Update game status
-    game.status = "ended"
-    game.board.gameStatus = "resignation"
-    game.resignedPlayer = self:GetFullPlayerName(UnitName("player"))
-    game.endTime = time()
-    
+    local playerColor = board:GetPlayerColor() or COLOR.WHITE
+    board:Resign(playerColor)
+
     -- Send resignation to opponent (skip for computer games)
-    if not game.isVsComputer then
+    if not board:OneOpponentIsEngine() then
         local opponent = self:GetOpponent(gameId)
         if opponent then
             local data = {gameId = gameId}
@@ -737,29 +721,28 @@ function DeltaChess:ResignGame(gameId)
         end
     end
     
-    -- Save to history
-    self:SaveGameToHistory(game, "resigned")
-    
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
         DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
     end
-    
+
+    -- Save to history
+    self:SaveGameToHistory(board, "resigned")
+
     self:Print("You resigned.")
 end
 
 -- Handle opponent resignation
 function DeltaChess:HandleResignation(gameId, opponent)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
-    game.status = "ended"
-    game.board.gameStatus = "resignation"
-    game.resignedPlayer = opponent
-    game.endTime = time()
+    local myColor = board:GetPlayerColor() or COLOR.WHITE
+    local resigningColor = (myColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
+    board:Resign(resigningColor)
     
     -- Save to history
-    self:SaveGameToHistory(game, "won")
+    self:SaveGameToHistory(board, "won")
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -771,8 +754,8 @@ end
 
 -- Offer draw
 function DeltaChess:OfferDraw(gameId)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
@@ -788,17 +771,15 @@ end
 
 -- Accept draw
 function DeltaChess:AcceptDraw(gameId)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     
     -- Update game status
-    game.status = "ended"
-    game.board.gameStatus = "draw"
-    game.endTime = time()
-    
+    board:EndGame()
+
     -- Send acceptance
     local data = {
         gameId = gameId,
@@ -808,7 +789,7 @@ function DeltaChess:AcceptDraw(gameId)
     self:SendCommMessage("ChessDraw", self:Serialize(data), "WHISPER", opponent)
     
     -- Save to history
-    self:SaveGameToHistory(game, "draw")
+    self:SaveGameToHistory(board, "draw")
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -820,8 +801,8 @@ end
 
 -- Decline draw
 function DeltaChess:DeclineDraw(gameId)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
@@ -836,15 +817,13 @@ end
 
 -- Handle draw accepted
 function DeltaChess:HandleDrawAccepted(gameId)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
-    game.status = "ended"
-    game.board.gameStatus = "draw"
-    game.endTime = time()
-    
+    board:EndGame()
+
     -- Save to history
-    self:SaveGameToHistory(game, "draw")
+    self:SaveGameToHistory(board, "draw")
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -856,20 +835,21 @@ end
 
 -- Handle timeout
 function DeltaChess:TimeOut(gameId, color)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     
-    game.status = "ended"
-    game.board.gameStatus = "timeout"
-    game.timeoutPlayer = color == "white" and game.white or game.black
-    game.endTime = time()
+    local white = board:GetWhitePlayerName()
+    local black = board:GetBlackPlayerName()
     
+    board:SetGameMeta("timeoutPlayer", color == COLOR.WHITE and white or black)
+    board:EndGame()
+
     -- Determine result for this player
     local myColor = self:GetMyColor(gameId)
     local result = myColor == color and "lost" or "won"
     
     -- Save to history
-    self:SaveGameToHistory(game, result)
+    self:SaveGameToHistory(board, result)
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -879,8 +859,8 @@ end
 
 -- Request pause (human vs human)
 function DeltaChess:RequestPause(gameId)
-    local game = self.db.games[gameId]
-    if not game or game.isVsComputer or game.status ~= "active" then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.ACTIVE then return end
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     self:SendCommMessage("ChessPause", self:Serialize({ gameId = gameId, accepted = nil }), "WHISPER", opponent)
@@ -889,8 +869,8 @@ end
 
 -- Send pause response (accept/decline)
 function DeltaChess:SendPauseResponse(gameId, accepted)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     self:SendCommMessage("ChessPause", self:Serialize({ gameId = gameId, accepted = accepted }), "WHISPER", opponent)
@@ -899,15 +879,15 @@ end
 -- Handle pause request/response
 function DeltaChess:HandlePauseRequest(data)
     local gameId, sender = data.gameId, data.sender
-    local game = self.db.games[gameId]
-    if not game or game.isVsComputer or game.status ~= "active" then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.ACTIVE then return end
     if data.accepted == nil then
         StaticPopup_Show("CHESS_PAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
     else
         if data.accepted then
-            game.status = "paused"
-            game.pauseStartTime = time()
-            game._lastMoveCountWhenPaused = #game.board.moves
+            board:PauseGame()
+            board:SetGameMeta("pauseStartTime", DeltaChess.Util.TimeNow())
+            board:SetGameMeta("_lastMoveCountWhenPaused", board:GetHalfMoveCount())
             self:Print("Opponent accepted. Game paused.")
         else
             self:Print("Opponent declined the pause request.")
@@ -920,8 +900,8 @@ end
 
 -- Request unpause (human vs human)
 function DeltaChess:RequestUnpause(gameId)
-    local game = self.db.games[gameId]
-    if not game or game.isVsComputer or game.status ~= "paused" then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.PAUSED then return end
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     self:SendCommMessage("ChessUnpause", self:Serialize({ gameId = gameId, accepted = nil }), "WHISPER", opponent)
@@ -930,8 +910,8 @@ end
 
 -- Send unpause response (caller should add timeSpentClosed before calling if accepting)
 function DeltaChess:SendUnpauseResponse(gameId, accepted, timeSpentClosedIncrement)
-    local game = self.db.games[gameId]
-    if not game then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     local payload = { gameId = gameId, accepted = accepted }
@@ -944,19 +924,24 @@ end
 -- Handle unpause request/response
 function DeltaChess:HandleUnpauseRequest(data)
     local gameId, sender = data.gameId, data.sender
-    local game = self.db.games[gameId]
-    if not game or game.isVsComputer or game.status ~= "paused" then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.PAUSED then return end
     if data.accepted == nil then
         StaticPopup_Show("CHESS_UNPAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
     else
         if data.accepted then
+            local timeSpentClosed = board:GetGameMeta("timeSpentClosed") or 0
             if data.timeSpentClosedIncrement then
-                game.timeSpentClosed = (game.timeSpentClosed or 0) + data.timeSpentClosedIncrement
-            elseif game.pauseStartTime then
-                game.timeSpentClosed = (game.timeSpentClosed or 0) + (time() - game.pauseStartTime)
+                timeSpentClosed = timeSpentClosed + data.timeSpentClosedIncrement
+            else
+                local pauseStartTime = board:GetGameMeta("pauseStartTime")
+                if pauseStartTime then
+                    timeSpentClosed = timeSpentClosed + (DeltaChess.Util.TimeNow() - pauseStartTime)
+                end
             end
-            game.status = "active"
-            game.pauseStartTime = nil
+            board:SetGameMeta("timeSpentClosed", timeSpentClosed)
+            board:ContinueGame()
+            board:SetGameMeta("pauseStartTime", nil)
             self:Print("Opponent accepted. Game resumed.")
         else
             self:Print("Opponent declined the unpause request.")
@@ -969,15 +954,17 @@ end
 
 -- Get opponent name
 function DeltaChess:GetOpponent(gameId)
-    local game = self.db.games[gameId]
-    if not game then return nil end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return nil end
     
     local myName = self:GetFullPlayerName(UnitName("player"))
+    local white = board:GetWhitePlayerName()
+    local black = board:GetBlackPlayerName()
     
-    if game.white == myName then
-        return game.black
-    elseif game.black == myName then
-        return game.white
+    if white == myName then
+        return black
+    elseif black == myName then
+        return white
     end
     
     return nil
@@ -985,15 +972,17 @@ end
 
 -- Get player's color in game
 function DeltaChess:GetMyColor(gameId)
-    local game = self.db.games[gameId]
-    if not game then return nil end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return nil end
     
     local myName = self:GetFullPlayerName(UnitName("player"))
+    local white = board:GetWhitePlayerName()
+    local black = board:GetBlackPlayerName()
     
-    if game.white == myName then
-        return "white"
-    elseif game.black == myName then
-        return "black"
+    if white == myName then
+        return COLOR.WHITE
+    elseif black == myName then
+        return COLOR.BLACK
     end
     
     return nil
