@@ -3,7 +3,7 @@
 ## IconTexture: Interface\AddOns\DeltaChess\Textures\logo_small
 ## Notes: Play chess with other players or against the computer
 ## Author: Deltachaos
-## Version: 1.0.0
+## Version: main
 ## SavedVariables: ChessDB
 ## X-Website: https://github.com/Deltachaos/deltachess
 ## X-Curse-Project-ID: 1450103
