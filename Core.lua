@@ -44,7 +44,7 @@ local function Initialize()
     end
     
     DeltaChess.db = ChessDB
-    
+
     -- Register slash commands (slash names unchanged)
     SLASH_CHESS1 = "/chess"
     SlashCmdList["CHESS"] = function(msg)
@@ -493,7 +493,7 @@ function DeltaChess:RefreshMainMenuContent()
     end
     
     -- Add history boards (deserialized; already have _endTime from serialization)
-    for _, entry in ipairs(self.db.history) do
+    for _, entry in pairs(self.db.history) do
         local board = self:DeserializeHistoryEntry(entry)
         if board then
             table.insert(allBoards, board)
@@ -992,7 +992,7 @@ function DeltaChess:GetRecentOpponents()
         addOpponent(board:GetBlackPlayerName(), ts)
     end
     -- History games (deserialize to board)
-    for _, entry in ipairs(self.db.history) do
+    for _, entry in pairs(self.db.history) do
         local board = self:DeserializeHistoryEntry(entry)
         if board then
             local ts = board:GetStartTime() or 0
@@ -1919,22 +1919,29 @@ end
 -- Show game history
 function DeltaChess:ShowGameHistory()
     self:Print("Game History:")
-    if #self.db.history == 0 then
+    local list = {}
+    for _, entry in pairs(self.db.history) do
+        table.insert(list, entry)
+    end
+    if #list == 0 then
         self:Print("  No game history")
     else
-        local count = math.min(10, #self.db.history)
-        for i = #self.db.history, #self.db.history - count + 1, -1 do
-            local board = self:DeserializeHistoryEntry(self.db.history[i])
+        table.sort(list, function(a, b)
+            return (a.endTime or a.startTime or 0) > (b.endTime or b.startTime or 0)
+        end)
+        local count = math.min(10, #list)
+        for i = 1, count do
+            local board = self:DeserializeHistoryEntry(list[i])
             if board then
-                self:Print(string.format("  %s vs %s - %s (%s)", 
-                    board:GetWhitePlayerName() or "?", 
-                    board:GetBlackPlayerName() or "?", 
-                    board:GetGameResult() or "Unknown", 
+                self:Print(string.format("  %s vs %s - %s (%s)",
+                    board:GetWhitePlayerName() or "?",
+                    board:GetBlackPlayerName() or "?",
+                    board:GetGameResult() or "Unknown",
                     board:GetStartDateString() or "Unknown"))
             end
         end
-        if #self.db.history > 10 then
-            self:Print(string.format("  ... and %d more games", #self.db.history - 10))
+        if #list > 10 then
+            self:Print(string.format("  ... and %d more games", #list - 10))
         end
     end
 end

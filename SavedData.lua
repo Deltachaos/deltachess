@@ -11,24 +11,23 @@ local STATUS = {
 function DeltaChess:SaveGameToHistory(board, result)
     -- Serialize the board state (contains ALL game data; result is derived in GetGameResult())
     local serializedBoard = board:Serialize()
+    local gameId = board:GetGameMeta("id")
+    if not gameId then
+        self:Print("Cannot save to history: game has no id.")
+        return
+    end
 
-    -- History entry IS the serialized board data
-    table.insert(self.db.history, serializedBoard)
-    
+    self.db.history[gameId] = serializedBoard
+
     -- Remove from active games
-    DeltaChess.RemoveBoard(board:GetGameMeta("id"))
-    
+    DeltaChess.RemoveBoard(gameId)
+
     self:Print("Game saved to history.")
 end
 
 -- Load game entry from history (raw serialized data)
 function DeltaChess:LoadGameFromHistory(historyId)
-    for _, entry in ipairs(self.db.history) do
-        if entry.id == historyId then
-            return entry
-        end
-    end
-    return nil
+    return self.db.history[historyId]
 end
 
 -- Reconstruct a Board object from a history entry
@@ -101,19 +100,12 @@ function DeltaChess:ClearHistory()
     self:Print("Game history cleared.")
 end
 
--- Helper: Get game ID from history entry
-function DeltaChess:GetHistoryEntryId(entry)
-    return entry.id
-end
-
 -- Delete a specific game from history
 function DeltaChess:DeleteFromHistory(gameId)
-    for i, entry in ipairs(self.db.history) do
-        if self:GetHistoryEntryId(entry) == gameId then
-            table.remove(self.db.history, i)
-            self:Print("Game removed from history.")
-            return true
-        end
+    if self.db.history[gameId] then
+        self.db.history[gameId] = nil
+        self:Print("Game removed from history.")
+        return true
     end
     return false
 end
@@ -121,12 +113,10 @@ end
 -- Get game count
 function DeltaChess:GetGameCount()
     local active = 0
-    local total = #self.db.history
-    
-    for _ in pairs(self.db.games) do
-        active = active + 1
-    end
-    
+    local total = 0
+    for _ in pairs(self.db.games) do active = active + 1 end
+    for _ in pairs(self.db.history) do total = total + 1 end
+
     return {
         active = active,
         history = total,

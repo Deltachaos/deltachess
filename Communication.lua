@@ -629,12 +629,7 @@ function DeltaChess:RestoreGameFromHistory(gameId)
         DeltaChess.StoreBoard(gameId, board)
         
         -- Remove from history
-        for i = #self.db.history, 1, -1 do
-            if self:GetHistoryEntryId(self.db.history[i]) == gameId then
-                table.remove(self.db.history, i)
-                break
-            end
-        end
+        self.db.history[gameId] = nil
         
         return board
     end
