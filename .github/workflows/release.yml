@@ -3,9 +3,12 @@ name: Create Release
 on:
   push:
     branches:
-      - '*'
+      - '**'
     tags:
       - '*'
+  pull_request:
+    branches:
+      - '**'
   workflow_dispatch:
 
 jobs:
