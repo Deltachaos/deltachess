@@ -759,8 +759,8 @@ end
 
 -- Create clock configuration panel (use clock checkbox, time slider, increment, optional handicap).
 -- config: { parent, anchorFrame (optional), anchorPoint, anchorRelPoint, offsetX, startY, showHandicap }
--- Sets on parent: clockCheck, timeSlider, timeValue, incSlider, incValue, and if showHandicap: handicapCheck, handicapSide, handicapMinutesSlider, handicapMinutesValue.
--- handicapSide is "white" or "black" (the side that gets less time).
+-- Sets on parent: clockCheck, timeSlider, timeValue, incSlider, incValue, and if showHandicap: handicapCheck, handicapSide, handicapSecondsSlider, handicapSecondsValue.
+-- handicapSide is "challenger" or "opponent" (the side that gets less time).
 -- Returns: endY (for placing content below).
 function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     local anchorFrame = config.anchorFrame or parent
@@ -808,7 +808,17 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     timeSlider.Low:SetText("1")
     timeSlider.High:SetText("60")
     timeSlider:SetScript("OnValueChanged", function(self, value)
-        timeValue:SetText(tostring(math.floor(value)))
+        local minutes = math.floor(value)
+        timeValue:SetText(tostring(minutes))
+        -- Dynamically update handicap seconds slider max to match clock time
+        if parent.handicapSecondsSlider then
+            local maxSec = minutes * 60
+            parent.handicapSecondsSlider:SetMinMaxValues(0, maxSec)
+            parent.handicapSecondsSlider.High:SetText(tostring(maxSec))
+            if parent.handicapSecondsSlider:GetValue() > maxSec then
+                parent.handicapSecondsSlider:SetValue(maxSec)
+            end
+        end
     end)
     parent.timeSlider = timeSlider
     table.insert(clockElements, timeSlider)
@@ -859,17 +869,17 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
 
         local handicapSideLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         handicapSideLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(-10))
-        handicapSideLabel:SetText("Side with less time:")
+        handicapSideLabel:SetText("Player with less time:")
         table.insert(handicapElements, handicapSideLabel)
         addY(-25)
 
-        parent.handicapSide = "white"
+        parent.handicapSide = "challenger"
         local handicapDropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
         handicapDropdown:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX - 15, addY(5))
         UIDropDownMenu_SetWidth(handicapDropdown, 300)
         UIDropDownMenu_Initialize(handicapDropdown, function(self, level)
             local info = UIDropDownMenu_CreateInfo()
-            for _, side in ipairs({ "white", "black" }) do
+            for _, side in ipairs({ "challenger", "opponent" }) do
                 info.text = side:sub(1, 1):upper() .. side:sub(2)
                 info.value = side
                 info.checked = (parent.handicapSide == side)
@@ -880,36 +890,37 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
                 UIDropDownMenu_AddButton(info)
             end
         end)
-        UIDropDownMenu_SetText(handicapDropdown, "White")
+        UIDropDownMenu_SetText(handicapDropdown, "Challenger")
         parent.handicapSideDropdown = handicapDropdown
         table.insert(handicapElements, handicapDropdown)
         addY(-30)
 
-        local handicapMinLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        handicapMinLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(-10))
-        handicapMinLabel:SetText("Minutes less:")
-        local handicapMinutesValue = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        handicapMinutesValue:SetPoint("LEFT", handicapMinLabel, "RIGHT", 10, 0)
-        handicapMinutesValue:SetText("0")
-        parent.handicapMinutesValue = handicapMinutesValue
-        table.insert(handicapElements, handicapMinLabel)
-        table.insert(handicapElements, handicapMinutesValue)
+        local handicapSecLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        handicapSecLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(-10))
+        handicapSecLabel:SetText("Seconds less:")
+        local handicapSecondsValue = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        handicapSecondsValue:SetPoint("LEFT", handicapSecLabel, "RIGHT", 10, 0)
+        handicapSecondsValue:SetText("0")
+        parent.handicapSecondsValue = handicapSecondsValue
+        table.insert(handicapElements, handicapSecLabel)
+        table.insert(handicapElements, handicapSecondsValue)
         addY(-25)
 
-        local handicapMinutesSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-        handicapMinutesSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
-        handicapMinutesSlider:SetSize(305, 17)
-        handicapMinutesSlider:SetMinMaxValues(0, 30)
-        handicapMinutesSlider:SetValue(0)
-        handicapMinutesSlider:SetValueStep(1)
-        handicapMinutesSlider:SetObeyStepOnDrag(true)
-        handicapMinutesSlider.Low:SetText("0")
-        handicapMinutesSlider.High:SetText("30")
-        handicapMinutesSlider:SetScript("OnValueChanged", function(self, value)
-            handicapMinutesValue:SetText(tostring(math.floor(value)))
+        local initialMaxSec = math.floor(timeSlider:GetValue()) * 60
+        local handicapSecondsSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
+        handicapSecondsSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
+        handicapSecondsSlider:SetSize(305, 17)
+        handicapSecondsSlider:SetMinMaxValues(0, initialMaxSec)
+        handicapSecondsSlider:SetValue(0)
+        handicapSecondsSlider:SetValueStep(1)
+        handicapSecondsSlider:SetObeyStepOnDrag(true)
+        handicapSecondsSlider.Low:SetText("0")
+        handicapSecondsSlider.High:SetText(tostring(initialMaxSec))
+        handicapSecondsSlider:SetScript("OnValueChanged", function(self, value)
+            handicapSecondsValue:SetText(tostring(math.floor(value)))
         end)
-        parent.handicapMinutesSlider = handicapMinutesSlider
-        table.insert(handicapElements, handicapMinutesSlider)
+        parent.handicapSecondsSlider = handicapSecondsSlider
+        table.insert(handicapElements, handicapSecondsSlider)
         addY(-45)
     end
 

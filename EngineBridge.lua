@@ -367,7 +367,7 @@ function DeltaChess.CreateGameBoard(gameId, white, black, settings, extraMeta)
     if settings and settings.useClock and clockData then
         local baseSec = clockData.initialTimeSeconds or (10 * 60)
         local inc = clockData.incrementSeconds or 0
-        local handicapSec = (clockData.handicapMinutes and clockData.handicapMinutes > 0) and (clockData.handicapMinutes * 60) or 0
+        local handicapSec = (clockData.handicapSeconds and clockData.handicapSeconds > 0) and clockData.handicapSeconds or 0
         local sideWithLess = clockData.handicapSide
         local whiteSec = baseSec
         local blackSec = baseSec

@@ -156,7 +156,7 @@ function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, setting
     local useClock = settings.useClock and true or false
     local timeMinutes = settings.timeMinutes or 10
     local incrementSeconds = settings.incrementSeconds or 0
-    local handicapMinutes = (settings.handicapMinutes and settings.handicapMinutes > 0) and settings.handicapMinutes or nil
+    local handicapSeconds = (settings.handicapSeconds and settings.handicapSeconds > 0) and settings.handicapSeconds or nil
     local handicapSide = (settings.handicapSide == "white" or settings.handicapSide == "black") and settings.handicapSide or nil
 
     local clockData = nil
@@ -165,7 +165,7 @@ function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, setting
             gameStartTimestamp = DeltaChess.Util.TimeNow(),
             initialTimeSeconds = timeMinutes * 60,
             incrementSeconds = incrementSeconds,
-            handicapMinutes = handicapMinutes,
+            handicapSeconds = handicapSeconds,
             handicapSide = handicapSide,
         }
     end

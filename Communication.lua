@@ -114,7 +114,7 @@ local function escapeForLua(s)
 end
 
 function DeltaChess:SerializeChallenge(gs)
-    return string.format('{g="%s",c="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s",hm=%s,hs="%s"}',
+    return string.format('{g="%s",c="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s",hsec=%s,hs="%s"}',
         escapeForLua(gs.gameId),
         escapeForLua(gs.challenger),
         escapeForLua(gs.opponent),
@@ -124,7 +124,7 @@ function DeltaChess:SerializeChallenge(gs)
         gs.incrementSeconds or 0,
         gs.challengerTimestamp or 0,
         escapeForLua(gs.challengerClass),
-        gs.handicapMinutes and tostring(gs.handicapMinutes) or "nil",
+        gs.handicapSeconds and tostring(gs.handicapSeconds) or "nil",
         (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or "")
 end
 
@@ -144,7 +144,7 @@ function DeltaChess:DeserializeChallenge(str)
             incrementSeconds = t.inc,
             challengerTimestamp = t.ct,
             challengerClass = t.ccl,
-            handicapMinutes = t.hm,
+            handicapSeconds = t.hsec,
             handicapSide = (t.hs == "white" or t.hs == "black") and t.hs or nil
         }
     end)
@@ -328,7 +328,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
                             gameStartTimestamp = data.acceptorTimestamp,
                             initialTimeSeconds = (challengeData.timeMinutes or 10) * 60,
                             incrementSeconds = challengeData.incrementSeconds or 0,
-                            handicapMinutes = challengeData.handicapMinutes,
+                            handicapSeconds = challengeData.handicapSeconds,
                             handicapSide = challengeData.handicapSide
                         }
                     }
@@ -506,7 +506,7 @@ function DeltaChess:AcceptChallenge(challengeData)
                 gameStartTimestamp = acceptorTimestamp,
                 initialTimeSeconds = (challengeData.timeMinutes or 10) * 60,
                 incrementSeconds = challengeData.incrementSeconds or 0,
-                handicapMinutes = challengeData.handicapMinutes,
+                handicapSeconds = challengeData.handicapSeconds,
                 handicapSide = challengeData.handicapSide
             }
         }

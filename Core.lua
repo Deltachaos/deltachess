@@ -1488,8 +1488,14 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                     finalColor = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
                 end
                 
-                local handicapMinutes = (frame.handicapCheck and frame.handicapCheck:GetChecked() and frame.handicapMinutesSlider) and math.floor(frame.handicapMinutesSlider:GetValue()) or 0
-                local handicapSide = (frame.handicapSide == "white" or frame.handicapSide == "black") and frame.handicapSide or nil
+                local handicapSeconds = (frame.handicapCheck and frame.handicapCheck:GetChecked() and frame.handicapSecondsSlider) and math.floor(frame.handicapSecondsSlider:GetValue()) or 0
+                -- Resolve "challenger"/"opponent" to "white"/"black" based on the challenger's color
+                local handicapSide = nil
+                if frame.handicapSide == "challenger" then
+                    handicapSide = finalColor  -- challenger's color gets less time
+                elseif frame.handicapSide == "opponent" then
+                    handicapSide = (finalColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
+                end
                 local gameSettings = {
                     challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
                     opponent = playerName,
@@ -1497,7 +1503,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                     useClock = frame.clockCheck:GetChecked(),
                     timeMinutes = math.floor(frame.timeSlider:GetValue()),
                     incrementSeconds = math.floor(frame.incSlider:GetValue()),
-                    handicapMinutes = (handicapMinutes > 0) and handicapMinutes or nil,
+                    handicapSeconds = (handicapSeconds > 0) and handicapSeconds or nil,
                     handicapSide = handicapSide,
                 }
                 
@@ -1533,9 +1539,9 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     self.frames.challengeWindow.incSlider:SetValue(0)
     if self.frames.challengeWindow.handicapCheck then
         self.frames.challengeWindow.handicapCheck:SetChecked(false)
-        self.frames.challengeWindow.handicapSide = "white"
-        UIDropDownMenu_SetText(self.frames.challengeWindow.handicapSideDropdown, "White")
-        self.frames.challengeWindow.handicapMinutesSlider:SetValue(0)
+        self.frames.challengeWindow.handicapSide = "challenger"
+        UIDropDownMenu_SetText(self.frames.challengeWindow.handicapSideDropdown, "Challenger")
+        self.frames.challengeWindow.handicapSecondsSlider:SetValue(0)
     end
     -- Update visibility and frame height to match reset checkbox states
     if self.frames.challengeWindow.UpdateClockLayout then
