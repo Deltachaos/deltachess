@@ -42,7 +42,6 @@ jobs:
       - name: Clean unused files
         run: |
           ls -la .
-          ls -la .release
 
       - name: Create Package (untagged)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
