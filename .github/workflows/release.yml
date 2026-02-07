@@ -1,4 +1,4 @@
-name: Create Release
+name: CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  package:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -47,6 +47,13 @@ jobs:
       - name: Create Package (untagged)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: BigWigsMods/packager@master
+
+      - name: Upload package artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeltaChess-${{ steps.version.outputs.VERSION }}.zip
+          path: DeltaChess-*.zip
 
       - name: Create Package (release)
         if: startsWith(github.ref, 'refs/tags/')
