@@ -39,14 +39,14 @@ jobs:
           # Update the Version line in DeltaChess.toc (use | delimiter so / in refs/heads/... doesn't break sed)
           sed -i "s|^## Version:.*|## Version: $VERSION|" DeltaChess.toc
 
-      - name: Clean unused files
-        run: |
-          ls -la .
-          ls -la Framework/
-
       - name: Create Package (untagged)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: BigWigsMods/packager@master
+
+      - name: Clean unused files
+        run: |
+          ls -la .
+          ls -la .release
 
       - name: Upload package artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
