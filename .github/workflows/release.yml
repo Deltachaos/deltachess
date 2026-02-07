@@ -53,7 +53,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DeltaChess-${{ steps.version.outputs.VERSION }}.zip
-          path: DeltaChess-*.zip
+          path: .release/DeltaChess-*.zip
 
       - name: Create Package (release)
         if: startsWith(github.ref, 'refs/tags/')
