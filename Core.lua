@@ -1155,6 +1155,29 @@ function DeltaChess:GetGuildOnlineFullNames()
     return out
 end
 
+-- Get list of party/raid member full names (excludes self)
+function DeltaChess:GetPartyFullNames()
+    local out = {}
+    local myName = self:GetFullPlayerName(UnitName("player"))
+    local numGroup = GetNumGroupMembers()
+    if numGroup <= 0 then return out end
+    local prefix = IsInRaid() and "raid" or "party"
+    local count = IsInRaid() and numGroup or (numGroup - 1) -- party units don't include "player"
+    for i = 1, count do
+        local unit = prefix .. i
+        if UnitExists(unit) and UnitIsPlayer(unit) and UnitIsConnected(unit) then
+            local name = UnitName(unit)
+            if name then
+                local fullName = self:GetFullPlayerName(name)
+                if fullName ~= myName then
+                    table.insert(out, fullName)
+                end
+            end
+        end
+    end
+    return out
+end
+
 -- Get list of online friend full names (WoW + Battle.net friends)
 function DeltaChess:GetFriendsOnlineFullNames()
     local out = {}
@@ -1219,7 +1242,7 @@ end
 -- PLAYER LIST POPUP (online + addon only)
 --------------------------------------------------------------------------------
 function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
-    -- source: "past", "guild", "friends"
+    -- source: "past", "guild", "friends", "party"
     local candidates = {}
     if source == "past" then
         candidates = self:GetPastOpponentsFullNames()
@@ -1227,6 +1250,8 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
         candidates = self:GetGuildOnlineFullNames()
     elseif source == "friends" then
         candidates = self:GetFriendsOnlineFullNames()
+    elseif source == "party" then
+        candidates = self:GetPartyFullNames()
     end
     local myName = self:GetFullPlayerName(UnitName("player"))
     local filtered = {}
@@ -1247,7 +1272,7 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     popup:RegisterForDrag("LeftButton")
     popup:SetScript("OnDragStart", popup.StartMoving)
     popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
-    local titleMap = { past = "Recent", guild = "Guild", friends = "Friends" }
+    local titleMap = { past = "Recent", guild = "Guild", friends = "Friends", party = "Party" }
     popup.TitleText:SetText(titleMap[source] or "Select Player")
 
     local statusText = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1339,7 +1364,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         yPos = yPos - 24
         
         local pastBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        pastBtn:SetSize(102, 24)
+        pastBtn:SetSize(76, 24)
         pastBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         pastBtn:SetText("Recent")
         pastBtn:SetScript("OnClick", function()
@@ -1349,7 +1374,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         end)
         
         local guildBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        guildBtn:SetSize(102, 24)
+        guildBtn:SetSize(76, 24)
         guildBtn:SetPoint("LEFT", pastBtn, "RIGHT", 5, 0)
         guildBtn:SetText("Guild")
         guildBtn:SetScript("OnClick", function()
@@ -1359,11 +1384,21 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         end)
         
         local friendsBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        friendsBtn:SetSize(102, 24)
+        friendsBtn:SetSize(76, 24)
         friendsBtn:SetPoint("LEFT", guildBtn, "RIGHT", 5, 0)
         friendsBtn:SetText("Friends")
         friendsBtn:SetScript("OnClick", function()
             DeltaChess:ShowPlayerListPopup("friends", frame, function(fullName)
+                frame.nameInput:SetText(fullName)
+            end)
+        end)
+        
+        local partyBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        partyBtn:SetSize(76, 24)
+        partyBtn:SetPoint("LEFT", friendsBtn, "RIGHT", 5, 0)
+        partyBtn:SetText("Party")
+        partyBtn:SetScript("OnClick", function()
+            DeltaChess:ShowPlayerListPopup("party", frame, function(fullName)
                 frame.nameInput:SetText(fullName)
             end)
         end)
