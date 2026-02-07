@@ -5,6 +5,7 @@ DeltaChess.Sound = {}
 local COLOR = DeltaChess.Constants.COLOR
 local STATUS = {
     ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
 }
 
 -- Detect WoW version for compatibility
@@ -205,9 +206,11 @@ function DeltaChess.Sound:PlayMoveSound(board, isPlayerMove, wasCapture, boardFo
         self:PlayOpponentMove(wasCapture)
     end
     
-    -- Then check for check status (but not if game ended - let game end sound play instead)
+    -- Then check for check status (but not if game ended - let game end sound play instead).
+    -- Allow when ACTIVE (live game) or PAUSED (replay snapshot) so check plays in replay too.
     local checkBoard = boardForCheck or board
-    if checkBoard and DeltaChess.GetGameStatus(checkBoard) == STATUS.ACTIVE then
+    local gameStatus = checkBoard and DeltaChess.GetGameStatus(checkBoard)
+    if checkBoard and (gameStatus == STATUS.ACTIVE or gameStatus == STATUS.PAUSED) then
         -- Only current side to move can be in check
         local currentTurn = checkBoard:GetCurrentTurn()
         local inCheck = checkBoard:InCheck()

@@ -928,6 +928,16 @@ function DeltaChess:ShowReplayWindow(board)
             end
         end
         
+        -- Play move sound when advancing (same as game window)
+        if animateMove then
+            local wasCapture = animateMove:IsCapture()
+            -- Snapshot is state after the move; current turn is the side that has to move next, so the side that just moved is the opposite
+            local currentTurn = snapshotBoard:GetCurrentTurn()
+            local movedColor = (currentTurn == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
+            local isPlayerMove = (movedColor == frame.myChessColor)
+            DeltaChess.Sound:PlayMoveSound(snapshotBoard, isPlayerMove, wasCapture, snapshotBoard)
+        end
+        
         -- Animate the move if requested
         if animateMove then
             DeltaChess.UI:AnimateReplayMove(frame, animateMove)
