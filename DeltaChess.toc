@@ -23,6 +23,7 @@ Framework/src/BoardMove.lua
 Framework/src/Board.lua
 Framework/src/EngineInterface.lua
 Framework/src/EngineRunner.lua
+Framework/src/EngineDuel.lua
 Framework/src/Engines/DumbGoblin.lua
 Framework/src/Engines/GarboChess.lua
 Framework/src/Engines/Sunfish.lua

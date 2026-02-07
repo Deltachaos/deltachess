@@ -41,7 +41,7 @@ jobs:
           # Update the Version line in DeltaChess.toc (use | delimiter so / in refs/heads/... doesn't break sed)
           sed -i "s|^## Version:.*|## Version: $VERSION|" DeltaChess.toc
 
-      - name: Clean unused files
+      - name: Clean non required files
         run: |
           # Build list of files to keep: DeltaChess.toc + every path listed in .toc (non-comment, non-empty lines)
           keep_files="DeltaChess.toc"
