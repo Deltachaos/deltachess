@@ -149,13 +149,11 @@ function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flip
                 square.bg:SetColorTexture(0.6, 0.4, 0.2, 1)
             end
             
-            -- Check indicator (for king in check) - only for interactive boards
-            if interactive then
-                square.checkIndicator = square:CreateTexture(nil, "BORDER")
-                square.checkIndicator:SetAllPoints()
-                square.checkIndicator:SetColorTexture(1, 0, 0, 0.5)
-                square.checkIndicator:Hide()
-            end
+            -- Check indicator (for king in check) - game and replay boards
+            square.checkIndicator = square:CreateTexture(nil, "BORDER")
+            square.checkIndicator:SetAllPoints()
+            square.checkIndicator:SetColorTexture(1, 0, 0, 0.5)
+            square.checkIndicator:Hide()
             
             -- Highlight texture (for selection) - only for interactive boards
             if interactive then
@@ -237,6 +235,15 @@ function DeltaChess.UI:RenderPieces(squares, boardState, lastMove)
                     square.bg:SetColorTexture(0.9, 0.9, 0.8, 1)
                 else
                     square.bg:SetColorTexture(0.6, 0.4, 0.2, 1)
+                end
+            end
+            
+            -- Show check indicator on king's square when board is in check (game and replay)
+            if square.checkIndicator and boardState.InCheck and boardState.GetCurrentTurn and boardState:InCheck() then
+                local currentTurn = boardState:GetCurrentTurn()
+                local kingPiece = (currentTurn == COLOR.WHITE) and "K" or "k"
+                if piece == kingPiece then
+                    square.checkIndicator:Show()
                 end
             end
             
