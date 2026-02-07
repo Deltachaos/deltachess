@@ -39,21 +39,28 @@ jobs:
           # Update the Version line in DeltaChess.toc (use | delimiter so / in refs/heads/... doesn't break sed)
           sed -i "s|^## Version:.*|## Version: $VERSION|" DeltaChess.toc
 
-      - name: Create Package (untagged)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: BigWigsMods/packager@master
-
       - name: Clean unused files
         run: |
           ls -la .
           ls -la .release
 
+      - name: Create Package (untagged)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: BigWigsMods/packager@master
+
+      - name: Prepare artifact (unzip packager output)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          unzip -q ".release/DeltaChess-${{ steps.version.outputs.VERSION }}.zip" -d addon-artifact
+          # Packager zip has DeltaChess/ at top level; upload that so artifact unzip gives the addon folder
+          mv addon-artifact/DeltaChess "DeltaChess-${{ steps.version.outputs.VERSION }}"
+
       - name: Upload package artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: DeltaChess-${{ steps.version.outputs.VERSION }}.zip
-          path: .release/DeltaChess-${{ steps.version.outputs.VERSION }}.zip
+          name: DeltaChess-${{ steps.version.outputs.VERSION }}
+          path: DeltaChess-${{ steps.version.outputs.VERSION }}
 
       - name: Create Package (release)
         if: startsWith(github.ref, 'refs/tags/')
