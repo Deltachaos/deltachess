@@ -344,7 +344,7 @@ function DeltaChess:ShowSupportDialog()
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
         frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(250)
+        frame:SetFrameLevel(200)
         frame.TitleText:SetText("DeltaChess - Support & License")
         
         local thankYou = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -780,7 +780,7 @@ function DeltaChess:ShowReplayWindow(board)
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    frame:SetFrameLevel(100)
+    frame:SetFrameLevel(250)
     frame.TitleText:SetText("Replay")
     
     self.frames.replayWindow = frame
@@ -1016,7 +1016,7 @@ function DeltaChess:ShowPGNWindow(board)
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
         frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(250)  -- Above main menu (100) so PGN window stays on top
+        frame:SetFrameLevel(300)  -- Above board (250) so PGN window stays on top
         frame.TitleText:SetText("PGN")
 
         -- Background behind the scroll area (ARTWORK layer so it draws above the frame's own background)
@@ -1068,7 +1068,7 @@ function DeltaChess:ShowPGNWindow(board)
     end
 
     local frame = self.frames.pgnWindow
-    frame:SetFrameLevel(250)  -- Ensure on top each time we show
+    frame:SetFrameLevel(300)  -- Ensure on top each time we show
     frame.pgnEditBox:SetText(pgn)
     frame.pgnEditBox:SetCursorPosition(0)
     frame.pgnScrollFrame:SetVerticalScroll(0)
@@ -1326,7 +1326,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
         frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(100)
+        frame:SetFrameLevel(150)
         frame.TitleText:SetText("Challenge Player")
         
         local yPos = -35
@@ -1582,7 +1582,7 @@ function DeltaChess:ShowComputerGameWindow()
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
         frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(100)
+        frame:SetFrameLevel(150)
         frame.TitleText:SetText("Play vs Computer")
         
         local yPos = -35
@@ -1922,9 +1922,9 @@ StaticPopupDialogs["CHESS_RESIGN_CONFIRM"] = {
     button1 = "Resign",
     button2 = "Cancel",
     OnShow = function(dialog)
-        -- Show above the board (board uses FULLSCREEN_DIALOG level 100)
+        -- Show above the board and PGN window
         dialog:SetFrameStrata("FULLSCREEN_DIALOG")
-        dialog:SetFrameLevel(200)
+        dialog:SetFrameLevel(350)
         DeltaChess._actionBlocked = (DeltaChess._actionBlocked or 0) + 1
         if DeltaChess.UI.activeFrame then
             DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)

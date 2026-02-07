@@ -1281,7 +1281,7 @@ function DeltaChess:ShowChessBoard(gameId)
         end
     end)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    frame:SetFrameLevel(100)
+    frame:SetFrameLevel(250)
     frame.TitleText:SetText("DeltaChess")
     
     -- Override the template's close button to avoid taint issues
@@ -2002,7 +2002,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComp
         dialog:SetPoint("CENTER")
         dialog:SetMovable(false)
         dialog:SetFrameStrata("FULLSCREEN_DIALOG")
-        dialog:SetFrameLevel(200)
+        dialog:SetFrameLevel(350)
         dialog.TitleText:SetText("Promote pawn to:")
 
         local pieceTypes = {"q", "r", "b", "n"}
@@ -2463,9 +2463,9 @@ StaticPopupDialogs["CHESS_GAME_END"] = {
     hideOnEscape = true,
     preferredIndex = 3,
     OnShow = function(dialog)
-        -- Ensure popup appears above the board (FULLSCREEN_DIALOG level 100)
+        -- Ensure popup appears above the board and PGN window
         dialog:SetFrameStrata("FULLSCREEN_DIALOG")
-        dialog:SetFrameLevel(200)
+        dialog:SetFrameLevel(350)
     end,
 }
 
