@@ -1598,24 +1598,24 @@ function DeltaChess:ShowComputerGameWindow()
         colorLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         colorLabel:SetText("Your Color:")
         
-        yPos = yPos - 30
+        yPos = yPos - 20
         
         -- Color buttons
         frame.selectedColor = COLOR.WHITE
         
         local whiteBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        whiteBtn:SetSize(80, 25)
+        whiteBtn:SetSize(92, 25)
         whiteBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         whiteBtn:SetText("White")
         whiteBtn:SetEnabled(false)
         
         local blackBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        blackBtn:SetSize(80, 25)
+        blackBtn:SetSize(92, 25)
         blackBtn:SetPoint("LEFT", whiteBtn, "RIGHT", 5, 0)
         blackBtn:SetText("Black")
         
         local randomBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        randomBtn:SetSize(80, 25)
+        randomBtn:SetSize(92, 25)
         randomBtn:SetPoint("LEFT", blackBtn, "RIGHT", 5, 0)
         randomBtn:SetText("Random")
         
@@ -1663,7 +1663,7 @@ function DeltaChess:ShowComputerGameWindow()
         
         local diffSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
         diffSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        diffSlider:SetSize(260, 17)
+        diffSlider:SetSize(275, 17)
         if hasEloEngines then
             diffSlider:SetMinMaxValues(globalRange[1], globalRange[2])
             diffSlider:SetValue(math.max(globalRange[1], math.min(globalRange[2], 1200)))
@@ -1704,7 +1704,7 @@ function DeltaChess:ShowComputerGameWindow()
 
         local engineDropdown = CreateFrame("Frame", "ChessEngineDropdown", frame, "UIDropDownMenuTemplate")
         engineDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, yPos)
-        UIDropDownMenu_SetWidth(engineDropdown, 250)
+        UIDropDownMenu_SetWidth(engineDropdown, 265)
         frame.engineDropdown = engineDropdown
         
         -- Engine description label (below dropdown)
