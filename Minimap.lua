@@ -3,6 +3,9 @@
 DeltaChess.Minimap = {}
 
 local minimapButton
+local STATUS = {
+    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+}
 
 -- Detect WoW version for compatibility (with nil checks for older clients)
 local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
@@ -58,10 +61,12 @@ function DeltaChess.Minimap:Initialize()
             -- Resume most recent active game
             local mostRecentId, mostRecentTime = nil, 0
             if DeltaChess.db and DeltaChess.db.games then
-                for gameId, game in pairs(DeltaChess.db.games) do
-                    if game.status == "active" and game.startTime and game.startTime > mostRecentTime then
+                for gameId, board in pairs(DeltaChess.db.games) do
+                    local status = board:GetGameStatus()
+                    local startTime = board:GetStartTime() or 0
+                    if status == STATUS.ACTIVE and startTime > mostRecentTime then
                         mostRecentId = gameId
-                        mostRecentTime = game.startTime
+                        mostRecentTime = startTime
                     end
                 end
             end
