@@ -28,6 +28,7 @@ Framework/src/Engines/DumbGoblin.lua
 Framework/src/Engines/GarboChess.lua
 Framework/src/Engines/Sunfish.lua
 Framework/src/Engines/Fruit21.lua
+Framework/src/Engines/Zugzug.lua
 
 Core.lua
 Sound.lua
