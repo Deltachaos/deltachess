@@ -556,7 +556,7 @@ function DeltaChess:RefreshMainMenuContent()
             local windowShown = DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame:IsShown()
             
             local entry = CreateFrame("Button", nil, scrollChild)
-            entry:SetSize(400, 60)
+            entry:SetSize(400, 72)
             entry:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -yOffset)
             
             -- Background
@@ -606,9 +606,14 @@ function DeltaChess:RefreshMainMenuContent()
             
             info:SetText(string.format("%s%s|r vs %s%s|r", whiteHex, whiteName, blackHex, blackName))
             
+            -- Date line
+            local dateText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            dateText:SetPoint("TOPLEFT", info, "BOTTOMLEFT", 0, -1)
+            dateText:SetText("|cFFAAAAAADate: " .. (gameDate or "Unknown") .. "|r")
+            
             -- Settings line (color, clock, difficulty)
             local settingsText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            settingsText:SetPoint("TOPLEFT", info, "BOTTOMLEFT", 0, -1)
+            settingsText:SetPoint("TOPLEFT", dateText, "BOTTOMLEFT", 0, -1)
             
             local settingsParts = {}
             if playerColor then
@@ -633,25 +638,8 @@ function DeltaChess:RefreshMainMenuContent()
             -- Status/Result line
             local statusText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             statusText:SetPoint("TOPLEFT", settingsText, "BOTTOMLEFT", 0, -1)
-            
-            if status == STATUS.ACTIVE or status == STATUS.PAUSED then
-                if status == STATUS.PAUSED then
-                    statusText:SetText("|cFFFFFF00Paused|r - " .. moveCount .. " moves")
-                else
-                    local turnText = isPlayerTurn and "|cFF00FF00YOUR TURN|r" or "|cFFFFFF00Waiting...|r"
-                    statusText:SetText(string.format("%s - %d moves", turnText, moveCount))
-                end
-            else
-                local resultColor = "|cFFFFFFFF"
-                if result == "won" then
-                    resultColor = "|cFF00FF00"
-                elseif result == "lost" or result == "resigned" then
-                    resultColor = "|cFFFF0000"
-                elseif result == "draw" then
-                    resultColor = "|cFFFFFF00"
-                end
-                statusText:SetText(string.format("%s%s|r - %d moves - %s", resultColor, result or "Unknown", moveCount, gameDate or "Unknown"))
-            end
+            local resultStr = DeltaChess.UI:GetGameStatusText(board, playerColor)
+            statusText:SetText(string.format("%s - %d moves", resultStr, moveCount))
             
             -- Buttons
             if status == STATUS.ACTIVE or status == STATUS.PAUSED then
@@ -733,7 +721,7 @@ function DeltaChess:RefreshMainMenuContent()
                 end)
             end
             
-            yOffset = yOffset + 62
+            yOffset = yOffset + 74
         end
     end
     

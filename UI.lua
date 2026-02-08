@@ -36,6 +36,52 @@ local STATUS = {
 }
 local COLOR = DeltaChess.Constants.COLOR
 
+--- Get a colored status text string for a board's current game state.
+-- Returns a WoW color-coded string like "|cFFFF4444Checkmate — White wins|r"
+-- @param board Board object
+-- @param playerColor string|nil Optional player color (COLOR.WHITE or COLOR.BLACK) to show "YOUR TURN" / "Waiting..." for active games
+-- @return string colored status text
+function DeltaChess.UI:GetGameStatusText(board, playerColor)
+    local gameStatus = DeltaChess.GetGameStatus(board)
+    if gameStatus == STATUS.PAUSED then
+        return "|cFFFFFF00Game Paused|r"
+    elseif gameStatus == STATUS.ACTIVE then
+        local turn = board:GetCurrentTurn()
+        if playerColor then
+            if turn == playerColor then
+                return "|cFF00FF00YOUR TURN|r"
+            else
+                return "|cFF888888Waiting...|r"
+            end
+        end
+        local turnColor = turn == COLOR.WHITE and "|cFFFFFFFF" or "|cFF888888"
+        return turnColor .. (turn == COLOR.WHITE and "White" or "Black") .. " to move|r"
+    end
+    -- Game has ended
+    local reason = board:GetEndReason()
+    local gameResult = board:GetGameResult()
+    if gameStatus == "checkmate" then
+        local winner = gameResult == COLOR.WHITE and "White" or "Black"
+        return "|cFFFF4444Checkmate - " .. winner .. " wins|r"
+    elseif gameStatus == "stalemate" then
+        return "|cFFFFFF00Stalemate - Draw|r"
+    elseif gameStatus == "draw" then
+        local drawDetail = ""
+        if reason == Constants.REASON_FIFTY_MOVE then
+            drawDetail = " (50-move rule)"
+        end
+        return "|cFFFFFF00Draw" .. drawDetail .. "|r"
+    elseif reason == Constants.REASON_RESIGNATION then
+        local winner = gameResult == COLOR.WHITE and "White" or "Black"
+        return "|cFFFF4444Resignation - " .. winner .. " wins|r"
+    elseif reason == Constants.REASON_TIMEOUT then
+        local winner = gameResult == COLOR.WHITE and "White" or "Black"
+        return "|cFFFF4444Timeout - " .. winner .. " wins|r"
+    else
+        return "|cFFFF4444Game Over|r"
+    end
+end
+
 -- Square coordinate conversions
 local FILE_TO_COL = { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8 }
 
@@ -1770,41 +1816,7 @@ function DeltaChess.UI:UpdateBoard(frame)
     
     -- Update turn indicator
     if frame.turnLabel then
-        local gameStatus = DeltaChess.GetGameStatus(board)
-        if gameStatus ~= STATUS.ACTIVE and gameStatus ~= STATUS.PAUSED then
-            -- Game has ended - show result
-            local resultText
-            local reason = board:GetEndReason()
-            local gameResult = board:GetGameResult()
-            local Constants = DeltaChess.Constants
-            if gameStatus == "checkmate" then
-                local winner = gameResult == COLOR.WHITE and "White" or "Black"
-                resultText = "|cFFFF4444Checkmate — " .. winner .. " wins|r"
-            elseif gameStatus == "stalemate" then
-                resultText = "|cFFFFFF00Stalemate — Draw|r"
-            elseif gameStatus == "draw" then
-                local drawDetail = ""
-                if reason == Constants.REASON_FIFTY_MOVE then
-                    drawDetail = " (50-move rule)"
-                end
-                resultText = "|cFFFFFF00Draw" .. drawDetail .. "|r"
-            elseif reason == Constants.REASON_RESIGNATION then
-                local winner = gameResult == COLOR.WHITE and "White" or "Black"
-                resultText = "|cFFFF4444Resignation — " .. winner .. " wins|r"
-            elseif reason == Constants.REASON_TIMEOUT then
-                local winner = gameResult == COLOR.WHITE and "White" or "Black"
-                resultText = "|cFFFF4444Timeout — " .. winner .. " wins|r"
-            else
-                resultText = "|cFFFF4444Game Over|r"
-            end
-            frame.turnLabel:SetText(resultText)
-        elseif status == STATUS.PAUSED then
-            frame.turnLabel:SetText("|cFFFFFF00Game Paused|r")
-        else
-            local turn = board:GetCurrentTurn()
-            local turnColor = turn == COLOR.WHITE and "|cFFFFFFFF" or "|cFF888888"
-            frame.turnLabel:SetText(turnColor .. (turn == COLOR.WHITE and "White" or "Black") .. " to move|r")
-        end
+        frame.turnLabel:SetText(DeltaChess.UI:GetGameStatusText(board))
     end
     
     -- Calculate material advantage
