@@ -114,7 +114,7 @@ local function escapeForLua(s)
 end
 
 function DeltaChess:SerializeChallenge(gs)
-    return string.format('{g="%s",c="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s",hsec=%s,hs="%s"}',
+    return string.format('{g="%s",c="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s",hsec=%s,hs="%s",ir=%s}',
         escapeForLua(gs.gameId),
         escapeForLua(gs.challenger),
         escapeForLua(gs.opponent),
@@ -125,7 +125,8 @@ function DeltaChess:SerializeChallenge(gs)
         gs.challengerTimestamp or 0,
         escapeForLua(gs.challengerClass),
         gs.handicapSeconds and tostring(gs.handicapSeconds) or "nil",
-        (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or "")
+        (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or "",
+        tostring(gs.isRandom or false))
 end
 
 function DeltaChess:DeserializeChallenge(str)
@@ -145,7 +146,8 @@ function DeltaChess:DeserializeChallenge(str)
             challengerTimestamp = t.ct,
             challengerClass = t.ccl,
             handicapSeconds = t.hsec,
-            handicapSide = (t.hs == "white" or t.hs == "black") and t.hs or nil
+            handicapSide = (t.hs == "white" or t.hs == "black") and t.hs or nil,
+            isRandom = t.ir or false
         }
     end)
     return ok and result, ok and result or nil
@@ -262,20 +264,46 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
             return
         end
         
-        -- Build settings text for popup
-        local colorText = data.challengerColor == COLOR.WHITE and "Black" or "White"
-        local clockText = data.useClock and "Yes" or "No"
-        local timeText = ""
-        if data.useClock then
-            timeText = string.format("\nTime: %d min + %d sec increment", 
-                data.timeMinutes or 10, 
-                data.incrementSeconds or 0)
+        -- Build class-colored challenger display name
+        local challengerDisplay = data.challenger:match("^([^%-]+)") or data.challenger
+        if data.challengerClass and RAID_CLASS_COLORS and RAID_CLASS_COLORS[data.challengerClass] then
+            local cc = RAID_CLASS_COLORS[data.challengerClass]
+            local hex = string.format("FF%02x%02x%02x", cc.r * 255, cc.g * 255, cc.b * 255)
+            challengerDisplay = "|c" .. hex .. challengerDisplay .. "|r"
         end
         
-        local settingsText = string.format(
-            "Your color: %s\nClock: %s%s",
-            colorText, clockText, timeText
-        )
+        -- Build structured settings text for popup
+        -- Side assignment
+        local yourSide = data.challengerColor == COLOR.WHITE and "Black" or "White"
+        local sideText
+        if data.isRandom then
+            sideText = string.format("|cFFFFD100Your Side:|r  %s  |cFF888888(randomly assigned)|r", yourSide)
+        else
+            sideText = string.format("|cFFFFD100Your Side:|r  %s", yourSide)
+        end
+        
+        -- Clock section
+        local clockText
+        if data.useClock then
+            local timeMin = data.timeMinutes or 10
+            local incSec = data.incrementSeconds or 0
+            if incSec > 0 then
+                clockText = string.format("|cFFFFD100Clock:|r  %d min  |cFF888888+%ds/move|r", timeMin, incSec)
+            else
+                clockText = string.format("|cFFFFD100Clock:|r  %d min  |cFF888888(no increment)|r", timeMin)
+            end
+        else
+            clockText = "|cFFFFD100Clock:|r  None"
+        end
+        
+        -- Handicap section
+        local handicapText = ""
+        if data.handicapSeconds and data.handicapSide then
+            local side = data.handicapSide == "white" and "White" or "Black"
+            handicapText = string.format("\n|cFFFFD100Handicap:|r  %s gets %ds less", side, data.handicapSeconds)
+        end
+        
+        local settingsText = string.format("%s\n%s%s", sideText, clockText, handicapText)
         
         -- Store challenge data for acceptance
         self.pendingReceivedChallenge = data
@@ -283,7 +311,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         -- Play sound to alert player
         DeltaChess.Sound:PlayChallengeReceived()
         
-        StaticPopup_Show("CHESS_CHALLENGE_RECEIVED", sender, settingsText, data)
+        StaticPopup_Show("CHESS_CHALLENGE_RECEIVED", challengerDisplay, settingsText, data)
         
     elseif prefix == "ChessResponse" then
         local success, data = self:Deserialize(message)

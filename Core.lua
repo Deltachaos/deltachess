@@ -687,8 +687,7 @@ function DeltaChess:RefreshMainMenuContent()
             statusText:SetText(string.format("%s - %d moves", resultStr, moveCount))
             
             -- Buttons
-            if status == STATUS.ACTIVE or status == STATUS.PAUSED then
-                local isPaused = (status == STATUS.PAUSED)
+            if isActive or isPaused then
                 local isHumanWindowHidden = not isVsComputer and not windowShown
                 local btnText, btnAction
                 if isPaused and not isVsComputer then
@@ -1551,6 +1550,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                     return
                 end
                 
+                local wasRandom = frame.selectedColor == "random"
                 local finalColor = frame.selectedColor
                 if finalColor == "random" then
                     finalColor = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
@@ -1568,6 +1568,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                     challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
                     opponent = playerName,
                     challengerColor = finalColor,
+                    isRandom = wasRandom,
                     useClock = frame.clockCheck:GetChecked(),
                     timeMinutes = math.floor(frame.timeSlider:GetValue()),
                     incrementSeconds = math.floor(frame.incSlider:GetValue()),

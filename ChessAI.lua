@@ -159,9 +159,6 @@ function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, setting
     local handicapSeconds = (settings.handicapSeconds and settings.handicapSeconds > 0) and settings.handicapSeconds or nil
     local handicapSide = (settings.handicapSide == "white" or settings.handicapSide == "black") and settings.handicapSide or nil
 
-    useClock = true
-    timeMinutes = 1
-
     local clockData = nil
     if useClock then
         clockData = {

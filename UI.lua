@@ -1268,15 +1268,8 @@ function DeltaChess:ShowChessBoard(gameId)
     
     -- Resume counting for computer game when opening
     local isVsComputer = board:OneOpponentIsEngine()
-    local pausedByClose = board:GetGameMeta("pausedByClose")
-    if isVsComputer and pausedByClose then
-        local pauseClosedAt = board:GetGameMeta("pauseClosedAt")
-        if pauseClosedAt then
-            local timeSpentClosed = (board:GetGameMeta("timeSpentClosed") or 0) + (DeltaChess.Util.TimeNow() - pauseClosedAt)
-            board:SetGameMeta("timeSpentClosed", timeSpentClosed)
-        end
-        board:SetGameMeta("pausedByClose", nil)
-        board:SetGameMeta("pauseClosedAt", nil)
+    if isVsComputer and board:IsPaused() then
+        board:ContinueGame()
     end
     
     -- Close existing board if open
@@ -1328,9 +1321,7 @@ function DeltaChess:ShowChessBoard(gameId)
     frame:SetScript("OnHide", function(self)
         local brd = DeltaChess.GetBoard(self.gameId)
         if brd and brd:OneOpponentIsEngine() and brd:IsActive() then
-            brd:SetGameMeta("pausedByClose", true)
-            brd:SetGameMeta("pauseClosedAt", DeltaChess.Util.TimeNow())
-            brd:SetGameMeta("_lastMoveCountWhenPaused", #brd.moves)
+            brd:PauseGame()
         end
     end)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -1513,9 +1504,7 @@ function DeltaChess:ShowChessBoard(gameId)
         closeButton:SetScript("OnClick", function()
             local board = DeltaChess.GetBoard(gameId)
             if board then
-                board:SetGameMeta("pausedByClose", true)
-                board:SetGameMeta("pauseClosedAt", DeltaChess.Util.TimeNow())
-                board:SetGameMeta("_lastMoveCountWhenPaused", board:GetHalfMoveCount())
+                board:PauseGame()
             end
             frame:Hide()
         end)
@@ -1852,8 +1841,7 @@ function DeltaChess.UI:UpdateBoard(frame)
         frame.opponentClock:Show()
     end
     -- Refresh time every second while game is active (not when paused or ended)
-    local pausedByClose = board:GetGameMeta("pausedByClose")
-    if board:IsActive() and not pausedByClose and frame:IsShown() then
+    if board:IsActive() and not board:IsPaused() and frame:IsShown() then
         C_Timer.After(1, function()
             local board = DeltaChess.GetBoard(frame.gameId)
             DeltaChess.UI:UpdateBoard(frame)
@@ -1926,9 +1914,7 @@ function DeltaChess.UI:UpdateBoard(frame)
                 frame.closeButton:SetScript("OnClick", function()
                     local board = DeltaChess.GetBoard(frame.gameId)
                     if board then
-                        board:SetGameMeta("pausedByClose", true)
-                        board:SetGameMeta("pauseClosedAt", DeltaChess.Util.TimeNow())
-                        board:SetGameMeta("_lastMoveCountWhenPaused", board:GetHalfMoveCount())
+                        board:PauseGame()
                     end
                     frame:Hide()
                 end)
