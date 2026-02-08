@@ -7,6 +7,25 @@ DeltaChess.version = "1.0.0"
 local COLOR
 local STATUS
 
+-- Helper: create a repeating timer with Classic compatibility fallback
+-- Returns the ticker handle (C_Timer ticker or a Frame for the OnUpdate fallback)
+function DeltaChess.CreateTicker(intervalSeconds, callback)
+    if C_Timer and C_Timer.NewTicker then
+        return C_Timer.NewTicker(intervalSeconds, callback)
+    end
+    -- Classic fallback: use an OnUpdate frame
+    local frame = CreateFrame("Frame")
+    local elapsed = 0
+    frame:SetScript("OnUpdate", function(self, delta)
+        elapsed = elapsed + delta
+        if elapsed >= intervalSeconds then
+            elapsed = 0
+            callback()
+        end
+    end)
+    return frame
+end
+
 -- Frame for events
 local eventFrame = CreateFrame("Frame")
 
@@ -79,6 +98,33 @@ local function Initialize()
     C_Timer.After(1, function()
         if DeltaChess.Minimap then
             DeltaChess.Minimap:Initialize()
+        end
+    end)
+
+    -- Periodic ticker: archive ended games and update minimap highlight
+    DeltaChess.CreateTicker(2, function()
+        -- Move ended games from db.games to history
+        if DeltaChess.db and DeltaChess.db.games then
+            local endedIds = {}
+            for gameId, board in pairs(DeltaChess.db.games) do
+                if board:IsEnded() then
+                    if not board:GetEndTime() then
+                        board:EndGame()
+                    end
+                    table.insert(endedIds, gameId)
+                end
+            end
+            for _, gameId in ipairs(endedIds) do
+                local board = DeltaChess.db.games[gameId]
+                if board then
+                    DeltaChess:SaveGameToHistory(board)
+                end
+            end
+        end
+
+        -- Update minimap your-turn highlight
+        if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+            DeltaChess.Minimap:UpdateYourTurnHighlight()
         end
     end)
 end

@@ -143,24 +143,6 @@ function DeltaChess.Minimap:Initialize()
     end
     
     self:UpdateDNDHighlight()
-
-    -- Periodically update "your turn" highlight (with fallback for Classic compatibility)
-    if C_Timer and C_Timer.NewTicker then
-        C_Timer.NewTicker(2, function()
-            DeltaChess.Minimap:UpdateYourTurnHighlight()
-        end)
-    else
-        -- Fallback: create a separate frame for updates (avoids conflicts with drag OnUpdate)
-        local updateFrame = CreateFrame("Frame")
-        local elapsed = 0
-        updateFrame:SetScript("OnUpdate", function(self, delta)
-            elapsed = elapsed + delta
-            if elapsed >= 2 then
-                elapsed = 0
-                DeltaChess.Minimap:UpdateYourTurnHighlight()
-            end
-        end)
-    end
 end
 
 -- Use .tga extension explicitly for Classic compatibility
