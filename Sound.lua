@@ -232,9 +232,7 @@ end
 
 -- Play appropriate sound for game end
 -- @param board table - The board object (board IS the game now)
--- @param boardUnused table - Unused parameter (kept for compatibility)
--- todo remove unused parameter
-function DeltaChess.Sound:PlayGameEndSound(board, boardUnused)
+function DeltaChess.Sound:PlayGameEndSound(board)
     local playerColor = GetPlayerColor(board)
     local reason = board:GetEndReason()
     

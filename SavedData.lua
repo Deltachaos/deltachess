@@ -8,8 +8,6 @@ local STATUS = {
 
 -- Save game to history using Board serialization
 function DeltaChess:SaveGameToHistory(board)
-    -- todo check if already saved into history
-
     -- Ensure the board has an end time set
     if not board:GetEndTime() then
         board:EndGame()
@@ -21,6 +19,9 @@ function DeltaChess:SaveGameToHistory(board)
         return
     end
 
+    -- Check if already saved into history
+    local alreadySaved = self.db.history[gameId] ~= nil
+
     -- Serialize the board state (contains ALL game data; result is derived in GetGameResult())
     local serializedBoard = board:Serialize()
 
@@ -29,7 +30,10 @@ function DeltaChess:SaveGameToHistory(board)
     -- Remove from active games
     DeltaChess.RemoveBoard(gameId)
 
-    self:Print("Game saved to history.")
+    -- Only print message if this is a new entry
+    if not alreadySaved then
+        self:Print("Game saved to history.")
+    end
 end
 
 -- Load game entry from history (raw serialized data)

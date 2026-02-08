@@ -2475,7 +2475,7 @@ function DeltaChess.UI:ShowGameEnd(gameId, frame)
     end
     
     -- Play game end sound
-    DeltaChess.Sound:PlayGameEndSound(board, board)
+    DeltaChess.Sound:PlayGameEndSound(board)
     
     -- Save the game to history (only if still in active games) — use current board instance
     local boardToSave = DeltaChess.GetBoard(gameId)
