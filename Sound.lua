@@ -9,7 +9,6 @@ local STATUS = {
 }
 
 local SOUND_FILES = {
-    MOVE = "Interface\\AddOns\\DeltaChess\\Sounds\\move.mp3",
 }
 
 -- Detect WoW version for compatibility
@@ -117,7 +116,6 @@ function DeltaChess.Sound:PlayPlayerMove(wasCapture)
     if wasCapture then
         self:Play("playerCapture")
     else
-        PlaySoundFile(SOUND_FILES.MOVE)
         self:Play("playerMove")
     end
 end
@@ -128,7 +126,6 @@ function DeltaChess.Sound:PlayOpponentMove(wasCapture)
     if wasCapture then
         self:Play("opponentCapture")
     else
-        PlaySoundFile(SOUND_FILES.MOVE)
         self:Play("opponentMove")
     end
 end
