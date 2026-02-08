@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      
+      - name: Extract tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            VERSION=${TAG_NAME#v}
+          else
+            VERSION=${GITHUB_SHA:0:7}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Update version in .toc file
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          # Update the Version line in DeltaChess.toc (use | delimiter so / in refs/heads/... doesn't break sed)
+          sed -i "s|^## Version:.*|## Version: $VERSION|" DeltaChess.toc
+
+      - name: Clean non required files
+        run: |
+          # Build list of files to keep: DeltaChess.toc + every path listed in .toc (non-comment, non-empty lines)
+          keep_files="DeltaChess.toc"
+          while IFS= read -r line; do
+            line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            [[ -z "$line" ]] && continue
+            keep_files="${keep_files}"$'\n'"${line}"
+          done < <(grep -v '^#' DeltaChess.toc | grep -v '^[[:space:]]*$')
+          # Also keep paths (files and directories) listed in .package (and the .package file itself)
+          keep_extra=""
+          if [[ -f .package ]]; then
+            keep_extra=".package"
+            while IFS= read -r line; do
+              line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+              [[ -z "$line" ]] && continue
+              keep_extra="${keep_extra}"$'\n'"${line}"
+            done < <(grep -v '^#' .package | grep -v '^[[:space:]]*$')
+          fi
+          # Delete any file not in keep list (exclude .git and .github)
+          find . -type f ! -path './.git/*' ! -path './.github/*' | while read -r f; do
+            rel="${f#./}"
+            keep=0
+            echo "$keep_files" | grep -Fxq "$rel" && keep=1
+            if [[ $keep -eq 0 && -n "$keep_extra" ]]; then
+              echo "$keep_extra" | grep -Fxq "$rel" && keep=1
+              if [[ $keep -eq 0 ]]; then
+                while IFS= read -r p; do
+                  [[ -z "$p" ]] && continue
+                  if [[ -d "$p" && "$rel" == "$p"/* ]]; then keep=1; break; fi
+                done <<< "$keep_extra"
+              fi
+            fi
+            if [[ $keep -eq 0 ]]; then
+              echo "Removing: $rel"
+              rm -- "$f"
+            fi
+          done
+          # Remove empty directories (except .git and .github)
+          for _ in $(seq 1 20); do
+            find . -depth -type d ! -path './.git*' ! -path './.github*' -empty -exec rmdir {} \; 2>/dev/null || true
+          done
+
+      - name: Create Package (untagged)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: BigWigsMods/packager@master
+
+      - name: Prepare artifact (unzip packager output)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          unzip -q ".release/DeltaChess-${{ steps.version.outputs.VERSION }}.zip" -d addon-artifact
+          # Packager zip has DeltaChess/ at top level; upload that so artifact unzip gives the addon folder
+          mv addon-artifact/DeltaChess "DeltaChess-${{ steps.version.outputs.VERSION }}"
+
+      - name: Upload package artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeltaChess-${{ steps.version.outputs.VERSION }}
+          path: DeltaChess-${{ steps.version.outputs.VERSION }}
+
+      - name: Create Package (release)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: BigWigsMods/packager@master
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}

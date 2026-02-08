@@ -62,10 +62,33 @@ Valid moves are highlighted, so you won't embarrass yourself by trying to move a
 Want to simulate Mythic+ stress but with fewer repair bills?
 
 * Optional **chess clocks**
-* Configurable time per player
-* Optional increment per move
+* Configurable time per player (1–60 minutes)
+* Optional increment per move (0–30 seconds)
+* **Handicap clocks** — give one side less time for a balanced challenge between uneven players
 
 Play as **white**, **black**, or let fate decide—just like raid loot.
+
+---
+
+## Pause without the drama
+
+Need to answer a summon? Bio break? Boss pull?
+
+* **Pause any game** — clocks stop, moves are blocked, nobody loses on time
+* **Mutual agreement** — in human games, both players must accept the pause (no mid-checkmate stalling)
+* **Instant pause** — vs the computer, just pause and resume whenever you want
+* Close the board window against the AI and the game auto-pauses for you
+
+---
+
+## Export your brilliance (PGN)
+
+Played an immortal game between trash pulls? Keep it forever.
+
+* **Full PGN export** with standard tags (Date, Players, Result, TimeControl, FEN)
+* Standard Algebraic Notation with check markers
+* Clock annotations included when time controls are active
+* One-click copy from a scrollable text window — paste it into Lichess, Chess.com, or brag in guild chat
 
 ---
 
@@ -80,12 +103,39 @@ Inactive games are automatically archived, because even chess deserves cleanup.
 
 ---
 
+## Pluggable engine framework
+
+DeltaChess ships with a **pluggable chess engine framework**. Pick an engine, set an ELO, and play — or add your own.
+
+* **4 built-in engines** spanning ELO 100–2600
+* Select engine and difficulty from the "Play vs Computer" dialog
+* Engines are filtered by your chosen ELO and sorted by efficiency
+* The framework is fully async and WoW-compatible (no frame drops)
+* Adding a custom engine is as simple as implementing a small interface and registering it
+
+### Supported chess engines
+
+| Engine | Style |
+|--------|-------|
+| **Dumb Goblin** | Greedy capture-first — perfect for your first game |
+| **Sunfish** | MTD-bi search with iterative deepening and transposition tables |
+| **GarboChess** | Alpha-beta with null-move pruning, killer moves, and SEE |
+| **Fruit 2.1** | Elite-level engine — null-move pruning, LMR, history heuristics, tapered eval |
+
+> Want to add your own engine? See the [Engine Framework](https://github.com/Deltachaos/deltachess-framework) for the full interface contract and examples.
+
+---
+
 ## Features
 
 * Play chess against other players **cross-realm**
 * Single-player mode vs the computer
 * Full standard chess rules implemented
 * Optional chess clocks with increment
+* **Handicap clocks** — asymmetric time controls
+* **Game pausing** — stop the clock and resume when ready
+* **PGN export** — copy your game in standard notation
+* **Pluggable engines** — 4 built-in AI engines (ELO 100–2600), extensible
 * Saved & resumable games
 * Full move history and player statistics
 * Clean board UI with highlighted moves
@@ -125,6 +175,7 @@ Start checkmating people. ♟️
 * **Chess clock:** On/off
 * **Time:** Minutes per player (1–60)
 * **Increment:** Seconds per move (0–30)
+* **Handicap:** Optionally reduce one side's starting time (challenger or opponent)
 
 ### Minimap button
 
@@ -137,7 +188,8 @@ Start checkmating people. ♟️
 * Click a piece to select it; valid moves are highlighted.
 * Click a highlighted square to move.
 * Castling, en passant, and promotion are supported.
-* **Resign**, **Offer draw**, and **Close** are available from the board UI.
+* **Resign**, **Offer draw**, **Pause**, and **Close** are available from the board UI.
+* **PGN** button lets you view and copy the game in standard notation.
 
 ---
 

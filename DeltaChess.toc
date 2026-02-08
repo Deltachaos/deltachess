@@ -3,24 +3,40 @@
 ## IconTexture: Interface\AddOns\DeltaChess\Textures\logo_small
 ## Notes: Play chess with other players or against the computer
 ## Author: Deltachaos
-## Version: 1.0.0
+## Version: main
 ## SavedVariables: ChessDB
 ## X-Website: https://github.com/Deltachaos/deltachess
 ## X-Curse-Project-ID: 1450103
 ## X-Wago-ID: kGryRnKy
 ## X-WoWI-ID: 27027
 
+Framework/lib/json.lua
+Framework/lib/bit.lua
+Framework/lib/fruit21.lua
+
+# Framework - standalone chess engine library
+Framework/src/Constants.lua
+Framework/src/Cache.lua
+Framework/src/Util.lua
+Framework/src/MoveGen.lua
+Framework/src/BoardMove.lua
+Framework/src/Board.lua
+Framework/src/EngineInterface.lua
+Framework/src/EngineRunner.lua
+Framework/src/EngineDuel.lua
+Framework/src/Engines/DumbGoblin.lua
+Framework/src/Engines/GarboChess.lua
+Framework/src/Engines/Sunfish.lua
+Framework/src/Engines/Fruit21.lua
+Framework/src/Engines/Zugzug.lua
+
 Core.lua
-Constants.lua
 Sound.lua
-ChessBoard.lua
-Engines/EngineInterface.lua
-Engines/BitOp.lua
-Engines/MinimaxEngine.lua
-Engines/sunfish/sunfish.lua
-Engines/SunfishEngine.lua
-Engines/garbochess/garbochess.lua
-Engines/GarboChessEngine.lua
+
+
+# WoW-specific bridge for framework
+EngineBridge.lua
+
 ChessAI.lua
 UI.lua
 Communication.lua

@@ -2,6 +2,15 @@
 
 DeltaChess.Sound = {}
 
+local COLOR = DeltaChess.Constants.COLOR
+local STATUS = {
+    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
+}
+
+local SOUND_FILES = {
+}
+
 -- Detect WoW version for compatibility
 local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
 
@@ -166,30 +175,32 @@ function DeltaChess.Sound:PlayChallengeDeclined()
     self:Play("challengeDeclined")
 end
 
--- Helper function to determine player color in a game
--- @param game table - The game object
--- @return string - "white" or "black"
-local function GetPlayerColor(game)
-    if game.isVsComputer then
-        return game.playerColor
+-- Helper function to determine player color in a game (board IS the game now)
+-- @param board table - The board object
+-- @return string - COLOR.WHITE or COLOR.BLACK
+local function GetPlayerColor(board)
+    local isVsComputer = board:OneOpponentIsEngine()
+    if isVsComputer then
+        return board:GetPlayerColor()
     else
         local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
-        if game.white == playerName then
-            return "white"
+        local white = board:GetWhitePlayerName()
+        if white == playerName then
+            return COLOR.WHITE
         else
-            return "black"
+            return COLOR.BLACK
         end
     end
 end
 
 -- Play appropriate sound after a move is made
--- @param game table - The game object
+-- @param board table - The board object (board IS the game now)
 -- @param isPlayerMove boolean - Whether this was the player's move
 -- @param wasCapture boolean - Whether a piece was captured
--- @param board table - The board object (for check detection)
-function DeltaChess.Sound:PlayMoveSound(game, isPlayerMove, wasCapture, board)
-    local playerColor = GetPlayerColor(game)
-    local opponentColor = playerColor == "white" and "black" or "white"
+-- @param boardForCheck table - The board object for check detection (same as board)
+function DeltaChess.Sound:PlayMoveSound(board, isPlayerMove, wasCapture, boardForCheck)
+    local playerColor = GetPlayerColor(board)
+    local opponentColor = playerColor == COLOR.WHITE and COLOR.BLACK or COLOR.WHITE
     
     -- First, play the move/capture sound
     if isPlayerMove then
@@ -198,53 +209,58 @@ function DeltaChess.Sound:PlayMoveSound(game, isPlayerMove, wasCapture, board)
         self:PlayOpponentMove(wasCapture)
     end
     
-    -- Then check for check status (but not if game ended - let game end sound play instead)
-    if board and board.gameStatus == "active" then
-        local playerInCheck = board:IsInCheck(playerColor)
-        local opponentInCheck = board:IsInCheck(opponentColor)
+    -- Then check for check status (but not if game ended - let game end sound play instead).
+    -- Allow when ACTIVE (live game) or PAUSED (replay snapshot) so check plays in replay too.
+    local checkBoard = boardForCheck or board
+    if checkBoard and not checkBoard:IsEnded() then
+        -- Only current side to move can be in check
+        local currentTurn = checkBoard:GetCurrentTurn()
+        local inCheck = checkBoard:InCheck()
         
-        if playerInCheck then
+        if inCheck then
             -- Short delay so sounds don't overlap
             C_Timer.After(0.15, function()
-                self:PlayPlayerInCheck()
-            end)
-        elseif opponentInCheck then
-            -- Short delay so sounds don't overlap
-            C_Timer.After(0.15, function()
-                self:PlayOpponentInCheck()
+                if currentTurn == playerColor then
+                    self:PlayPlayerInCheck()
+                else
+                    self:PlayOpponentInCheck()
+                end
             end)
         end
     end
 end
 
 -- Play appropriate sound for game end
--- @param game table - The game object
--- @param board table - The board object
-function DeltaChess.Sound:PlayGameEndSound(game, board)
-    local playerColor = GetPlayerColor(game)
+-- @param board table - The board object (board IS the game now)
+function DeltaChess.Sound:PlayGameEndSound(board)
+    local playerColor = GetPlayerColor(board)
+    local reason = board:GetEndReason()
     
-    if board.gameStatus == "checkmate" then
+    if reason == DeltaChess.Constants.REASON_CHECKMATE then
         -- The player whose turn it is when checkmate is detected is the loser
         -- (they have no legal moves and are in check)
-        local loserColor = board.currentTurn
+        local loserColor = board:GetCurrentTurn()
         if playerColor == loserColor then
             self:PlayLose()
         else
             self:PlayWin()
         end
-    elseif board.gameStatus == "stalemate" or board.gameStatus == "draw" then
+    elseif reason == DeltaChess.Constants.REASON_STALEMATE or reason == DeltaChess.Constants.REASON_FIFTY_MOVE then
         self:PlayStalemate()
-    elseif board.gameStatus == "resignation" then
+    elseif reason == DeltaChess.Constants.REASON_RESIGNATION then
         local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
-        if game.resignedPlayer == playerName or 
-           (game.isVsComputer and game.resignedPlayer ~= "Computer") then
+        local resignedPlayer = board:GetResignedPlayer()
+        local isVsComputer = board:OneOpponentIsEngine()
+        if resignedPlayer == playerName or 
+           (isVsComputer and resignedPlayer ~= "Computer") then
             self:PlayLose()
         else
             self:PlayWin()
         end
-    elseif board.gameStatus == "timeout" then
+    elseif reason == DeltaChess.Constants.REASON_TIMEOUT then
         local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
-        if game.timeoutPlayer == playerName then
+        local timeoutPlayer = board:GetGameMeta("timeoutPlayer")
+        if timeoutPlayer == playerName then
             self:PlayLose()
         else
             self:PlayWin()

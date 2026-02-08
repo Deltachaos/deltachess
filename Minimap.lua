@@ -3,6 +3,9 @@
 DeltaChess.Minimap = {}
 
 local minimapButton
+local STATUS = {
+    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+}
 
 -- Detect WoW version for compatibility (with nil checks for older clients)
 local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
@@ -58,10 +61,11 @@ function DeltaChess.Minimap:Initialize()
             -- Resume most recent active game
             local mostRecentId, mostRecentTime = nil, 0
             if DeltaChess.db and DeltaChess.db.games then
-                for gameId, game in pairs(DeltaChess.db.games) do
-                    if game.status == "active" and game.startTime and game.startTime > mostRecentTime then
+                for gameId, board in pairs(DeltaChess.db.games) do
+                    local startTime = board:GetStartTime() or 0
+                    if board:IsActive() and startTime > mostRecentTime then
                         mostRecentId = gameId
-                        mostRecentTime = game.startTime
+                        mostRecentTime = startTime
                     end
                 end
             end
@@ -139,24 +143,6 @@ function DeltaChess.Minimap:Initialize()
     end
     
     self:UpdateDNDHighlight()
-
-    -- Periodically update "your turn" highlight (with fallback for Classic compatibility)
-    if C_Timer and C_Timer.NewTicker then
-        C_Timer.NewTicker(2, function()
-            DeltaChess.Minimap:UpdateYourTurnHighlight()
-        end)
-    else
-        -- Fallback: create a separate frame for updates (avoids conflicts with drag OnUpdate)
-        local updateFrame = CreateFrame("Frame")
-        local elapsed = 0
-        updateFrame:SetScript("OnUpdate", function(self, delta)
-            elapsed = elapsed + delta
-            if elapsed >= 2 then
-                elapsed = 0
-                DeltaChess.Minimap:UpdateYourTurnHighlight()
-            end
-        end)
-    end
 end
 
 -- Use .tga extension explicitly for Classic compatibility

@@ -1,7 +1,30 @@
 -- Core.lua - Main addon initialization and slash commands
 
-DeltaChess = {}
+DeltaChess = DeltaChess or {}
 DeltaChess.version = "1.0.0"
+
+-- Local reference for constants (set after Constants loads)
+local COLOR
+local STATUS
+
+-- Helper: create a repeating timer with Classic compatibility fallback
+-- Returns the ticker handle (C_Timer ticker or a Frame for the OnUpdate fallback)
+function DeltaChess.CreateTicker(intervalSeconds, callback)
+    if C_Timer and C_Timer.NewTicker then
+        return C_Timer.NewTicker(intervalSeconds, callback)
+    end
+    -- Classic fallback: use an OnUpdate frame
+    local frame = CreateFrame("Frame")
+    local elapsed = 0
+    frame:SetScript("OnUpdate", function(self, delta)
+        elapsed = elapsed + delta
+        if elapsed >= intervalSeconds then
+            elapsed = 0
+            callback()
+        end
+    end)
+    return frame
+end
 
 -- Frame for events
 local eventFrame = CreateFrame("Frame")
@@ -11,6 +34,14 @@ DeltaChess.frames = {}
 
 -- Initialize the addon
 local function Initialize()
+    -- Set local reference to constants now that all files are loaded
+    COLOR = DeltaChess.Constants.COLOR
+    STATUS = {
+        ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+        PAUSED = DeltaChess.Constants.STATUS_PAUSED,
+        ENDED = DeltaChess.Constants.STATUS_ENDED,
+    }
+    
     -- Initialize saved variables
     if not ChessDB then
         ChessDB = {
@@ -31,8 +62,17 @@ local function Initialize()
         ChessDB.settings.boardMinimized = false
     end
     
-    DeltaChess.db = ChessDB
+    -- Version check: if no version exists, clear games and history (old database format)
+    if not ChessDB.version then
+        ChessDB.games = {}
+        ChessDB.history = {}
+    end
     
+    -- Save current addon version
+    ChessDB.version = DeltaChess.version
+    
+    DeltaChess.db = ChessDB
+
     -- Register slash commands (slash names unchanged)
     SLASH_CHESS1 = "/chess"
     SlashCmdList["CHESS"] = function(msg)
@@ -69,32 +109,53 @@ local function Initialize()
             DeltaChess.Minimap:Initialize()
         end
     end)
+
+    -- Periodic ticker: archive ended games and update minimap highlight
+    DeltaChess.CreateTicker(2, function()
+        -- Move ended games from db.games to history
+        if DeltaChess.db and DeltaChess.db.games then
+            for gameId, board in pairs(DeltaChess.db.games) do
+                if board:IsEnded() then
+                    -- Update the frame before saving (which removes the board)
+                    if DeltaChess.UI and DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+                        DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
+                    end
+                    DeltaChess:SaveGameToHistory(board)
+                end
+            end
+        end
+
+        -- Update minimap your-turn highlight
+        if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+            DeltaChess.Minimap:UpdateYourTurnHighlight()
+        end
+    end)
 end
 
 -- Restore board metatables for saved games after addon reload
 function DeltaChess:RestoreSavedGames()
     if not self.db or not self.db.games then return end
     
-    for gameId, game in pairs(self.db.games) do
-        if game.board and not getmetatable(game.board) then
-            -- Restore the board metatable
-            setmetatable(game.board, {__index = DeltaChess.Board})
+    for gameId, board in pairs(self.db.games) do
+        -- Board IS the game - restore metatable directly
+        if board and not getmetatable(board) then
+            -- Restore the board metatable using the Board prototype
+            setmetatable(board, DeltaChess.Board.Prototype)
             
             -- Ensure the board has all required data structures
-            if not game.board.squares then
-                game.board.squares = {}
+            if not board.moves then
+                board.moves = {}
             end
-            if not game.board.moves then
-                game.board.moves = {}
+            if not board.gameMeta then
+                board.gameMeta = {}
             end
-            if not game.board.capturedPieces then
-                game.board.capturedPieces = {white = {}, black = {}}
+            -- Ensure board has started (for old saved games)
+            if not board:GetStartTime() then
+                board:StartGame()
             end
-            if not game.board.currentTurn then
-                game.board.currentTurn = "white"
-            end
-            if not game.board.gameStatus then
-                game.board.gameStatus = "active"
+            -- Ensure board has its ID stored
+            if not board:GetGameMeta("id") then
+                board:SetGameMeta("id", gameId)
             end
         end
     end
@@ -127,7 +188,7 @@ function DeltaChess:SlashCommand(input)
         end
     elseif command == "menu" or command == "help" then
         self:ShowMainMenu()
-    elseif command == "games" or command == "active" then
+    elseif command == "games" or command == STATUS.ACTIVE then
         self:ShowActiveGames()
     elseif command == "history" then
         self:ShowGameHistory()
@@ -166,15 +227,19 @@ end
 function DeltaChess:IsMyTurnInAnyGame()
     if not self.db or not self.db.games then return false end
     local playerName = self:GetFullPlayerName(UnitName("player"))
-    for _, game in pairs(self.db.games) do
-        if game.status == "active" and game.board then
-            local currentTurn = game.board.currentTurn or "white"
+    for _, board in pairs(self.db.games) do
+        if board:IsActive() then
+            local currentTurn = board:GetCurrentTurn()
             local isPlayerTurn
-            if game.isVsComputer then
-                isPlayerTurn = (currentTurn == (game.playerColor or "white"))
+            local isVsComputer = board:OneOpponentIsEngine()
+            if isVsComputer then
+                local playerColor = board:GetPlayerColor() or COLOR.WHITE
+                isPlayerTurn = (currentTurn == playerColor)
             else
-                isPlayerTurn = (game.white == playerName and currentTurn == "white") or
-                              (game.black == playerName and currentTurn == "black")
+                local white = board:GetWhitePlayerName()
+                local black = board:GetBlackPlayerName()
+                isPlayerTurn = (white == playerName and currentTurn == COLOR.WHITE) or
+                              (black == playerName and currentTurn == COLOR.BLACK)
             end
             if isPlayerTurn then return true end
         end
@@ -184,10 +249,11 @@ end
 
 -- Common: notify user that opponent moved and it's their turn (human or computer)
 function DeltaChess:NotifyItIsYourTurn(gameId, opponentDisplayName)
-    local game = self.db.games[gameId]
-    if not game or game.status ~= "active" then return end
+    local board = DeltaChess.GetBoard(gameId)
+    if not board then return end
+    if not board:IsActive() then return end
     
-    local lastMove = game.board.moves and game.board.moves[#game.board.moves]
+    local lastMove = board:GetLastMove()
     local moveNotation = lastMove and DeltaChess.UI:FormatMoveAlgebraic(lastMove) or ""
     if moveNotation ~= "" then
         self:Print(opponentDisplayName .. " played " .. moveNotation .. " - it's your turn!")
@@ -227,7 +293,7 @@ function DeltaChess:ShowMainMenu()
         frame:RegisterForDrag("LeftButton")
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-        frame:SetFrameStrata("FULLSCREEN_DIALOG") -- High z-index
+        frame:SetFrameStrata("DIALOG")
         frame:SetFrameLevel(100)
         frame.TitleText:SetText("DeltaChess (by Deltachaos)")
         
@@ -324,8 +390,8 @@ function DeltaChess:ShowSupportDialog()
         frame:RegisterForDrag("LeftButton")
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-        frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(250)
+        frame:SetFrameStrata("DIALOG")
+        frame:SetFrameLevel(200)
         frame.TitleText:SetText("DeltaChess - Support & License")
         
         local thankYou = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -385,7 +451,7 @@ function DeltaChess:ShowSupportDialog()
         
         -- Build engine credits from registered engines
         local creditLines = {}
-        for _, engine in pairs(DeltaChess.Engines.registry or {}) do
+        for _, engine in pairs(DeltaChess.Engines.Registry or {}) do
             local line = engine.name or engine.id
             if engine.author then
                 line = line .. " by " .. engine.author
@@ -465,102 +531,89 @@ function DeltaChess:RefreshMainMenuContent()
         region:SetParent(nil)
     end
     
-    -- Collect all games (active + history)
-    local allGames = {}
-    local playerName = self:GetFullPlayerName(UnitName("player"))
+    -- Collect all boards (active + history deserialized)
+    local allBoards = {}
     
-    -- Add active games first
-    for gameId, game in pairs(self.db.games) do
-        local currentTurn = game.board and game.board.currentTurn or "white"
-        local isPlayerTurn = false
-        local playerColor = nil
-        
-        if game.isVsComputer then
-            playerColor = game.playerColor
-            isPlayerTurn = (currentTurn == playerColor)
-        else
-            if game.white == playerName then
-                playerColor = "white"
-            elseif game.black == playerName then
-                playerColor = "black"
-            end
-            isPlayerTurn = (currentTurn == playerColor)
-        end
-        
-        local gameStatus = game.status or "active"
-        local isPaused = (gameStatus == "paused")
-        local windowShown = DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame:IsShown()
-        table.insert(allGames, {
-            id = gameId,
-            white = game.white,
-            black = game.black,
-            whiteClass = game.whiteClass,
-            blackClass = game.blackClass,
-            status = gameStatus,
-            startTime = game.startTime,
-            isVsComputer = game.isVsComputer,
-            moveCount = game.board and #game.board.moves or 0,
-            currentTurn = currentTurn,
-            isPlayerTurn = isPlayerTurn,
-            playerColor = playerColor,
-            settings = game.settings,
-            computerDifficulty = game.computerDifficulty,
-            computerEngine = game.computerEngine,
-            pausedByClose = game.pausedByClose,
-            windowShown = windowShown
-        })
+    -- Add active game boards
+    for _, board in pairs(self.db.games) do
+        table.insert(allBoards, board)
     end
     
-    -- Add completed games from history
-    for i, game in ipairs(self.db.history) do
-        table.insert(allGames, {
-            id = game.id,
-            white = game.white,
-            black = game.black,
-            whiteClass = game.whiteClass,
-            blackClass = game.blackClass,
-            status = "completed",
-            result = game.result,
-            date = game.date,
-            startTime = game.startTime or 0,
-            moveCount = game.moves and #game.moves or 0,
-            isVsComputer = game.isVsComputer,
-            playerColor = game.playerColor,
-            settings = game.settings,
-            computerDifficulty = game.computerDifficulty,
-            computerEngine = game.computerEngine,
-            moves = game.moves
-        })
+    -- Add history boards (deserialized; already have _endTime from serialization)
+    for _, entry in pairs(self.db.history) do
+        local board = self:DeserializeHistoryEntry(entry)
+        if board then
+            table.insert(allBoards, board)
+        end
     end
     
     -- Sort by start time (newest first)
-    table.sort(allGames, function(a, b)
-        return (a.startTime or 0) > (b.startTime or 0)
+    table.sort(allBoards, function(a, b)
+        return (a:GetStartTime() or 0) > (b:GetStartTime() or 0)
     end)
+    
+    -- Helper to compute player color and turn status
+    local playerName = self:GetFullPlayerName(UnitName("player"))
+    local function getPlayerInfo(board)
+        local isVsComputer = board:OneOpponentIsEngine()
+        local white = board:GetWhitePlayerName()
+        local black = board:GetBlackPlayerName()
+        local storedPlayerColor = board:GetPlayerColor()
+        local currentTurn = board:GetCurrentTurn()
+        local playerColor
+        
+        if isVsComputer then
+            playerColor = storedPlayerColor
+        else
+            if white == playerName then
+                playerColor = COLOR.WHITE
+            elseif black == playerName then
+                playerColor = COLOR.BLACK
+            end
+        end
+        
+        local isPlayerTurn = (currentTurn == playerColor)
+        return playerColor, isPlayerTurn, currentTurn
+    end
     
     -- Add entries
     local yOffset = 0
-    if #allGames == 0 then
+    if #allBoards == 0 then
         local noHistory = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         noHistory:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
         noHistory:SetText("No games played yet")
         noHistory:SetTextColor(0.5, 0.5, 0.5)
     else
-        local displayCount = math.min(#allGames, 30)
+        local displayCount = math.min(#allBoards, 30)
         for i = 1, displayCount do
-            local game = allGames[i]
+            local board = allBoards[i]
+            local gameId = board:GetGameMeta("id")
+            local isActive = board:IsActive()
+            local isPaused = board:IsPaused()
+            local isVsComputer = board:OneOpponentIsEngine()
+            local white = board:GetWhitePlayerName()
+            local black = board:GetBlackPlayerName()
+            local settings = board:GetGameMeta("settings")
+            local computerEngine = board:GetEngineId()
+            local computerDifficulty = board:GetEngineElo()
+            local moveCount = board:GetHalfMoveCount()
+            local result = board:GetGameResult()
+            local gameDate = board:GetStartDateString()
+            
+            local playerColor, isPlayerTurn, _ = getPlayerInfo(board)
+            local windowShown = DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame:IsShown()
             
             local entry = CreateFrame("Button", nil, scrollChild)
-            entry:SetSize(400, 60)
+            entry:SetSize(400, 72)
             entry:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -yOffset)
             
             -- Background
             local bg = entry:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints()
-            if game.status == "active" or game.status == "paused" then
-                if game.status == "paused" then
+            if isActive or isPaused then
+                if isPaused then
                     bg:SetColorTexture(0.2, 0.2, 0.0, 0.7) -- Yellow tint - paused
-                elseif game.isPlayerTurn then
+                elseif isPlayerTurn then
                     bg:SetColorTexture(0.0, 0.3, 0.0, 0.7) -- Bright green - your turn
                 else
                     bg:SetColorTexture(0.1, 0.15, 0.1, 0.6) -- Dim green - waiting
@@ -574,51 +627,31 @@ function DeltaChess:RefreshMainMenuContent()
             -- Game info (opponents with class colors)
             local info = entry:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             info:SetPoint("TOPLEFT", entry, "TOPLEFT", 5, -4)
+            info:SetText(DeltaChess.UI:FormatGameTitle(board))
             
-            -- Get class colors for both players (use saved class if available)
-            local whiteR, whiteG, whiteB = DeltaChess.UI:GetPlayerColor(game.white or "?", game.whiteClass)
-            local blackR, blackG, blackB = DeltaChess.UI:GetPlayerColor(game.black or "?", game.blackClass)
-            
-            -- Convert to hex color codes
-            local whiteHex = string.format("|cFF%02X%02X%02X", whiteR * 255, whiteG * 255, whiteB * 255)
-            local blackHex = string.format("|cFF%02X%02X%02X", blackR * 255, blackG * 255, blackB * 255)
-            
-            -- Format names (remove realm for display, show engine name for computer games)
-            local whiteName = (game.white or "?"):match("^([^%-]+)") or game.white or "?"
-            local blackName = (game.black or "?"):match("^([^%-]+)") or game.black or "?"
-            
-            -- Replace "Computer" with "Computer (engine)" for vs computer games
-            if game.isVsComputer and game.computerEngine then
-                local engine = DeltaChess.Engines:Get(game.computerEngine)
-                local engineName = engine and engine.name or game.computerEngine
-                if whiteName == "Computer" then
-                    whiteName = "Computer (" .. engineName .. ")"
-                end
-                if blackName == "Computer" then
-                    blackName = "Computer (" .. engineName .. ")"
-                end
-            end
-            
-            info:SetText(string.format("%s%s|r vs %s%s|r", whiteHex, whiteName, blackHex, blackName))
+            -- Date line
+            local dateText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            dateText:SetPoint("TOPLEFT", info, "BOTTOMLEFT", 0, -1)
+            dateText:SetText("|cFFAAAAAADate: " .. (gameDate or "Unknown") .. "|r")
             
             -- Settings line (color, clock, difficulty)
             local settingsText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            settingsText:SetPoint("TOPLEFT", info, "BOTTOMLEFT", 0, -1)
+            settingsText:SetPoint("TOPLEFT", dateText, "BOTTOMLEFT", 0, -1)
             
             local settingsParts = {}
-            if game.playerColor then
-                table.insert(settingsParts, "You: " .. game.playerColor)
+            if playerColor then
+                table.insert(settingsParts, "You: " .. playerColor)
             end
-            if game.isVsComputer and game.computerDifficulty then
-                local d = game.computerDifficulty
+            if isVsComputer and computerDifficulty then
+                local d = computerDifficulty
                 local diffStr = type(d) == "number" and (tostring(d) .. " ELO") or "~1200 ELO"
                 table.insert(settingsParts, "AI: " .. diffStr)
             end
-            if game.settings then
-                if game.settings.useClock then
+            if settings then
+                if settings.useClock then
                     table.insert(settingsParts, string.format("Clock: %dm +%ds", 
-                        game.settings.timeMinutes or 10, 
-                        game.settings.incrementSeconds or 0))
+                        settings.timeMinutes or 10, 
+                        settings.incrementSeconds or 0))
                 else
                     table.insert(settingsParts, "No clock")
                 end
@@ -628,49 +661,31 @@ function DeltaChess:RefreshMainMenuContent()
             -- Status/Result line
             local statusText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             statusText:SetPoint("TOPLEFT", settingsText, "BOTTOMLEFT", 0, -1)
-            
-            if game.status == "active" or game.status == "paused" then
-                if game.status == "paused" then
-                    statusText:SetText("|cFFFFFF00Paused|r - " .. game.moveCount .. " moves")
-                else
-                    local turnText = game.isPlayerTurn and "|cFF00FF00YOUR TURN|r" or "|cFFFFFF00Waiting...|r"
-                    statusText:SetText(string.format("%s - %d moves", turnText, game.moveCount))
-                end
-            else
-                local resultColor = "|cFFFFFFFF"
-                if game.result == "won" then
-                    resultColor = "|cFF00FF00"
-                elseif game.result == "lost" or game.result == "resigned" then
-                    resultColor = "|cFFFF0000"
-                elseif game.result == "draw" then
-                    resultColor = "|cFFFFFF00"
-                end
-                statusText:SetText(string.format("%s%s|r - %d moves - %s", resultColor, game.result or "Unknown", game.moveCount, game.date or "Unknown"))
-            end
+            local resultStr = DeltaChess.UI:GetGameStatusText(board, playerColor)
+            statusText:SetText(string.format("%s - %d moves", resultStr, moveCount))
             
             -- Buttons
-            if game.status == "active" or game.status == "paused" then
-                local isPaused = (game.status == "paused")
-                local isHumanWindowHidden = not game.isVsComputer and not game.windowShown
+            if isActive or isPaused then
+                local isHumanWindowHidden = not isVsComputer and not windowShown
                 local btnText, btnAction
-                if isPaused and not game.isVsComputer then
+                if isPaused and not isVsComputer then
                     btnText = "Resume"
                     btnAction = function()
                         self.frames.mainMenu:Hide()
-                        DeltaChess:RequestUnpause(game.id)
-                        DeltaChess:ShowChessBoard(game.id)
+                        DeltaChess:RequestUnpause(gameId)
+                        DeltaChess:ShowChessBoard(gameId)
                     end
                 elseif isHumanWindowHidden and not isPaused then
                     btnText = "Open"
                     btnAction = function()
                         self.frames.mainMenu:Hide()
-                        DeltaChess:ShowChessBoard(game.id)
+                        DeltaChess:ShowChessBoard(gameId)
                     end
                 else
                     btnText = "Resume"
                     btnAction = function()
                         self.frames.mainMenu:Hide()
-                        DeltaChess:ShowChessBoard(game.id)
+                        DeltaChess:ShowChessBoard(gameId)
                     end
                 end
                 local resumeBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
@@ -684,9 +699,18 @@ function DeltaChess:RefreshMainMenuContent()
                 resignBtn:SetPoint("RIGHT", resumeBtn, "LEFT", -3, 0)
                 resignBtn:SetText("Resign")
                 resignBtn:SetScript("OnClick", function()
-                    DeltaChess._resignConfirmGameId = game.id
-                    StaticPopup_Show("CHESS_RESIGN_CONFIRM", nil, nil, game.id)
+                    DeltaChess._resignConfirmGameId = gameId
+                    DeltaChess.UI:ShowGamePopup(gameId, "CHESS_RESIGN_CONFIRM", nil, gameId)
                     DeltaChess:RefreshMainMenuContent()
+                end)
+                
+                -- PGN button for active/paused games
+                local pgnBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
+                pgnBtn:SetSize(40, 22)
+                pgnBtn:SetPoint("RIGHT", resignBtn, "LEFT", -3, 0)
+                pgnBtn:SetText("PGN")
+                pgnBtn:SetScript("OnClick", function()
+                    DeltaChess:ShowPGNWindow(board)
                 end)
             else
                 -- Delete button for completed games
@@ -695,7 +719,7 @@ function DeltaChess:RefreshMainMenuContent()
                 deleteBtn:SetPoint("RIGHT", entry, "RIGHT", -5, 0)
                 deleteBtn:SetText("X")
                 deleteBtn:SetScript("OnClick", function()
-                    DeltaChess:DeleteFromHistory(game.id)
+                    DeltaChess:DeleteFromHistory(gameId)
                     DeltaChess:RefreshMainMenuContent() -- Refresh without closing
                 end)
                 
@@ -706,11 +730,20 @@ function DeltaChess:RefreshMainMenuContent()
                 replayBtn:SetText("Replay")
                 replayBtn:SetScript("OnClick", function()
                     self.frames.mainMenu:Hide()
-                    DeltaChess:ShowReplayWindow(game)
+                    DeltaChess:ShowReplayWindow(board)
+                end)
+                
+                -- PGN button for completed games
+                local pgnBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
+                pgnBtn:SetSize(40, 22)
+                pgnBtn:SetPoint("RIGHT", replayBtn, "LEFT", -3, 0)
+                pgnBtn:SetText("PGN")
+                pgnBtn:SetScript("OnClick", function()
+                    DeltaChess:ShowPGNWindow(board)
                 end)
             end
             
-            yOffset = yOffset + 62
+            yOffset = yOffset + 74
         end
     end
     
@@ -720,7 +753,7 @@ end
 --------------------------------------------------------------------------------
 -- REPLAY WINDOW
 --------------------------------------------------------------------------------
-function DeltaChess:ShowReplayWindow(gameData)
+function DeltaChess:ShowReplayWindow(board)
     -- Close existing replay window
     if self.frames.replayWindow then
         self.frames.replayWindow:Hide()
@@ -733,27 +766,16 @@ function DeltaChess:ShowReplayWindow(gameData)
     local RIGHT_PANEL_WIDTH = 220
     local CAPTURED_PIECE_SIZE = 18
     
-    -- Determine board orientation and player info
-    local playerName = self:GetFullPlayerName(UnitName("player"))
-    local flipBoard = (gameData.black == playerName) or (gameData.playerColor == "black")
-    
-    -- Determine who is "me" and who is "opponent"
-    local myName, opponentName, myChessColor, opponentChessColor, myClass, opponentClass
-    if flipBoard then
-        myName = gameData.black or "Black"
-        opponentName = gameData.white or "White"
-        myChessColor = "black"
-        opponentChessColor = "white"
-        myClass = gameData.blackClass
-        opponentClass = gameData.whiteClass
-    else
-        myName = gameData.white or "White"
-        opponentName = gameData.black or "Black"
-        myChessColor = "white"
-        opponentChessColor = "black"
-        myClass = gameData.whiteClass
-        opponentClass = gameData.blackClass
-    end
+    -- Get participant info using shared helper
+    local participants = DeltaChess.UI:GetBoardParticipants(board)
+    local myName = participants.myName
+    local opponentName = participants.opponentName
+    local myChessColor = participants.myChessColor
+    local opponentChessColor = participants.opponentChessColor
+    local myClass = participants.myClass
+    local opponentClass = participants.opponentClass
+    local flipBoard = participants.flipBoard
+    -- Replay always shows time per side: clock if that side has one, else thinking time
     
     -- Create replay frame
     local totalWidth = LABEL_SIZE + BOARD_SIZE + 15 + RIGHT_PANEL_WIDTH + 15
@@ -768,13 +790,17 @@ function DeltaChess:ShowReplayWindow(gameData)
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    frame:SetFrameLevel(100)
+    frame:SetFrameLevel(250)
     frame.TitleText:SetText("Replay")
     
     self.frames.replayWindow = frame
     
-    -- Store replay state
-    frame.moves = gameData.moves or {}
+    -- Store replay state: full board (for GetBoardAtIndex) and move list for history/animation
+    frame.replayBoard = board
+    frame.moves = {}
+    for i, moveData in ipairs(board:GetMoveHistory() or {}) do
+        frame.moves[i] = DeltaChess.BoardMove.Wrap(moveData, nil, i)
+    end
     frame.currentMoveIndex = 0
     frame.myChessColor = myChessColor
     frame.opponentChessColor = opponentChessColor
@@ -783,34 +809,24 @@ function DeltaChess:ShowReplayWindow(gameData)
     local topOffset = -30
     
     -- ==================== OPPONENT BAR (TOP) ====================
-    local opponentBar = CreateFrame("Frame", nil, frame)
-    opponentBar:SetSize(LABEL_SIZE + BOARD_SIZE, PLAYER_BAR_HEIGHT)
-    opponentBar:SetPoint("TOPLEFT", frame, "TOPLEFT", leftMargin, topOffset)
-    
-    local opponentBg = opponentBar:CreateTexture(nil, "BACKGROUND")
-    opponentBg:SetAllPoints()
-    opponentBg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
-    
-    -- Opponent name with class color (show "Computer (engine - ELO)" for computer games)
-    local displayOpponentName = opponentName:match("^([^%-]+)") or opponentName
-    if gameData.isVsComputer and opponentName == "Computer" and gameData.computerEngine then
-        local engine = DeltaChess.Engines:Get(gameData.computerEngine)
-        local engineName = engine and engine.name or gameData.computerEngine
-        local eloStr = gameData.computerDifficulty and (" - " .. gameData.computerDifficulty .. " ELO") or ""
-        displayOpponentName = "Computer (" .. engineName .. eloStr .. ")"
-    end
-    local opR, opG, opB = DeltaChess.UI:GetPlayerColor(opponentName, opponentClass)
-    local opponentNameText = opponentBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    opponentNameText:SetPoint("LEFT", opponentBar, "LEFT", 5, 8)
-    opponentNameText:SetTextColor(opR, opG, opB)
-    opponentNameText:SetText(displayOpponentName)
-    
-    -- Opponent captured pieces container
-    local opponentCapturedContainer = CreateFrame("Frame", nil, opponentBar)
-    opponentCapturedContainer:SetSize(200, CAPTURED_PIECE_SIZE)
-    opponentCapturedContainer:SetPoint("LEFT", opponentBar, "LEFT", 5, -10)
-    frame.opponentCapturedContainer = opponentCapturedContainer
+    local opponentBarInfo = DeltaChess.UI:CreatePlayerBar({
+        parent = frame,
+        anchorFrame = frame,
+        anchorPoint = "TOPLEFT",
+        anchorRelPoint = "TOPLEFT",
+        offsetX = leftMargin,
+        offsetY = topOffset,
+        playerName = opponentName,
+        playerClass = opponentClass,
+        board = board,
+        showClock = true,
+        chessColor = opponentChessColor,
+    })
+    local opponentBar = opponentBarInfo.bar
+    frame.opponentCapturedContainer = opponentBarInfo.capturedContainer
     frame.opponentCapturedColor = myChessColor
+    frame.opponentClock = opponentBarInfo.timeDisplay
+    frame.opponentClockColor = opponentChessColor
     
     -- ==================== BOARD ====================
     local boardContainer = CreateFrame("Frame", nil, frame)
@@ -821,34 +837,24 @@ function DeltaChess:ShowReplayWindow(gameData)
     frame.squares = DeltaChess.UI:CreateBoardSquares(boardContainer, SQUARE_SIZE, LABEL_SIZE, flipBoard, false)
     
     -- ==================== PLAYER BAR (BOTTOM) ====================
-    local playerBar = CreateFrame("Frame", nil, frame)
-    playerBar:SetSize(LABEL_SIZE + BOARD_SIZE, PLAYER_BAR_HEIGHT)
-    playerBar:SetPoint("TOPLEFT", boardContainer, "BOTTOMLEFT", 0, 0)
-    
-    local playerBg = playerBar:CreateTexture(nil, "BACKGROUND")
-    playerBg:SetAllPoints()
-    playerBg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
-    
-    -- Player name with class color (show "Computer (engine - ELO)" for computer games)
-    local displayMyName = myName:match("^([^%-]+)") or myName
-    if gameData.isVsComputer and myName == "Computer" and gameData.computerEngine then
-        local engine = DeltaChess.Engines:Get(gameData.computerEngine)
-        local engineName = engine and engine.name or gameData.computerEngine
-        local eloStr = gameData.computerDifficulty and (" - " .. gameData.computerDifficulty .. " ELO") or ""
-        displayMyName = "Computer (" .. engineName .. eloStr .. ")"
-    end
-    local plR, plG, plB = DeltaChess.UI:GetPlayerColor(myName, myClass)
-    local playerNameText = playerBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    playerNameText:SetPoint("LEFT", playerBar, "LEFT", 5, 8)
-    playerNameText:SetTextColor(plR, plG, plB)
-    playerNameText:SetText(displayMyName)
-    
-    -- Player captured pieces container
-    local playerCapturedContainer = CreateFrame("Frame", nil, playerBar)
-    playerCapturedContainer:SetSize(200, CAPTURED_PIECE_SIZE)
-    playerCapturedContainer:SetPoint("LEFT", playerBar, "LEFT", 5, -10)
-    frame.playerCapturedContainer = playerCapturedContainer
+    local playerBarInfo = DeltaChess.UI:CreatePlayerBar({
+        parent = frame,
+        anchorFrame = boardContainer,
+        anchorPoint = "TOPLEFT",
+        anchorRelPoint = "BOTTOMLEFT",
+        offsetX = 0,
+        offsetY = 0,
+        playerName = myName,
+        playerClass = myClass,
+        board = board,
+        showClock = true,
+        chessColor = myChessColor,
+    })
+    local playerBar = playerBarInfo.bar
+    frame.playerCapturedContainer = playerBarInfo.capturedContainer
     frame.playerCapturedColor = opponentChessColor
+    frame.playerClock = playerBarInfo.timeDisplay
+    frame.playerClockColor = myChessColor
     
     -- ==================== RIGHT PANEL ====================
     local rightPanel = CreateFrame("Frame", nil, frame)
@@ -856,31 +862,14 @@ function DeltaChess:ShowReplayWindow(gameData)
     rightPanel:SetPoint("TOPLEFT", opponentBar, "TOPRIGHT", 10, 0)
     
     -- Move history scroll frame
-    local historyHeight = rightPanel:GetHeight() - 80
-    
-    local historyLabel = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    historyLabel:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 0, 0)
-    historyLabel:SetText("Moves")
-    
-    local historyBg = rightPanel:CreateTexture(nil, "BACKGROUND")
-    historyBg:SetPoint("TOPLEFT", historyLabel, "BOTTOMLEFT", 0, -5)
-    historyBg:SetSize(RIGHT_PANEL_WIDTH, historyHeight - 20)
-    historyBg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
-    
-    local historyScroll = CreateFrame("ScrollFrame", nil, rightPanel, "UIPanelScrollFrameTemplate")
-    historyScroll:SetPoint("TOPLEFT", historyBg, "TOPLEFT", 5, -5)
-    historyScroll:SetSize(RIGHT_PANEL_WIDTH - 30, historyHeight - 30)
-    
-    local historyScrollChild = CreateFrame("Frame", nil, historyScroll)
-    historyScrollChild:SetSize(RIGHT_PANEL_WIDTH - 35, 500)
-    historyScroll:SetScrollChild(historyScrollChild)
-    
-    local historyText = historyScrollChild:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    historyText:SetPoint("TOPLEFT", historyScrollChild, "TOPLEFT", 0, 0)
-    historyText:SetWidth(RIGHT_PANEL_WIDTH - 40)
-    historyText:SetJustifyH("LEFT")
-    historyText:SetSpacing(2)
-    frame.historyText = historyText
+    local historyHeight = rightPanel:GetHeight() - 100
+    local historyInfo = DeltaChess.UI:CreateMoveHistoryScroller({
+        parent = rightPanel,
+        width = RIGHT_PANEL_WIDTH,
+        height = historyHeight,
+        includeLabel = true,
+    })
+    frame.historyText = historyInfo.historyText
     
     -- Move counter / position label
     local moveLabel = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -923,76 +912,59 @@ function DeltaChess:ShowReplayWindow(gameData)
     
     -- Update display function (animateMove: optional move to animate after rendering)
     local function UpdateReplayBoard(animateMove)
-        local board = DeltaChess.UI:GetInitialBoardState()
-        local capturedByWhite = {}
-        local capturedByBlack = {}
+        -- Get board state at current move index (paused snapshot with same opponents/startTime/moves up to index)
+        local snapshotBoard = frame.replayBoard:GetBoardAtIndex(frame.currentMoveIndex)
         
-        -- Apply moves and track captures (use move data, not board state, to handle promotions correctly)
-        for i = 1, frame.currentMoveIndex do
-            local move = frame.moves[i]
-            if move then
-                local movingColor = move.color
-                
-                -- Track captured piece using move data (handles promoted pieces correctly)
-                if move.captured or move.capturedType then
-                    local capturedType = move.capturedType or "pawn"
-                    local capturedColor = movingColor == "white" and "black" or "white"
-                    local capturedPiece = {type = capturedType, color = capturedColor}
-                    
-                    if movingColor == "white" then
-                        table.insert(capturedByWhite, capturedPiece)
-                    else
-                        table.insert(capturedByBlack, capturedPiece)
-                    end
-                end
-            end
-        end
-        
-        -- Apply moves to get current board state
-        board = DeltaChess.UI:ApplyMovesToBoard(DeltaChess.UI:GetInitialBoardState(), frame.moves, frame.currentMoveIndex)
-        
-        local lastMove = frame.currentMoveIndex > 0 and frame.moves[frame.currentMoveIndex] or nil
-        DeltaChess.UI:RenderPieces(frame.squares, board, lastMove)
+        -- Render the field using the snapshot board like the normal board (same rendering path)
+        local lastMove = snapshotBoard:GetLastMove()
+        DeltaChess.UI:RenderPieces(frame.squares, snapshotBoard, lastMove)
         
         -- Update move counter
         frame.moveLabel:SetText(string.format("Move: %d / %d", frame.currentMoveIndex, #frame.moves))
         
         -- Update move history with highlighting for current move
-        local historyStr = ""
-        for i, move in ipairs(frame.moves) do
-            if i % 2 == 1 then
-                historyStr = historyStr .. "|cFFAAAAAA" .. math.ceil(i / 2) .. ".|r "
-            end
-            
-            local notation = DeltaChess.UI:FormatMoveAlgebraic(move)
-            
-            -- Highlight current move
-            if i == frame.currentMoveIndex then
-                notation = "|cFFFFFF00[" .. notation .. "]|r"
-            end
-            
-            historyStr = historyStr .. notation .. " "
-            
-            if i % 2 == 0 then
-                historyStr = historyStr .. "\n"
-            end
-        end
+        local historyStr = DeltaChess.UI:FormatMoveHistoryText(frame.moves, frame.currentMoveIndex)
         frame.historyText:SetText(historyStr)
         
-        -- Update captured pieces display
-        local advantage = DeltaChess.UI:CalculateMaterialAdvantage(capturedByWhite, capturedByBlack)
-        local myAdvantage = myChessColor == "white" and advantage or -advantage
-        
-        -- My captured pieces (what I captured)
-        local myCaptured = myChessColor == "white" and capturedByWhite or capturedByBlack
+        -- Update captured pieces display from snapshot board
+        local myAdvantage = snapshotBoard:CalculateMaterialAdvantage(myChessColor)
+        local capturedByWhite = snapshotBoard:GetCapturedPiecesWhite()
+        local capturedByBlack = snapshotBoard:GetCapturedPiecesBlack()
+        local myCaptured = myChessColor == COLOR.WHITE and capturedByWhite or capturedByBlack
+        local opponentCaptured = opponentChessColor == COLOR.WHITE and capturedByWhite or capturedByBlack
         DeltaChess.UI:UpdateCapturedPieces(frame.playerCapturedContainer, myCaptured,
             frame.playerCapturedColor, myAdvantage > 0 and myAdvantage or nil)
-        
-        -- Opponent captured pieces
-        local opponentCaptured = opponentChessColor == "white" and capturedByWhite or capturedByBlack
-        local opponentAdvantage = -myAdvantage
         DeltaChess.UI:UpdateCapturedPieces(frame.opponentCapturedContainer, opponentCaptured,
-            frame.opponentCapturedColor, opponentAdvantage > 0 and opponentAdvantage or nil)
+            frame.opponentCapturedColor, (-myAdvantage) > 0 and (-myAdvantage) or nil)
+        
+        -- Update time per side: remaining clock if that side has a clock, else thinking time
+        if frame.playerClock or frame.opponentClock then
+            local snapshotTime = (frame.currentMoveIndex == 0) and snapshotBoard:GetStartTime()
+                or (frame.moves[frame.currentMoveIndex] and frame.moves[frame.currentMoveIndex]:GetTimestamp())
+                or snapshotBoard:GetStartTime()
+            if frame.playerClock then
+                local myHasClock = (snapshotBoard:GetClock(myChessColor) or 0) > 0
+                local myTime = myHasClock and snapshotBoard:TimeLeft(myChessColor, snapshotTime) or snapshotBoard:TimeThinking(myChessColor, snapshotTime)
+                frame.playerClock:SetText(DeltaChess.UI:FormatTime(myTime or 0))
+                frame.playerClock:Show()
+            end
+            if frame.opponentClock then
+                local oppHasClock = (snapshotBoard:GetClock(opponentChessColor) or 0) > 0
+                local oppTime = oppHasClock and snapshotBoard:TimeLeft(opponentChessColor, snapshotTime) or snapshotBoard:TimeThinking(opponentChessColor, snapshotTime)
+                frame.opponentClock:SetText(DeltaChess.UI:FormatTime(oppTime or 0))
+                frame.opponentClock:Show()
+            end
+        end
+        
+        -- Play move sound when advancing (same as game window)
+        if animateMove then
+            local wasCapture = animateMove:IsCapture()
+            -- Snapshot is state after the move; current turn is the side that has to move next, so the side that just moved is the opposite
+            local currentTurn = snapshotBoard:GetCurrentTurn()
+            local movedColor = (currentTurn == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
+            local isPlayerMove = (movedColor == frame.myChessColor)
+            DeltaChess.Sound:PlayMoveSound(snapshotBoard, isPlayerMove, wasCapture, snapshotBoard)
+        end
         
         -- Animate the move if requested
         if animateMove then
@@ -1036,6 +1008,86 @@ function DeltaChess:ShowReplayWindow(gameData)
 end
 
 --------------------------------------------------------------------------------
+-- PGN WINDOW
+--------------------------------------------------------------------------------
+function DeltaChess:ShowPGNWindow(board)
+    if not board or not board.GetPGN then return end
+    local pgn = board:GetPGN()
+    if not pgn or pgn == "" then pgn = "(no PGN)" end
+
+    -- Create PGN window once and reuse
+    if not self.frames.pgnWindow then
+        local frame = CreateFrame("Frame", "ChessPGNFrame", UIParent, "BasicFrameTemplateWithInset")
+        frame:SetSize(450, 380)
+        frame:SetPoint("CENTER")
+        frame:SetMovable(true)
+        frame:EnableMouse(true)
+        frame:RegisterForDrag("LeftButton")
+        frame:SetScript("OnDragStart", frame.StartMoving)
+        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        frame:SetFrameLevel(300)  -- Above board (250) so PGN window stays on top
+        frame.TitleText:SetText("PGN")
+
+        -- Background behind the scroll area (ARTWORK layer so it draws above the frame's own background)
+        local editBg = frame:CreateTexture(nil, "ARTWORK", nil, -1)
+        editBg:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -32)
+        editBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -35, 10)
+        editBg:SetColorTexture(0.1, 0.1, 0.15, 0.95)
+
+        -- ScrollFrame = viewport; the EditBox IS the scroll child (standard WoW pattern)
+        local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+        scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -32)
+        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -35, 10)
+
+        local editBox = CreateFrame("EditBox", nil, scrollFrame)
+        editBox:SetMultiLine(true)
+        editBox:SetAutoFocus(false)
+        editBox:SetFontObject(GameFontHighlightSmall)
+        editBox:SetTextInsets(6, 6, 6, 6)
+        editBox:SetMaxLetters(99999)
+        editBox:SetWidth(400)
+        editBox:SetScript("OnEscapePressed", function()
+            frame:Hide()
+        end)
+        -- Update scroll range when text changes so scrollbar knows content height
+        editBox:SetScript("OnTextChanged", function(self)
+            local sf = self:GetParent()
+            sf:UpdateScrollChildRect()
+        end)
+        -- Mouse wheel on EditBox forwards to ScrollFrame
+        editBox:SetScript("OnCursorChanged", function(self, x, y, w, h)
+            local sf = self:GetParent()
+            local vs = sf:GetVerticalScroll()
+            local sfHeight = sf:GetHeight()
+            -- y is negative offset from top of editbox
+            local cursorTop = -y
+            local cursorBottom = cursorTop + h
+            if cursorTop < vs then
+                sf:SetVerticalScroll(cursorTop)
+            elseif cursorBottom > vs + sfHeight then
+                sf:SetVerticalScroll(cursorBottom - sfHeight)
+            end
+        end)
+
+        scrollFrame:SetScrollChild(editBox)
+
+        frame.pgnScrollFrame = scrollFrame
+        frame.pgnEditBox = editBox
+        self.frames.pgnWindow = frame
+    end
+
+    local frame = self.frames.pgnWindow
+    frame:SetFrameLevel(300)  -- Ensure on top each time we show
+    frame.pgnEditBox:SetText(pgn)
+    frame.pgnEditBox:SetCursorPosition(0)
+    frame.pgnScrollFrame:SetVerticalScroll(0)
+    frame:Show()
+    frame.pgnEditBox:HighlightText()
+    frame.pgnEditBox:SetFocus()
+end
+
+--------------------------------------------------------------------------------
 -- RECENT OPPONENTS
 --------------------------------------------------------------------------------
 function DeltaChess:GetRecentOpponents()
@@ -1051,15 +1103,20 @@ function DeltaChess:GetRecentOpponents()
         end
     end
 
-    for _, game in pairs(self.db.games) do
-        local ts = game.startTime or 0
-        addOpponent(game.white, ts)
-        addOpponent(game.black, ts)
+    -- Active games (board IS the game)
+    for _, board in pairs(self.db.games) do
+        local ts = board:GetStartTime() or 0
+        addOpponent(board:GetWhitePlayerName(), ts)
+        addOpponent(board:GetBlackPlayerName(), ts)
     end
-    for _, game in ipairs(self.db.history) do
-        local ts = game.startTime or 0
-        addOpponent(game.white, ts)
-        addOpponent(game.black, ts)
+    -- History games (deserialize to board)
+    for _, entry in pairs(self.db.history) do
+        local board = self:DeserializeHistoryEntry(entry)
+        if board then
+            local ts = board:GetStartTime() or 0
+            addOpponent(board:GetWhitePlayerName(), ts)
+            addOpponent(board:GetBlackPlayerName(), ts)
+        end
     end
 
     local list = {}
@@ -1103,6 +1160,29 @@ function DeltaChess:GetGuildOnlineFullNames()
         if name and online and name ~= myName then
             local fullName = name:find("-") and name or (name .. "-" .. GetRealmName())
             table.insert(out, fullName)
+        end
+    end
+    return out
+end
+
+-- Get list of party/raid member full names (excludes self)
+function DeltaChess:GetPartyFullNames()
+    local out = {}
+    local myName = self:GetFullPlayerName(UnitName("player"))
+    local numGroup = GetNumGroupMembers()
+    if numGroup <= 0 then return out end
+    local prefix = IsInRaid() and "raid" or "party"
+    local count = IsInRaid() and numGroup or (numGroup - 1) -- party units don't include "player"
+    for i = 1, count do
+        local unit = prefix .. i
+        if UnitExists(unit) and UnitIsPlayer(unit) and UnitIsConnected(unit) then
+            local name = UnitName(unit)
+            if name then
+                local fullName = self:GetFullPlayerName(name)
+                if fullName ~= myName then
+                    table.insert(out, fullName)
+                end
+            end
         end
     end
     return out
@@ -1172,7 +1252,7 @@ end
 -- PLAYER LIST POPUP (online + addon only)
 --------------------------------------------------------------------------------
 function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
-    -- source: "past", "guild", "friends"
+    -- source: "past", "guild", "friends", "party"
     local candidates = {}
     if source == "past" then
         candidates = self:GetPastOpponentsFullNames()
@@ -1180,6 +1260,8 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
         candidates = self:GetGuildOnlineFullNames()
     elseif source == "friends" then
         candidates = self:GetFriendsOnlineFullNames()
+    elseif source == "party" then
+        candidates = self:GetPartyFullNames()
     end
     local myName = self:GetFullPlayerName(UnitName("player"))
     local filtered = {}
@@ -1193,14 +1275,14 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     local popup = CreateFrame("Frame", nil, parentFrame, "BasicFrameTemplateWithInset")
     popup:SetSize(320, 380)
     popup:SetPoint("CENTER", parentFrame, "CENTER", 0, 0)
-    popup:SetFrameStrata("FULLSCREEN_DIALOG")
+    popup:SetFrameStrata("DIALOG")
     popup:SetFrameLevel(parentFrame:GetFrameLevel() + 50)
     popup:SetMovable(true)
     popup:EnableMouse(true)
     popup:RegisterForDrag("LeftButton")
     popup:SetScript("OnDragStart", popup.StartMoving)
     popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
-    local titleMap = { past = "Recent", guild = "Guild", friends = "Friends" }
+    local titleMap = { past = "Recent", guild = "Guild", friends = "Friends", party = "Party" }
     popup.TitleText:SetText(titleMap[source] or "Select Player")
 
     local statusText = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1270,15 +1352,16 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     -- Create challenge window if it doesn't exist
     if not self.frames.challengeWindow then
         local frame = CreateFrame("Frame", "ChessChallengeWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(350, 480)
+        local BASE_CHALLENGE_HEIGHT = 320
+        frame:SetSize(350, BASE_CHALLENGE_HEIGHT)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
         frame:RegisterForDrag("LeftButton")
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-        frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(100)
+        frame:SetFrameStrata("DIALOG")
+        frame:SetFrameLevel(150)
         frame.TitleText:SetText("Challenge Player")
         
         local yPos = -35
@@ -1291,7 +1374,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         yPos = yPos - 24
         
         local pastBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        pastBtn:SetSize(105, 24)
+        pastBtn:SetSize(76, 24)
         pastBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         pastBtn:SetText("Recent")
         pastBtn:SetScript("OnClick", function()
@@ -1301,7 +1384,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         end)
         
         local guildBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        guildBtn:SetSize(105, 24)
+        guildBtn:SetSize(76, 24)
         guildBtn:SetPoint("LEFT", pastBtn, "RIGHT", 5, 0)
         guildBtn:SetText("Guild")
         guildBtn:SetScript("OnClick", function()
@@ -1311,11 +1394,21 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         end)
         
         local friendsBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        friendsBtn:SetSize(105, 24)
+        friendsBtn:SetSize(76, 24)
         friendsBtn:SetPoint("LEFT", guildBtn, "RIGHT", 5, 0)
         friendsBtn:SetText("Friends")
         friendsBtn:SetScript("OnClick", function()
             DeltaChess:ShowPlayerListPopup("friends", frame, function(fullName)
+                frame.nameInput:SetText(fullName)
+            end)
+        end)
+        
+        local partyBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        partyBtn:SetSize(76, 24)
+        partyBtn:SetPoint("LEFT", friendsBtn, "RIGHT", 5, 0)
+        partyBtn:SetText("Party")
+        partyBtn:SetScript("OnClick", function()
+            DeltaChess:ShowPlayerListPopup("party", frame, function(fullName)
                 frame.nameInput:SetText(fullName)
             end)
         end)
@@ -1348,33 +1441,33 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         frame.selectedColor = "random"
         
         local whiteBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        whiteBtn:SetSize(100, 25)
+        whiteBtn:SetSize(102, 25)
         whiteBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         whiteBtn:SetText("White")
         
         local blackBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        blackBtn:SetSize(100, 25)
+        blackBtn:SetSize(102, 25)
         blackBtn:SetPoint("LEFT", whiteBtn, "RIGHT", 5, 0)
         blackBtn:SetText("Black")
         
         local randomBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        randomBtn:SetSize(100, 25)
+        randomBtn:SetSize(102, 25)
         randomBtn:SetPoint("LEFT", blackBtn, "RIGHT", 5, 0)
         randomBtn:SetText("Random")
         
         local function updateColorButtons()
-            whiteBtn:SetEnabled(frame.selectedColor ~= "white")
-            blackBtn:SetEnabled(frame.selectedColor ~= "black")
+            whiteBtn:SetEnabled(frame.selectedColor ~= COLOR.WHITE)
+            blackBtn:SetEnabled(frame.selectedColor ~= COLOR.BLACK)
             randomBtn:SetEnabled(frame.selectedColor ~= "random")
         end
         
         whiteBtn:SetScript("OnClick", function()
-            frame.selectedColor = "white"
+            frame.selectedColor = COLOR.WHITE
             updateColorButtons()
         end)
         
         blackBtn:SetScript("OnClick", function()
-            frame.selectedColor = "black"
+            frame.selectedColor = COLOR.BLACK
             updateColorButtons()
         end)
         
@@ -1387,66 +1480,18 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         
         yPos = yPos - 45
         
-        -- Use clock checkbox
-        local clockCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-        clockCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, yPos)
-        clockCheck.text:SetText("Use Chess Clock")
-        clockCheck:SetChecked(false)
-        frame.clockCheck = clockCheck
-        
-        yPos = yPos - 40
-        
-        -- Time per player
-        local timeLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        timeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        timeLabel:SetText("Time per player (minutes):")
-        
-        local timeValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        timeValue:SetPoint("LEFT", timeLabel, "RIGHT", 10, 0)
-        timeValue:SetText("10")
-        
-        yPos = yPos - 25
-        
-        local timeSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-        timeSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        timeSlider:SetSize(300, 17)
-        timeSlider:SetMinMaxValues(1, 60)
-        timeSlider:SetValue(10)
-        timeSlider:SetValueStep(1)
-        timeSlider:SetObeyStepOnDrag(true)
-        timeSlider.Low:SetText("1")
-        timeSlider.High:SetText("60")
-        timeSlider:SetScript("OnValueChanged", function(self, value)
-            timeValue:SetText(tostring(math.floor(value)))
-        end)
-        frame.timeSlider = timeSlider
-        
-        yPos = yPos - 45
-        
-        -- Increment per move
-        local incLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        incLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        incLabel:SetText("Increment per move (seconds):")
-        
-        local incValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        incValue:SetPoint("LEFT", incLabel, "RIGHT", 10, 0)
-        incValue:SetText("0")
-        
-        yPos = yPos - 25
-        
-        local incSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-        incSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        incSlider:SetSize(300, 17)
-        incSlider:SetMinMaxValues(0, 30)
-        incSlider:SetValue(0)
-        incSlider:SetValueStep(1)
-        incSlider:SetObeyStepOnDrag(true)
-        incSlider.Low:SetText("0")
-        incSlider.High:SetText("30")
-        incSlider:SetScript("OnValueChanged", function(self, value)
-            incValue:SetText(tostring(math.floor(value)))
-        end)
-        frame.incSlider = incSlider
+        -- Clock config (shared panel with handicap)
+        yPos = DeltaChess.UI:CreateClockConfigPanel(frame, {
+            anchorFrame = frame,
+            anchorPoint = "TOPLEFT",
+            anchorRelPoint = "TOPLEFT",
+            offsetX = 12,
+            startY = yPos,
+            showHandicap = true,
+            onResize = function(extraHeight)
+                frame:SetHeight(BASE_CHALLENGE_HEIGHT + extraHeight)
+            end,
+        })
         
         -- Buttons at bottom
         local sendBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -1483,18 +1528,30 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                     return
                 end
                 
+                local wasRandom = frame.selectedColor == "random"
                 local finalColor = frame.selectedColor
                 if finalColor == "random" then
-                    finalColor = math.random(2) == 1 and "white" or "black"
+                    finalColor = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
                 end
                 
+                local handicapSeconds = (frame.handicapCheck and frame.handicapCheck:GetChecked() and frame.handicapSecondsSlider) and math.floor(frame.handicapSecondsSlider:GetValue()) or 0
+                -- Resolve "challenger"/"opponent" to "white"/"black" based on the challenger's color
+                local handicapSide = nil
+                if frame.handicapSide == "challenger" then
+                    handicapSide = finalColor  -- challenger's color gets less time
+                elseif frame.handicapSide == "opponent" then
+                    handicapSide = (finalColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
+                end
                 local gameSettings = {
                     challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
                     opponent = playerName,
                     challengerColor = finalColor,
+                    isRandom = wasRandom,
                     useClock = frame.clockCheck:GetChecked(),
                     timeMinutes = math.floor(frame.timeSlider:GetValue()),
-                    incrementSeconds = math.floor(frame.incSlider:GetValue())
+                    incrementSeconds = math.floor(frame.incSlider:GetValue()),
+                    handicapSeconds = (handicapSeconds > 0) and handicapSeconds or nil,
+                    handicapSide = handicapSide,
                 }
                 
                 DeltaChess:SendChallenge(gameSettings)
@@ -1527,6 +1584,16 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     self.frames.challengeWindow.clockCheck:SetChecked(false)
     self.frames.challengeWindow.timeSlider:SetValue(10)
     self.frames.challengeWindow.incSlider:SetValue(0)
+    if self.frames.challengeWindow.handicapCheck then
+        self.frames.challengeWindow.handicapCheck:SetChecked(false)
+        self.frames.challengeWindow.handicapSide = "challenger"
+        UIDropDownMenu_SetText(self.frames.challengeWindow.handicapSideDropdown, "Challenger")
+        self.frames.challengeWindow.handicapSecondsSlider:SetValue(0)
+    end
+    -- Update visibility and frame height to match reset checkbox states
+    if self.frames.challengeWindow.UpdateClockLayout then
+        self.frames.challengeWindow.UpdateClockLayout()
+    end
     
     -- Update color buttons
     local frame = self.frames.challengeWindow
@@ -1560,15 +1627,15 @@ function DeltaChess:ShowComputerGameWindow()
     -- Create window if it doesn't exist
     if not self.frames.computerWindow then
         local frame = CreateFrame("Frame", "ChessComputerWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(300, 350)
+        frame:SetSize(320, 350)
         frame:SetPoint("CENTER")
         frame:SetMovable(true)
         frame:EnableMouse(true)
         frame:RegisterForDrag("LeftButton")
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-        frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(100)
+        frame:SetFrameStrata("DIALOG")
+        frame:SetFrameLevel(150)
         frame.TitleText:SetText("Play vs Computer")
         
         local yPos = -35
@@ -1578,40 +1645,40 @@ function DeltaChess:ShowComputerGameWindow()
         colorLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         colorLabel:SetText("Your Color:")
         
-        yPos = yPos - 30
+        yPos = yPos - 20
         
         -- Color buttons
-        frame.selectedColor = "white"
+        frame.selectedColor = COLOR.WHITE
         
         local whiteBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        whiteBtn:SetSize(80, 25)
+        whiteBtn:SetSize(92, 25)
         whiteBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
         whiteBtn:SetText("White")
         whiteBtn:SetEnabled(false)
         
         local blackBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        blackBtn:SetSize(80, 25)
+        blackBtn:SetSize(92, 25)
         blackBtn:SetPoint("LEFT", whiteBtn, "RIGHT", 5, 0)
         blackBtn:SetText("Black")
         
         local randomBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        randomBtn:SetSize(80, 25)
+        randomBtn:SetSize(92, 25)
         randomBtn:SetPoint("LEFT", blackBtn, "RIGHT", 5, 0)
         randomBtn:SetText("Random")
         
         local function updateColorButtons()
-            whiteBtn:SetEnabled(frame.selectedColor ~= "white")
-            blackBtn:SetEnabled(frame.selectedColor ~= "black")
+            whiteBtn:SetEnabled(frame.selectedColor ~= COLOR.WHITE)
+            blackBtn:SetEnabled(frame.selectedColor ~= COLOR.BLACK)
             randomBtn:SetEnabled(frame.selectedColor ~= "random")
         end
         
         whiteBtn:SetScript("OnClick", function()
-            frame.selectedColor = "white"
+            frame.selectedColor = COLOR.WHITE
             updateColorButtons()
         end)
         
         blackBtn:SetScript("OnClick", function()
-            frame.selectedColor = "black"
+            frame.selectedColor = COLOR.BLACK
             updateColorButtons()
         end)
         
@@ -1643,7 +1710,7 @@ function DeltaChess:ShowComputerGameWindow()
         
         local diffSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
         diffSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        diffSlider:SetSize(260, 17)
+        diffSlider:SetSize(275, 17)
         if hasEloEngines then
             diffSlider:SetMinMaxValues(globalRange[1], globalRange[2])
             diffSlider:SetValue(math.max(globalRange[1], math.min(globalRange[2], 1200)))
@@ -1684,7 +1751,7 @@ function DeltaChess:ShowComputerGameWindow()
 
         local engineDropdown = CreateFrame("Frame", "ChessEngineDropdown", frame, "UIDropDownMenuTemplate")
         engineDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, yPos)
-        UIDropDownMenu_SetWidth(engineDropdown, 250)
+        UIDropDownMenu_SetWidth(engineDropdown, 265)
         frame.engineDropdown = engineDropdown
         
         -- Engine description label (below dropdown)
@@ -1817,12 +1884,11 @@ function DeltaChess:ShowComputerGameWindow()
         startBtn:SetScript("OnClick", function()
             local color = frame.selectedColor
             if color == "random" then
-                color = math.random(2) == 1 and "white" or "black"
+                color = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
             end
-            
+            local settings = { useClock = false }
             frame:Hide()
-            -- Pass nil for difficulty if engine doesn't support ELO
-            DeltaChess:StartComputerGame(color, frame.selectedDifficulty, frame.selectedEngine)
+            DeltaChess:StartComputerGame(color, frame.selectedDifficulty, frame.selectedEngine, settings)
         end)
         frame.startButton = startBtn
         
@@ -1839,7 +1905,7 @@ function DeltaChess:ShowComputerGameWindow()
     
     -- Reset to defaults
     local frame = self.frames.computerWindow
-    frame.selectedColor = "white"
+    frame.selectedColor = COLOR.WHITE
     frame.selectedEngine = DeltaChess.Engines:GetEffectiveDefaultId()
     frame.selectedDifficulty = 1200
     
@@ -1905,28 +1971,24 @@ StaticPopupDialogs["CHESS_CHALLENGE_RECEIVED"] = {
 }
 
 StaticPopupDialogs["CHESS_RESIGN_CONFIRM"] = {
-    text = "Are you sure you want to resign?",
+    text = "%s\n\nAre you sure you want to resign?",
     button1 = "Resign",
     button2 = "Cancel",
     OnShow = function(dialog)
-        -- Show above the board (board uses FULLSCREEN_DIALOG level 100)
+        -- Show above the board and PGN window
         dialog:SetFrameStrata("FULLSCREEN_DIALOG")
-        dialog:SetFrameLevel(200)
-        -- Disable resign button so it cannot be clicked again
-        local gameId = DeltaChess._resignConfirmGameId
-        if gameId and DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame.resignButton then
-            DeltaChess.UI.activeFrame.resignButton:Disable()
+        dialog:SetFrameLevel(350)
+        DeltaChess._actionBlocked = (DeltaChess._actionBlocked or 0) + 1
+        if DeltaChess.UI.activeFrame then
+            DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
         end
     end,
     OnHide = function()
         local gameId = DeltaChess._resignConfirmGameId
         DeltaChess._resignConfirmGameId = nil
-        -- Re-enable resign button on the board if this game's dialog was closed
-        if gameId and DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame.resignButton then
-            local game = DeltaChess.db.games[gameId]
-            if game and game.board and game.board.gameStatus == "active" then
-                DeltaChess.UI.activeFrame.resignButton:Enable()
-            end
+        DeltaChess._actionBlocked = math.max(0, (DeltaChess._actionBlocked or 0) - 1)
+        if DeltaChess.UI.activeFrame then
+            DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
         end
     end,
     OnAccept = function(self, gameId)
@@ -1943,15 +2005,20 @@ StaticPopupDialogs["CHESS_RESIGN_CONFIRM"] = {
 }
 
 StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
-    text = "Your opponent wants to pause the game. Do you accept?",
+    text = "%s\n\nYour opponent wants to pause the game. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
+    OnShow = function(dialog)
+        -- Ensure popup appears above the board
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(350)
+    end,
     OnAccept = function(self, popupData)
-        local game = DeltaChess.db.games[popupData.gameId]
-        if game then
-            game.status = "paused"
-            game.pauseStartTime = time()
-            game._lastMoveCountWhenPaused = #game.board.moves
+        local board = DeltaChess.GetBoard(popupData.gameId)
+        if board then
+            board:PauseGame()
+            board:SetGameMeta("pauseStartTime", DeltaChess.Util.TimeNow())
+            board:SetGameMeta("_lastMoveCountWhenPaused", board:GetHalfMoveCount())
             DeltaChess:SendPauseResponse(popupData.gameId, true)
             DeltaChess:Print("Game paused.")
             if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
@@ -1970,16 +2037,24 @@ StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
 }
 
 StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
-    text = "Your opponent wants to resume the game. Do you accept?",
+    text = "%s\n\nYour opponent wants to resume the game. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
+    OnShow = function(dialog)
+        -- Ensure popup appears above the board
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(350)
+    end,
     OnAccept = function(self, popupData)
-        local game = DeltaChess.db.games[popupData.gameId]
-        if game then
-            local increment = game.pauseStartTime and (time() - game.pauseStartTime) or 0
-            game.timeSpentClosed = (game.timeSpentClosed or 0) + increment
-            game.status = "active"
-            game.pauseStartTime = nil
+        local board = DeltaChess.GetBoard(popupData.gameId)
+        if board then
+            local pauseStartTime = board:GetGameMeta("pauseStartTime")
+            local now = DeltaChess.Util.TimeNow()
+            local increment = pauseStartTime and (now - pauseStartTime) or 0
+            local timeSpentClosed = (board:GetGameMeta("timeSpentClosed") or 0) + increment
+            board:SetGameMeta("timeSpentClosed", timeSpentClosed)
+            board:ContinueGame()
+            board:SetGameMeta("pauseStartTime", nil)
             DeltaChess:SendUnpauseResponse(popupData.gameId, true, increment)
             DeltaChess:Print("Game resumed.")
             if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
@@ -2005,10 +2080,12 @@ StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
 function DeltaChess:ShowActiveGames()
     local hasActiveGames = false
     self:Print("Active Games:")
-    for gameId, game in pairs(self.db.games) do
-        if game.status == "active" then
+    for gameId, board in pairs(self.db.games) do
+        if board:IsActive() then
             hasActiveGames = true
-            self:Print(string.format("  %s vs %s (ID: %s)", game.white, game.black, gameId))
+            local white = board:GetWhitePlayerName()
+            local black = board:GetBlackPlayerName()
+            self:Print(string.format("  %s vs %s (ID: %s)", white, black, gameId))
         end
     end
     
@@ -2020,17 +2097,29 @@ end
 -- Show game history
 function DeltaChess:ShowGameHistory()
     self:Print("Game History:")
-    if #self.db.history == 0 then
+    local list = {}
+    for _, entry in pairs(self.db.history) do
+        table.insert(list, entry)
+    end
+    if #list == 0 then
         self:Print("  No game history")
     else
-        local count = math.min(10, #self.db.history)
-        for i = #self.db.history, #self.db.history - count + 1, -1 do
-            local game = self.db.history[i]
-            self:Print(string.format("  %s vs %s - %s (%s)", 
-                game.white, game.black, game.result or "Unknown", game.date or "Unknown"))
+        table.sort(list, function(a, b)
+            return (a.endTime or a.startTime or 0) > (b.endTime or b.startTime or 0)
+        end)
+        local count = math.min(10, #list)
+        for i = 1, count do
+            local board = self:DeserializeHistoryEntry(list[i])
+            if board then
+                self:Print(string.format("  %s vs %s - %s (%s)",
+                    board:GetWhitePlayerName() or "?",
+                    board:GetBlackPlayerName() or "?",
+                    board:GetGameResult() or "Unknown",
+                    board:GetStartDateString() or "Unknown"))
+            end
         end
-        if #self.db.history > 10 then
-            self:Print(string.format("  ... and %d more games", #self.db.history - 10))
+        if #list > 10 then
+            self:Print(string.format("  ... and %d more games", #list - 10))
         end
     end
 end

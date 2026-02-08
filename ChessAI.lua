@@ -1,157 +1,187 @@
 -- ChessAI.lua - AI orchestrator for chess engine integration
--- Chess engine logic is fully decoupled; plug in engines via DeltaChess.Engines.
+-- Uses EngineFramework's EngineRunner for async calculations
 
 DeltaChess.AI = {}
 
-local C = DeltaChess.Constants.COLOR
-local PT = DeltaChess.Constants.PIECE_TYPE
+local COLOR = DeltaChess.Constants.COLOR
+local STATUS = {
+    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
+    ENDED = DeltaChess.Constants.STATUS_ENDED,
+}
 
 local AI_INITIAL_DELAY_MS = 500
 local AI_AFTER_DELAY_MS = 500
 
--- Get the engine for a game (or default)
-local function getEngine(game)
-    local engineId = game and game.computerEngine or DeltaChess.Engines:GetEffectiveDefaultId()
-    return DeltaChess.Engines:Get(engineId)
-end
-
--- Delegate to the active engine; engine must implement GetBestMoveAsync
-function DeltaChess.AI:GetBestMoveAsync(board, color, difficulty, onComplete, engineId)
-    local engine = DeltaChess.Engines:Get(engineId or DeltaChess.Engines:GetEffectiveDefaultId())
-    if not engine or not engine.GetBestMoveAsync then
-        onComplete(nil)
-        return
-    end
-    local position = DeltaChess.Engines.CreateBoardAdapter(board)
-    engine:GetBestMoveAsync(position, color, difficulty, onComplete)
+-- Get the engine ID for a game (or default)
+local function getEngineId(board)
+    local engineId = board and board:GetEngineId()
+    return engineId or DeltaChess.Engines:GetEffectiveDefaultId()
 end
 
 -- Make AI move (game integration - calls engine and applies result)
 function DeltaChess.AI:MakeMove(gameId, delayMs)
     local delaySec = (delayMs or AI_INITIAL_DELAY_MS) / 1000
     C_Timer.After(delaySec, function()
-        local game = DeltaChess.db.games[gameId]
-        if not game or game.status ~= "active" then return end
-        if not game.isVsComputer then return end
+        local board = DeltaChess.GetBoard(gameId)
+        if not board then return end
+        if not board:IsActive() then return end
+        if not board:OneOpponentIsEngine() then return end
 
-        local aiColor = game.computerColor
-        if game.board.currentTurn ~= aiColor then return end
+        local aiColor = board:GetEnginePlayerColor()
+        local currentTurn = board:IsWhiteToMove() and COLOR.WHITE or COLOR.BLACK
+        if currentTurn ~= aiColor then return end
 
-        local engine = getEngine(game)
-        if not engine or not engine.GetBestMoveAsync then
+        local engineId = getEngineId(board)
+        local engine = DeltaChess.Engines:Get(engineId)
+        if not engine then
             DeltaChess:Print("No chess engine available!")
             return
         end
 
-        local difficulty = game.computerDifficulty  -- nil if engine doesn't support ELO
-        local position = DeltaChess.Engines.CreateBoardAdapter(game.board)
+        local difficulty = board:GetEngineElo()
         local engineName = engine.name or engine.id
-        local moveApplied = false  -- Flag to prevent double-moves from timeout vs callback race
-        
+        local moveApplied = false
+
         -- Function to apply a validated move
-        local function applyMove(validMove)
+        local function applyMove(uci)
             if moveApplied then return end
-            if not game or game.status ~= "active" then return end
-            if game.board.currentTurn ~= aiColor then return end
+            
+            -- Re-fetch board state (may have changed during async)
+            local currentBoard = DeltaChess.GetBoard(gameId)
+            if not currentBoard then return end
+            if not currentBoard:IsActive() then return end
+            
+            local currentTurnCheck = currentBoard:IsWhiteToMove() and COLOR.WHITE or COLOR.BLACK
+            if currentTurnCheck ~= aiColor then return end
             
             moveApplied = true
-            
-            local piece = game.board:GetPiece(validMove.fromRow, validMove.fromCol)
-            local promotion = validMove.promotion
-            if piece and piece.type == PT.PAWN then
-                local promotionRank = piece.color == C.WHITE and 8 or 1
-                if validMove.toRow == promotionRank and not promotion then
-                    promotion = PT.QUEEN
-                end
-            end
 
-            -- Dynamically calculate delay based on framerate to let the game recover
-            -- from heavy AI calculations before applying the move
+            -- Dynamically calculate delay based on framerate
             local fps = GetFramerate() or 60
             local targetFps = 60
             local baseDelay = AI_AFTER_DELAY_MS / 1000
             local delay
             
             if fps >= targetFps then
-                -- Good framerate, use base delay
                 delay = baseDelay
             else
-                -- Scale delay inversely with FPS: lower FPS = longer delay
-                -- Formula: delay = baseDelay * (targetFps / fps)
-                -- This gives the system more time to recover when under stress
-                local scaleFactor = targetFps / math.max(fps, 10) -- Clamp fps to min 10 to avoid huge delays
+                local scaleFactor = targetFps / math.max(fps, 10)
                 delay = baseDelay * scaleFactor
             end
-            
-            -- Clamp delay between minimum (0.1s) and maximum (3s)
             delay = math.max(0.1, math.min(delay, 2.0))
 
             C_Timer.After(delay, function()
-                game.board:MakeMove(validMove.fromRow, validMove.fromCol, validMove.toRow, validMove.toCol, promotion)
+                -- Re-fetch board again after delay
+                local finalBoard = DeltaChess.GetBoard(gameId)
+                if not finalBoard then return end
+                
+                -- Make the move using UCI notation
+                local result, err = finalBoard:MakeMoveUci(uci, { timestamp = DeltaChess.Util.TimeNow() })
+                
+                if not result then
+                    DeltaChess:Print("|cFFFF0000ERROR: Failed to apply move " .. uci .. ": " .. (err or "unknown error") .. "|r")
+                    return
+                end
 
-                -- Play sound for AI's move (opponent move from player's perspective)
-                local lastMove = game.board.moves and game.board.moves[#game.board.moves]
+                -- Play sound for AI's move
+                local lastMove = finalBoard.moves[#finalBoard.moves]
                 local wasCapture = lastMove and lastMove.captured ~= nil
-                DeltaChess.Sound:PlayMoveSound(game, false, wasCapture, game.board)
+                DeltaChess.Sound:PlayMoveSound(finalBoard, false, wasCapture, finalBoard)
+
+                -- Update the UI with animation
+                if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+                    DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, false)
+                end
 
                 DeltaChess:NotifyItIsYourTurn(gameId, "Computer")
 
-                if game.board.gameStatus ~= "active" then
-                    DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
+                -- Check if game ended
+                if finalBoard:IsEnded() then
+                    finalBoard:EndGame()
+                    local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
+                    DeltaChess.UI:ShowGameEnd(gameId, frame)
                 end
             end)
         end
-        
-        engine:GetBestMoveAsync(position, aiColor, difficulty, function(move)
-            if moveApplied then return end
-            if not game or game.status ~= "active" then return end
-            if game.board.currentTurn ~= aiColor then return end
 
-            if move then
-                -- Validate the engine's move against DeltaChess game logic
-                if DeltaChess.Engines:ValidateMove(game.board, move) then
-                    applyMove(move)
-                else
-                    DeltaChess:Print("|cFFFF0000ERROR: Engine '" .. engineName .. "' returned invalid move: " .. 
-                        move.fromRow .. "," .. move.fromCol .. " -> " .. move.toRow .. "," .. move.toCol .. "|r")
+        -- Use EngineRunner for async calculation
+        DeltaChess.EngineRunner.Create(engineId)
+            :Fen(board:GetFen())
+            :Elo(difficulty)
+            :LoopFn(DeltaChess.WowLoop)
+            :HandleError(function(err)
+                DeltaChess:Print("|cFFFF0000Engine error: " .. tostring(err.message or err) .. "|r")
+                return true  -- Return random legal move on error
+            end)
+            :OnComplete(function(result, err)
+                if moveApplied then return end
+                
+                -- Re-fetch board state
+                local currentBoard = DeltaChess.GetBoard(gameId)
+                if not currentBoard then return end
+                if not currentBoard:IsActive() then return end
+                
+                local currentTurnCheck = currentBoard:IsWhiteToMove() and COLOR.WHITE or COLOR.BLACK
+                if currentTurnCheck ~= aiColor then return end
+
+                if err then
+                    DeltaChess:Print("|cFFFF0000ERROR: Engine '" .. engineName .. "' error: " .. tostring(err.message or err) .. "|r")
+                    return
                 end
-            else
-                DeltaChess:Print("|cFFFF0000ERROR: Engine '" .. engineName .. "' returned no move.|r")
-            end
-        end)
+
+                if result and result.move then
+                    applyMove(result.move)
+                else
+                    DeltaChess:Print("|cFFFF0000ERROR: Engine '" .. engineName .. "' returned no move.|r")
+                end
+            end)
+            :Run()
     end)
 end
 
 -- Start a game against the computer
-function DeltaChess:StartComputerGame(playerColor, difficulty, engineId)
-    local gameId = "computer_" .. tostring(time()) .. "_" .. math.random(1000, 9999)
+function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, settings)
+    settings = settings or {}
+    local gameId = "computer_" .. tostring(DeltaChess.Util.TimeNow()) .. "_" .. math.random(1000, 9999)
     local playerName = self:GetFullPlayerName(UnitName("player"))
-    local computerColor = playerColor == C.WHITE and C.BLACK or C.WHITE
-    local engine = DeltaChess.Engines:Get(engineId or DeltaChess.Engines:GetEffectiveDefaultId())
+    local engineIdResolved = engineId or DeltaChess.Engines:GetEffectiveDefaultId()
+    local engine = DeltaChess.Engines:Get(engineIdResolved)
+    local computerPlayer = { name = "Computer", engine = { id = engine and engine.id or engineIdResolved, elo = difficulty } }
 
-    local game = {
-        id = gameId,
-        white = playerColor == C.WHITE and playerName or "Computer",
-        black = playerColor == C.BLACK and playerName or "Computer",
-        board = DeltaChess.Board:New(),
-        status = "active",
-        settings = {
-            useClock = false,
-            timeMinutes = 0,
-            incrementSeconds = 0
-        },
-        startTime = time(),
-        isVsComputer = true,
-        computerColor = computerColor,
-        computerDifficulty = difficulty,  -- nil if engine doesn't support ELO
-        computerEngine = engine and engine.id or DeltaChess.Engines:GetEffectiveDefaultId(),
-        playerColor = playerColor
-    }
+    local whitePlayer = (playerColor == COLOR.WHITE) and playerName or computerPlayer
+    local blackPlayer = (playerColor == COLOR.BLACK) and playerName or computerPlayer
 
-    self.db.games[gameId] = game
+    local useClock = settings.useClock and true or false
+    local timeMinutes = settings.timeMinutes or 10
+    local incrementSeconds = settings.incrementSeconds or 0
+    local handicapSeconds = (settings.handicapSeconds and settings.handicapSeconds > 0) and settings.handicapSeconds or nil
+    local handicapSide = (settings.handicapSide == "white" or settings.handicapSide == "black") and settings.handicapSide or nil
+
+    local clockData = nil
+    if useClock then
+        clockData = {
+            gameStartTimestamp = DeltaChess.Util.TimeNow(),
+            initialTimeSeconds = timeMinutes * 60,
+            incrementSeconds = incrementSeconds,
+            handicapSeconds = handicapSeconds,
+            handicapSide = handicapSide,
+        }
+    end
+
+    local board = DeltaChess.CreateGameBoard(
+        gameId,
+        whitePlayer,
+        blackPlayer,
+        { useClock = useClock, timeMinutes = timeMinutes, incrementSeconds = incrementSeconds },
+        { playerColor = playerColor, clockData = clockData }
+    )
+
+    -- Store board directly in games database
+    DeltaChess.StoreBoard(gameId, board)
     self:ShowChessBoard(gameId)
 
-    if computerColor == C.WHITE then
+    if board:GetEnginePlayerColor() == COLOR.WHITE then
         DeltaChess.AI:MakeMove(gameId, 1000)
     end
 
