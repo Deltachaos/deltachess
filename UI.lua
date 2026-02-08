@@ -2454,6 +2454,11 @@ StaticPopupDialogs["CHESS_DRAW_OFFER"] = {
     OnCancel = function(self, gameId)
         DeltaChess:DeclineDraw(gameId)
     end,
+    OnShow = function(dialog)
+        -- Ensure popup appears above the board
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(350)
+    end,
     timeout = 30,
     whileDead = true,
     hideOnEscape = true,

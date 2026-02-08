@@ -2030,6 +2030,11 @@ StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
     text = "Your opponent wants to pause the game. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
+    OnShow = function(dialog)
+        -- Ensure popup appears above the board
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(350)
+    end,
     OnAccept = function(self, popupData)
         local board = DeltaChess.GetBoard(popupData.gameId)
         if board then
@@ -2057,6 +2062,11 @@ StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
     text = "Your opponent wants to resume the game. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
+    OnShow = function(dialog)
+        -- Ensure popup appears above the board
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:SetFrameLevel(350)
+    end,
     OnAccept = function(self, popupData)
         local board = DeltaChess.GetBoard(popupData.gameId)
         if board then
