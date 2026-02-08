@@ -8,6 +8,10 @@ local STATUS = {
     PAUSED = DeltaChess.Constants.STATUS_PAUSED,
 }
 
+local SOUND_FILES = {
+    MOVE = "Interface\\AddOns\\DeltaChess\\Sounds\\move.mp3",
+}
+
 -- Detect WoW version for compatibility
 local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
 
@@ -113,6 +117,7 @@ function DeltaChess.Sound:PlayPlayerMove(wasCapture)
     if wasCapture then
         self:Play("playerCapture")
     else
+        PlaySoundFile(SOUND_FILES.MOVE)
         self:Play("playerMove")
     end
 end
@@ -123,6 +128,7 @@ function DeltaChess.Sound:PlayOpponentMove(wasCapture)
     if wasCapture then
         self:Play("opponentCapture")
     else
+        PlaySoundFile(SOUND_FILES.MOVE)
         self:Play("opponentMove")
     end
 end
@@ -209,8 +215,7 @@ function DeltaChess.Sound:PlayMoveSound(board, isPlayerMove, wasCapture, boardFo
     -- Then check for check status (but not if game ended - let game end sound play instead).
     -- Allow when ACTIVE (live game) or PAUSED (replay snapshot) so check plays in replay too.
     local checkBoard = boardForCheck or board
-    local gameStatus = checkBoard and DeltaChess.GetGameStatus(checkBoard)
-    if checkBoard and (gameStatus == STATUS.ACTIVE or gameStatus == STATUS.PAUSED) then
+    if checkBoard and not checkBoard:IsEnded() then
         -- Only current side to move can be in check
         local currentTurn = checkBoard:GetCurrentTurn()
         local inCheck = checkBoard:InCheck()
@@ -233,9 +238,9 @@ end
 -- @param boardUnused table - Unused parameter (kept for compatibility)
 function DeltaChess.Sound:PlayGameEndSound(board, boardUnused)
     local playerColor = GetPlayerColor(board)
-    local gameStatus = DeltaChess.GetGameStatus(board)
+    local reason = board:GetEndReason()
     
-    if gameStatus == "checkmate" then
+    if reason == DeltaChess.Constants.REASON_CHECKMATE then
         -- The player whose turn it is when checkmate is detected is the loser
         -- (they have no legal moves and are in check)
         local loserColor = board:GetCurrentTurn()
@@ -244,9 +249,9 @@ function DeltaChess.Sound:PlayGameEndSound(board, boardUnused)
         else
             self:PlayWin()
         end
-    elseif gameStatus == "stalemate" or gameStatus == "draw" then
+    elseif reason == DeltaChess.Constants.REASON_STALEMATE or reason == DeltaChess.Constants.REASON_FIFTY_MOVE then
         self:PlayStalemate()
-    elseif gameStatus == "resignation" then
+    elseif reason == DeltaChess.Constants.REASON_RESIGNATION then
         local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
         local resignedPlayer = board:GetResignedPlayer()
         local isVsComputer = board:OneOpponentIsEngine()
@@ -256,7 +261,7 @@ function DeltaChess.Sound:PlayGameEndSound(board, boardUnused)
         else
             self:PlayWin()
         end
-    elseif gameStatus == "timeout" then
+    elseif reason == DeltaChess.Constants.REASON_TIMEOUT then
         local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
         local timeoutPlayer = board:GetGameMeta("timeoutPlayer")
         if timeoutPlayer == playerName then

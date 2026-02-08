@@ -101,7 +101,7 @@ function DeltaChess:RestoreSavedGames()
                 board.gameMeta = {}
             end
             -- Ensure board has started (for old saved games)
-            if not board:GetGameStatus() then
+            if not board:GetStartTime() then
                 board:StartGame()
             end
             -- Ensure board has its ID stored
@@ -179,8 +179,7 @@ function DeltaChess:IsMyTurnInAnyGame()
     if not self.db or not self.db.games then return false end
     local playerName = self:GetFullPlayerName(UnitName("player"))
     for _, board in pairs(self.db.games) do
-        local status = board:GetGameStatus()
-        if status == STATUS.ACTIVE then
+        if board:IsActive() then
             local currentTurn = board:GetCurrentTurn()
             local isPlayerTurn
             local isVsComputer = board:OneOpponentIsEngine()
@@ -203,8 +202,7 @@ end
 function DeltaChess:NotifyItIsYourTurn(gameId, opponentDisplayName)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
-    local status = board:GetGameStatus()
-    if status ~= STATUS.ACTIVE then return end
+    if not board:IsActive() then return end
     
     local lastMove = board:GetLastMove()
     local moveNotation = lastMove and DeltaChess.UI:FormatMoveAlgebraic(lastMove) or ""
@@ -541,7 +539,8 @@ function DeltaChess:RefreshMainMenuContent()
         for i = 1, displayCount do
             local board = allBoards[i]
             local gameId = board:GetGameMeta("id")
-            local status = board:GetGameStatus() or STATUS.ACTIVE
+            local isActive = board:IsActive()
+            local isPaused = board:IsPaused()
             local isVsComputer = board:OneOpponentIsEngine()
             local white = board:GetWhitePlayerName()
             local black = board:GetBlackPlayerName()
@@ -562,8 +561,8 @@ function DeltaChess:RefreshMainMenuContent()
             -- Background
             local bg = entry:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints()
-            if status == STATUS.ACTIVE or status == STATUS.PAUSED then
-                if status == STATUS.PAUSED then
+            if isActive or isPaused then
+                if isPaused then
                     bg:SetColorTexture(0.2, 0.2, 0.0, 0.7) -- Yellow tint - paused
                 elseif isPlayerTurn then
                     bg:SetColorTexture(0.0, 0.3, 0.0, 0.7) -- Bright green - your turn
@@ -2047,8 +2046,7 @@ function DeltaChess:ShowActiveGames()
     local hasActiveGames = false
     self:Print("Active Games:")
     for gameId, board in pairs(self.db.games) do
-        local status = board:GetGameStatus()
-        if status == STATUS.ACTIVE then
+        if board:IsActive() then
             hasActiveGames = true
             local white = board:GetWhitePlayerName()
             local black = board:GetBlackPlayerName()

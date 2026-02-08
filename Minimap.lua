@@ -62,9 +62,8 @@ function DeltaChess.Minimap:Initialize()
             local mostRecentId, mostRecentTime = nil, 0
             if DeltaChess.db and DeltaChess.db.games then
                 for gameId, board in pairs(DeltaChess.db.games) do
-                    local status = board:GetGameStatus()
                     local startTime = board:GetStartTime() or 0
-                    if status == STATUS.ACTIVE and startTime > mostRecentTime then
+                    if board:IsActive() and startTime > mostRecentTime then
                         mostRecentId = gameId
                         mostRecentTime = startTime
                     end

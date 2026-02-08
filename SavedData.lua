@@ -51,8 +51,7 @@ function DeltaChess:ResumeGame(gameId)
         return
     end
     
-    local status = board:GetGameStatus()
-    if status ~= STATUS.ACTIVE then
+    if not board:IsActive() then
         self:Print("Game has already ended!")
         return
     end
@@ -66,8 +65,7 @@ function DeltaChess:GetActiveGames()
     local activeGames = {}
     
     for gameId, board in pairs(self.db.games) do
-        local status = board:GetGameStatus()
-        if status == STATUS.ACTIVE then
+        if board:IsActive() then
             table.insert(activeGames, board)
         end
     end
@@ -82,9 +80,8 @@ function DeltaChess:CleanupOldGames()
     
     for gameId, board in pairs(self.db.games) do
         local startTime = board:GetStartTime() or 0
-        local status = board:GetGameStatus()
         -- Remove games that haven't been updated in 7 days
-        if startTime < sevenDaysAgo and status == STATUS.ACTIVE then
+        if startTime < sevenDaysAgo and board:IsActive() then
             -- Move to history as abandoned
             board:EndGame(currentTime)
 

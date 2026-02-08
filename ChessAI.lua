@@ -25,7 +25,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
     C_Timer.After(delaySec, function()
         local board = DeltaChess.GetBoard(gameId)
         if not board then return end
-        if board:GetGameStatus() ~= STATUS.ACTIVE then return end
+        if not board:IsActive() then return end
         if not board:OneOpponentIsEngine() then return end
 
         local aiColor = board:GetEnginePlayerColor()
@@ -50,7 +50,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             -- Re-fetch board state (may have changed during async)
             local currentBoard = DeltaChess.GetBoard(gameId)
             if not currentBoard then return end
-            if currentBoard:GetGameStatus() ~= STATUS.ACTIVE then return end
+            if not currentBoard:IsActive() then return end
             
             local currentTurnCheck = currentBoard:IsWhiteToMove() and COLOR.WHITE or COLOR.BLACK
             if currentTurnCheck ~= aiColor then return end
@@ -121,7 +121,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
                 -- Re-fetch board state
                 local currentBoard = DeltaChess.GetBoard(gameId)
                 if not currentBoard then return end
-                if currentBoard:GetGameStatus() ~= STATUS.ACTIVE then return end
+                if not currentBoard:IsActive() then return end
                 
                 local currentTurnCheck = currentBoard:IsWhiteToMove() and COLOR.WHITE or COLOR.BLACK
                 if currentTurnCheck ~= aiColor then return end
@@ -158,6 +158,9 @@ function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, setting
     local incrementSeconds = settings.incrementSeconds or 0
     local handicapSeconds = (settings.handicapSeconds and settings.handicapSeconds > 0) and settings.handicapSeconds or nil
     local handicapSide = (settings.handicapSide == "white" or settings.handicapSide == "black") and settings.handicapSide or nil
+
+    useClock = true
+    timeMinutes = 1
 
     local clockData = nil
     if useClock then

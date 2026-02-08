@@ -417,7 +417,7 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
         DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, true)
         
         -- Check for game end
-        if DeltaChess.GetGameStatus(board) ~= STATUS.ACTIVE then
+        if board:IsEnded() then
             DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
         end
     end
@@ -618,7 +618,7 @@ function DeltaChess:RestoreGameFromHistory(gameId)
         local board = frame.board
         
         -- Ensure board has required metadata
-        if not board:GetGameStatus() then
+        if not board:GetStartTime() then
             board:StartGame()
         end
         if not board:GetGameMeta("id") then
@@ -851,7 +851,7 @@ end
 -- Request pause (human vs human)
 function DeltaChess:RequestPause(gameId)
     local board = DeltaChess.GetBoard(gameId)
-    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.ACTIVE then return end
+    if not board or board:OneOpponentIsEngine() or not board:IsActive() then return end
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     self:SendCommMessage("ChessPause", self:Serialize({ gameId = gameId, accepted = nil }), "WHISPER", opponent)
@@ -871,7 +871,7 @@ end
 function DeltaChess:HandlePauseRequest(data)
     local gameId, sender = data.gameId, data.sender
     local board = DeltaChess.GetBoard(gameId)
-    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.ACTIVE then return end
+    if not board or board:OneOpponentIsEngine() or not board:IsActive() then return end
     if data.accepted == nil then
         StaticPopup_Show("CHESS_PAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
     else
@@ -892,7 +892,7 @@ end
 -- Request unpause (human vs human)
 function DeltaChess:RequestUnpause(gameId)
     local board = DeltaChess.GetBoard(gameId)
-    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.PAUSED then return end
+    if not board or board:OneOpponentIsEngine() or not board:IsPaused() then return end
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     self:SendCommMessage("ChessUnpause", self:Serialize({ gameId = gameId, accepted = nil }), "WHISPER", opponent)
@@ -916,7 +916,7 @@ end
 function DeltaChess:HandleUnpauseRequest(data)
     local gameId, sender = data.gameId, data.sender
     local board = DeltaChess.GetBoard(gameId)
-    if not board or board:OneOpponentIsEngine() or board:GetGameStatus() ~= STATUS.PAUSED then return end
+    if not board or board:OneOpponentIsEngine() or not board:IsPaused() then return end
     if data.accepted == nil then
         StaticPopup_Show("CHESS_UNPAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
     else

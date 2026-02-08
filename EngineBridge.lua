@@ -261,34 +261,8 @@ function DeltaChess.GetCurrentTurn(board)
     return board:GetCurrentTurn()
 end
 
---- Get game status string (compatibility with old board.gameStatus).
--- Maps framework status to addon-style status strings.
--- @param board Board object from framework
--- @return string STATUS.ACTIVE, "checkmate", "stalemate", "draw", or custom status
-function DeltaChess.GetGameStatus(board)
-    -- Check for custom status set via native method (resignation, timeout, etc.)
-    local customStatus = board:GetGameStatus()
-    if customStatus and customStatus ~= STATUS.ACTIVE and customStatus ~= STATUS.ENDED then
-        return customStatus
-    end
-
-    if board:IsRunning() then
-        return STATUS.ACTIVE
-    end
-    
-    local reason = board:GetEndReason()
-    local Constants = DeltaChess.Constants
-    
-    if reason == Constants.REASON_CHECKMATE then
-        return "checkmate"
-    elseif reason == Constants.REASON_STALEMATE then
-        return "stalemate"
-    elseif reason == Constants.REASON_FIFTY_MOVE then
-        return "draw"
-    else
-        return customStatus or STATUS.ENDED
-    end
-end
+-- (GetGameStatus wrapper removed — use board:IsActive(), board:IsPaused(),
+--  board:IsEnded(), and board:GetEndReason() directly instead.)
 
 --- Make a move using UCI string.
 -- @param board Board object from framework
@@ -401,7 +375,7 @@ function DeltaChess.GetActiveGameIds()
     local ids = {}
     if DeltaChess.db and DeltaChess.db.games then
         for gameId, board in pairs(DeltaChess.db.games) do
-            if board:GetGameStatus() == STATUS.ACTIVE then
+            if board:IsActive() then
                 table.insert(ids, gameId)
             end
         end

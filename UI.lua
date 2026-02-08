@@ -42,10 +42,9 @@ local COLOR = DeltaChess.Constants.COLOR
 -- @param playerColor string|nil Optional player color (COLOR.WHITE or COLOR.BLACK) to show "YOUR TURN" / "Waiting..." for active games
 -- @return string colored status text
 function DeltaChess.UI:GetGameStatusText(board, playerColor)
-    local gameStatus = DeltaChess.GetGameStatus(board)
-    if gameStatus == STATUS.PAUSED then
+    if board:IsPaused() then
         return "|cFFFFFF00Game Paused|r"
-    elseif gameStatus == STATUS.ACTIVE then
+    elseif board:IsActive() then
         local turn = board:GetCurrentTurn()
         if playerColor then
             if turn == playerColor then
@@ -60,16 +59,13 @@ function DeltaChess.UI:GetGameStatusText(board, playerColor)
     -- Game has ended
     local reason = board:GetEndReason()
     local gameResult = board:GetGameResult()
-    if gameStatus == "checkmate" then
+    if reason == Constants.REASON_CHECKMATE then
         local winner = gameResult == COLOR.WHITE and "White" or "Black"
         return "|cFFFF4444Checkmate - " .. winner .. " wins|r"
-    elseif gameStatus == "stalemate" then
+    elseif reason == Constants.REASON_STALEMATE then
         return "|cFFFFFF00Stalemate - Draw|r"
-    elseif gameStatus == "draw" then
-        local drawDetail = ""
-        if reason == Constants.REASON_FIFTY_MOVE then
-            drawDetail = " (50-move rule)"
-        end
+    elseif reason == Constants.REASON_FIFTY_MOVE then
+        local drawDetail = " (50-move rule)"
         return "|cFFFFFF00Draw" .. drawDetail .. "|r"
     elseif reason == Constants.REASON_RESIGNATION then
         local winner = gameResult == COLOR.WHITE and "White" or "Black"
@@ -1331,7 +1327,7 @@ function DeltaChess:ShowChessBoard(gameId)
     -- Pause timer when closing via X (vs computer only)
     frame:SetScript("OnHide", function(self)
         local brd = DeltaChess.GetBoard(self.gameId)
-        if brd and brd:OneOpponentIsEngine() and brd:GetGameStatus() == STATUS.ACTIVE then
+        if brd and brd:OneOpponentIsEngine() and brd:IsActive() then
             brd:SetGameMeta("pausedByClose", true)
             brd:SetGameMeta("pauseClosedAt", DeltaChess.Util.TimeNow())
             brd:SetGameMeta("_lastMoveCountWhenPaused", #brd.moves)
@@ -1485,7 +1481,7 @@ function DeltaChess:ShowChessBoard(gameId)
     resignButton:SetText("Resign")
     resignButton:SetScript("OnClick", function()
         local board = DeltaChess.GetBoard(gameId)
-        if not board or DeltaChess.GetGameStatus(board) ~= STATUS.ACTIVE then return end
+        if not board or not board:IsActive() then return end
         DeltaChess._resignConfirmGameId = gameId
         StaticPopup_Show("CHESS_RESIGN_CONFIRM", nil, nil, gameId)
     end)
@@ -1690,6 +1686,7 @@ end
 function DeltaChess.UI:UpdateBoard(frame)
     local board = DeltaChess.GetBoard(frame.gameId)
     if not board then return end
+
     frame.board = board  -- keep frame in sync with current board instance
     local Board = DeltaChess.Board
     
@@ -1769,12 +1766,9 @@ function DeltaChess.UI:UpdateBoard(frame)
         end
     end
 
-    print(board:GetGameStatus())
-    
     -- Restore selection highlight and valid moves (UpdateBoard clears them above)
     -- Don't restore when game has ended - no moves to make
-    local status = board:GetGameStatus()
-    if status ~= STATUS.ENDED and frame.selectedSquare and frame.validMoves then
+    if not board:IsEnded() and frame.selectedSquare and frame.validMoves then
         local selectedSquareFrame = frame.squares[frame.selectedSquare]
         if selectedSquareFrame and selectedSquareFrame.highlight then
             selectedSquareFrame.highlight:Show()
@@ -1795,7 +1789,7 @@ function DeltaChess.UI:UpdateBoard(frame)
     
     -- Update Pause/Unpause button state for human games
     if frame.closeButton and not isVsComputer then
-        if status == STATUS.PAUSED then
+        if board:IsPaused() then
             frame.closeButton:SetText("Unpause")
             frame.closeButton:Enable()
             frame.closeButton:SetScript("OnClick", function()
@@ -1858,9 +1852,8 @@ function DeltaChess.UI:UpdateBoard(frame)
         frame.opponentClock:Show()
     end
     -- Refresh time every second while game is active (not when paused or ended)
-    local boardGameStatus = DeltaChess.GetGameStatus(board)
     local pausedByClose = board:GetGameMeta("pausedByClose")
-    if status == STATUS.ACTIVE and boardGameStatus == STATUS.ACTIVE and not pausedByClose and frame:IsShown() then
+    if board:IsActive() and not pausedByClose and frame:IsShown() then
         C_Timer.After(1, function()
             local board = DeltaChess.GetBoard(frame.gameId)
             DeltaChess.UI:UpdateBoard(frame)
@@ -1893,9 +1886,7 @@ function DeltaChess.UI:UpdateBoard(frame)
     end
     
     -- Apply game-over UI state or re-enable buttons when game is active
-    local boardGameStatus = DeltaChess.GetGameStatus(board)
-
-    if boardGameStatus ~= STATUS.ACTIVE then
+    if board:IsEnded() then
         DeltaChess.UI:ApplyGameEndUIState(frame)
     else
         -- When a user action is pending (resign confirm or promotion), disable action buttons; otherwise re-enable
@@ -1942,7 +1933,7 @@ function DeltaChess.UI:UpdateBoard(frame)
                     frame:Hide()
                 end)
             else
-                if status == STATUS.PAUSED then
+                if board:IsPaused() then
                     frame.closeButton:SetText("Unpause")
                     frame.closeButton:SetScript("OnClick", function()
                         DeltaChess:RequestUnpause(frame.gameId)
@@ -1958,7 +1949,7 @@ function DeltaChess.UI:UpdateBoard(frame)
     end
     
     -- Check for game end
-    if boardGameStatus ~= STATUS.ACTIVE then
+    if board:IsEnded() then
         DeltaChess.UI:ShowGameEnd(frame)
     end
 end
@@ -2006,7 +1997,7 @@ function DeltaChess.UI:ShowWaitingOverlay(frame, show)
         
         -- Re-enable action buttons only if game is still active
         local board = DeltaChess.GetBoard(frame.gameId)
-        if board and DeltaChess.GetGameStatus(board) == STATUS.ACTIVE then
+        if board and board:IsActive() then
             if frame.resignButton then
                 frame.resignButton:Enable()
             end
@@ -2131,7 +2122,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComp
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
                 end
-                if DeltaChess.GetGameStatus(board) ~= STATUS.ACTIVE then
+                if board:IsEnded() then
                     DeltaChess.UI:ShowGameEnd(pm.frame)
                     return
                 end
@@ -2176,7 +2167,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComp
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
                 end
-                if DeltaChess.GetGameStatus(board) ~= STATUS.ACTIVE then
+                if board:IsEnded() then
                     DeltaChess.UI:ShowGameEnd(frame)
                     return
                 end
@@ -2239,7 +2230,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
         return
     end
     
-    if DeltaChess.GetGameStatus(board) ~= STATUS.ACTIVE then
+    if board:IsEnded() then
         DeltaChess:Print("Game has ended!")
         DeltaChess.Sound:PlayInvalidMove()
         return
@@ -2313,7 +2304,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
                 end
                 
                 -- Check for game end
-                if DeltaChess.GetGameStatus(board) ~= STATUS.ACTIVE then
+                if board:IsEnded() then
                     DeltaChess.UI:ShowGameEnd(frame)
                     return
                 end
@@ -2408,21 +2399,21 @@ function DeltaChess.UI:ShowGameEnd(frame)
     
     local resultText = ""
 
-    local gameStatus = DeltaChess.GetGameStatus(board)
+    local reason = board:GetEndReason()
     local currentTurn = board:GetCurrentTurn()
     
-    if gameStatus == "checkmate" then
+    if reason == Constants.REASON_CHECKMATE then
         local winner = currentTurn == COLOR.WHITE and "Black" or "White"
         local winnerName = currentTurn == COLOR.WHITE and black or white
         resultText = winner .. " wins by checkmate!"
-    elseif gameStatus == "stalemate" then
+    elseif reason == Constants.REASON_STALEMATE then
         resultText = "Draw by stalemate!"
-    elseif gameStatus == "draw" then
+    elseif reason == Constants.REASON_FIFTY_MOVE then
         resultText = "Draw!"
-    elseif gameStatus == "resignation" or resignedPlayer then
+    elseif reason == Constants.REASON_RESIGNATION or resignedPlayer then
         resultText = (resignedPlayer or "Someone") .. " resigned. " .. 
                      ((resignedPlayer == white) and black or white) .. " wins!"
-    elseif gameStatus == "timeout" or timeoutPlayer then
+    elseif reason == Constants.REASON_TIMEOUT or timeoutPlayer then
         resultText = (timeoutPlayer or "Someone") .. " ran out of time. " ..
                      ((timeoutPlayer == white) and black or white) .. " wins!"
     end
