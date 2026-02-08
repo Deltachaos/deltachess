@@ -110,8 +110,6 @@ local function Initialize()
         end
     end)
 
-    print(DeltaChess.Util.Dump(DeltaChess.db.history))
-
     -- Periodic ticker: archive ended games and update minimap highlight
     DeltaChess.CreateTicker(2, function()
         -- Move ended games from db.games to history
