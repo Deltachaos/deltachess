@@ -396,7 +396,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         elseif data.accepted then
             self:HandleDrawAccepted(data.gameId)
         else
-            self:Print("Your opponent declined the draw offer.")
+            self:Print("Your opponent declined the remis offer.")
         end
         
     elseif prefix == "ChessAck" then
@@ -811,7 +811,7 @@ function DeltaChess:OfferDraw(gameId)
     }
     
     self:SendCommMessage("ChessDraw", self:Serialize(data), "WHISPER", opponent)
-    self:Print("Draw offer sent.")
+    self:Print("Remis offer sent.")
 end
 
 -- Accept draw
@@ -837,7 +837,7 @@ function DeltaChess:AcceptDraw(gameId)
     local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
     DeltaChess.UI:ShowGameEnd(gameId, frame)
     
-    self:Print("Draw accepted.")
+    self:Print("Remis accepted.")
 end
 
 -- Decline draw
@@ -867,7 +867,7 @@ function DeltaChess:HandleDrawAccepted(gameId)
     local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
     DeltaChess.UI:ShowGameEnd(gameId, frame)
     
-    self:Print("Draw accepted by opponent.")
+    self:Print("Remis accepted by opponent.")
 end
 
 -- Handle timeout

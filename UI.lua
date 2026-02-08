@@ -63,10 +63,12 @@ function DeltaChess.UI:GetGameStatusText(board, playerColor)
     if reason == Constants.REASON_CHECKMATE then
         return "|cFFFF4444Checkmate - " .. (winnerLabel or "???") .. " wins|r"
     elseif reason == Constants.REASON_STALEMATE then
-        return "|cFFFFFF00Stalemate - Draw|r"
+        return "|cFFFFFF00Stalemate - Remis|r"
     elseif reason == Constants.REASON_FIFTY_MOVE then
         local drawDetail = " (50-move rule)"
-        return "|cFFFFFF00Draw" .. drawDetail .. "|r"
+        return "|cFFFFFF00Remis" .. drawDetail .. "|r"
+    elseif reason == Constants.REASON_REMIS then
+        return "|cFFFFFF00Remis by agreement|r"
     elseif reason == Constants.REASON_RESIGNATION then
         return "|cFFFF4444Resignation - " .. (winnerLabel or "???") .. " wins|r"
     elseif reason == Constants.REASON_TIMEOUT then
@@ -1487,7 +1489,7 @@ function DeltaChess:ShowChessBoard(gameId)
             DeltaChess:TakeBackMove(gameId)
         end)
     else
-        drawButton:SetText("Draw")
+        drawButton:SetText("Remis")
         drawButton:SetScript("OnClick", function()
             DeltaChess:OfferDraw(gameId)
         end)
@@ -1673,8 +1675,6 @@ end
 function DeltaChess.UI:UpdateBoard(frame)
     local board = DeltaChess.GetBoard(frame.gameId)
     if not board then return end
-
-    print(board:GetStatus())
 
     frame.board = board  -- keep frame in sync with current board instance
     local Board = DeltaChess.Board
@@ -2416,9 +2416,11 @@ function DeltaChess.UI:ShowGameEnd(gameId, frame)
     if reason == Constants.REASON_CHECKMATE then
         resultText = (winnerName or "Someone") .. " wins by checkmate!"
     elseif reason == Constants.REASON_STALEMATE then
-        resultText = "Draw by stalemate!"
+        resultText = "Remis by stalemate!"
     elseif reason == Constants.REASON_FIFTY_MOVE then
-        resultText = "Draw!"
+        resultText = "Remis!"
+    elseif reason == Constants.REASON_REMIS then
+        resultText = "Remis by agreement!"
     elseif reason == Constants.REASON_RESIGNATION or resignedPlayer then
         resultText = (resignedPlayer or loserName or "Someone") .. " resigned. " .. 
                      (resignedPlayer and ((resignedPlayer == white) and black or white) or winnerName or "Someone") .. " wins!"
@@ -2456,7 +2458,7 @@ StaticPopupDialogs["CHESS_GAME_END"] = {
 
 -- Draw offer popup
 StaticPopupDialogs["CHESS_DRAW_OFFER"] = {
-    text = "Your opponent offers a draw. Do you accept?",
+    text = "Your opponent offers a remis. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
     OnAccept = function(self, gameId)
