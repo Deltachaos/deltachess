@@ -58,21 +58,19 @@ function DeltaChess.UI:GetGameStatusText(board, playerColor)
     end
     -- Game has ended
     local reason = board:GetEndReason()
-    local gameResult = board:GetGameResult()
+    local result = board:GetResult()
+    local winnerLabel = result == Constants.WHITE and "White" or (result == Constants.BLACK and "Black" or nil)
     if reason == Constants.REASON_CHECKMATE then
-        local winner = gameResult == COLOR.WHITE and "White" or "Black"
-        return "|cFFFF4444Checkmate - " .. winner .. " wins|r"
+        return "|cFFFF4444Checkmate - " .. (winnerLabel or "???") .. " wins|r"
     elseif reason == Constants.REASON_STALEMATE then
         return "|cFFFFFF00Stalemate - Draw|r"
     elseif reason == Constants.REASON_FIFTY_MOVE then
         local drawDetail = " (50-move rule)"
         return "|cFFFFFF00Draw" .. drawDetail .. "|r"
     elseif reason == Constants.REASON_RESIGNATION then
-        local winner = gameResult == COLOR.WHITE and "White" or "Black"
-        return "|cFFFF4444Resignation - " .. winner .. " wins|r"
+        return "|cFFFF4444Resignation - " .. (winnerLabel or "???") .. " wins|r"
     elseif reason == Constants.REASON_TIMEOUT then
-        local winner = gameResult == COLOR.WHITE and "White" or "Black"
-        return "|cFFFF4444Timeout - " .. winner .. " wins|r"
+        return "|cFFFF4444Timeout - " .. (winnerLabel or "???") .. " wins|r"
     else
         return "|cFFFF4444Game Over|r"
     end
@@ -2392,27 +2390,26 @@ function DeltaChess.UI:ShowGameEnd(frame)
     local black = board:GetBlackPlayerName()
     local storedPlayerColor = board:GetPlayerColor()
     local resignedPlayer = board:GetResignedPlayer()
-    local timeoutPlayer = board:GetGameMeta("timeoutPlayer")
     
     local resultText = ""
 
     local reason = board:GetEndReason()
-    local currentTurn = board:GetCurrentTurn()
+    local result = board:GetResult()
+    
+    local winnerName = result == Constants.WHITE and white or (result == Constants.BLACK and black or nil)
+    local loserName = result == Constants.WHITE and black or (result == Constants.BLACK and white or nil)
     
     if reason == Constants.REASON_CHECKMATE then
-        local winner = currentTurn == COLOR.WHITE and "Black" or "White"
-        local winnerName = currentTurn == COLOR.WHITE and black or white
-        resultText = winner .. " wins by checkmate!"
+        resultText = (winnerName or "Someone") .. " wins by checkmate!"
     elseif reason == Constants.REASON_STALEMATE then
         resultText = "Draw by stalemate!"
     elseif reason == Constants.REASON_FIFTY_MOVE then
         resultText = "Draw!"
     elseif reason == Constants.REASON_RESIGNATION or resignedPlayer then
-        resultText = (resignedPlayer or "Someone") .. " resigned. " .. 
-                     ((resignedPlayer == white) and black or white) .. " wins!"
-    elseif reason == Constants.REASON_TIMEOUT or timeoutPlayer then
-        resultText = (timeoutPlayer or "Someone") .. " ran out of time. " ..
-                     ((timeoutPlayer == white) and black or white) .. " wins!"
+        resultText = (resignedPlayer or loserName or "Someone") .. " resigned. " .. 
+                     (resignedPlayer and ((resignedPlayer == white) and black or white) or winnerName or "Someone") .. " wins!"
+    elseif reason == Constants.REASON_TIMEOUT then
+        resultText = (loserName or "Someone") .. " ran out of time. " .. (winnerName or "Someone") .. " wins!"
     end
     
     -- Play game end sound
