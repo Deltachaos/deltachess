@@ -1776,8 +1776,8 @@ function DeltaChess.UI:UpdateBoard(frame)
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
     
-    -- Update Pause/Unpause button state for human games
-    if frame.closeButton and not isVsComputer then
+    -- Update Pause/Unpause button state for human games (skip when game has ended)
+    if frame.closeButton and not isVsComputer and not board:IsEnded() then
         if board:IsPaused() then
             frame.closeButton:SetText("Unpause")
             frame.closeButton:Enable()
@@ -1885,6 +1885,10 @@ function DeltaChess.UI:UpdateBoard(frame)
             if frame.resignButton then frame.resignButton:Disable() end
             if frame.drawButton then frame.drawButton:Disable() end
             if frame.closeButton then frame.closeButton:Disable() end
+        elseif board:IsPaused() then
+            -- When paused, disable resign and draw but keep pause/unpause button active
+            if frame.resignButton then frame.resignButton:Disable() end
+            if frame.drawButton then frame.drawButton:Disable() end
         else
             if frame.resignButton then
                 frame.resignButton:Enable()
@@ -2176,6 +2180,13 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
     
     -- Block moves while a user action is pending (resign confirm or promotion dialog)
     if (DeltaChess._actionBlocked or 0) > 0 then
+        return
+    end
+    
+    -- Block moves while the game is paused
+    if board:IsPaused() then
+        DeltaChess:Print("Game is paused!")
+        DeltaChess.Sound:PlayInvalidMove()
         return
     end
     

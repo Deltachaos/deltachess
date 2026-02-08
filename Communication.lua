@@ -462,6 +462,12 @@ function DeltaChess:SendMoveWithConfirmation(gameId, uci)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
     
+    -- Block moves while the game is paused
+    if board:IsPaused() then
+        self:Print("Game is paused!")
+        return false
+    end
+    
     -- Check if already waiting for ACK
     if self:IsBoardLocked(gameId) then
         self:Print("Waiting for previous move to be acknowledged...")
@@ -621,6 +627,9 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     if moveData.messageId and sender then
         self:SendAck(moveData.messageId, sender)
     end
+    
+    -- Reject the move if the game is paused
+    if board:IsPaused() then return end
     
     board:MakeMoveUci(moveData.uci, { timestamp = moveData.timestamp or DeltaChess.Util.TimeNow() })
     
