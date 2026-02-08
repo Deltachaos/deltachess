@@ -833,13 +833,9 @@ function DeltaChess:AcceptDraw(gameId)
     
     self:SendCommMessage("ChessDraw", self:Serialize(data), "WHISPER", opponent)
     
-    -- Save to history
-    self:SaveGameToHistory(board)
-    
-    -- Update UI
-    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
-        DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
-    end
+    -- Show game end (handles UI update, sound, and saving to history)
+    local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
+    DeltaChess.UI:ShowGameEnd(gameId, frame)
     
     self:Print("Draw accepted.")
 end
@@ -867,13 +863,9 @@ function DeltaChess:HandleDrawAccepted(gameId)
     
     board:EndGame()
 
-    -- Save to history
-    self:SaveGameToHistory(board)
-    
-    -- Update UI
-    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
-        DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
-    end
+    -- Show game end (handles UI update, sound, and saving to history)
+    local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
+    DeltaChess.UI:ShowGameEnd(gameId, frame)
     
     self:Print("Draw accepted by opponent.")
 end

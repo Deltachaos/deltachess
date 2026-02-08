@@ -8,13 +8,19 @@ local STATUS = {
 
 -- Save game to history using Board serialization
 function DeltaChess:SaveGameToHistory(board)
-    -- Serialize the board state (contains ALL game data; result is derived in GetGameResult())
-    local serializedBoard = board:Serialize()
+    -- Ensure the board has an end time set
+    if not board:GetEndTime() then
+        board:EndGame()
+    end
+
     local gameId = board:GetGameMeta("id")
     if not gameId then
         self:Print("Cannot save to history: game has no id.")
         return
     end
+
+    -- Serialize the board state (contains ALL game data; result is derived in GetGameResult())
+    local serializedBoard = board:Serialize()
 
     self.db.history[gameId] = serializedBoard
 

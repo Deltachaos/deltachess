@@ -1674,6 +1674,8 @@ function DeltaChess.UI:UpdateBoard(frame)
     local board = DeltaChess.GetBoard(frame.gameId)
     if not board then return end
 
+    print(board:GetStatus())
+
     frame.board = board  -- keep frame in sync with current board instance
     local Board = DeltaChess.Board
     

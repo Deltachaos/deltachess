@@ -105,18 +105,12 @@ local function Initialize()
     DeltaChess.CreateTicker(2, function()
         -- Move ended games from db.games to history
         if DeltaChess.db and DeltaChess.db.games then
-            local endedIds = {}
             for gameId, board in pairs(DeltaChess.db.games) do
                 if board:IsEnded() then
-                    if not board:GetEndTime() then
-                        board:EndGame()
+                    -- Update the frame before saving (which removes the board)
+                    if DeltaChess.UI and DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
+                        DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
                     end
-                    table.insert(endedIds, gameId)
-                end
-            end
-            for _, gameId in ipairs(endedIds) do
-                local board = DeltaChess.db.games[gameId]
-                if board then
                     DeltaChess:SaveGameToHistory(board)
                 end
             end
