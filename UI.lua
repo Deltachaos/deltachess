@@ -1770,7 +1770,35 @@ function DeltaChess.UI:UpdateBoard(frame)
     
     -- Update turn indicator
     if frame.turnLabel then
-        if status == STATUS.PAUSED then
+        local gameStatus = DeltaChess.GetGameStatus(board)
+        if gameStatus ~= STATUS.ACTIVE and gameStatus ~= STATUS.PAUSED then
+            -- Game has ended - show result
+            local resultText
+            local reason = board:GetEndReason()
+            local gameResult = board:GetGameResult()
+            local Constants = DeltaChess.Constants
+            if gameStatus == "checkmate" then
+                local winner = gameResult == COLOR.WHITE and "White" or "Black"
+                resultText = "|cFFFF4444Checkmate — " .. winner .. " wins|r"
+            elseif gameStatus == "stalemate" then
+                resultText = "|cFFFFFF00Stalemate — Draw|r"
+            elseif gameStatus == "draw" then
+                local drawDetail = ""
+                if reason == Constants.REASON_FIFTY_MOVE then
+                    drawDetail = " (50-move rule)"
+                end
+                resultText = "|cFFFFFF00Draw" .. drawDetail .. "|r"
+            elseif reason == Constants.REASON_RESIGNATION then
+                local winner = gameResult == COLOR.WHITE and "White" or "Black"
+                resultText = "|cFFFF4444Resignation — " .. winner .. " wins|r"
+            elseif reason == Constants.REASON_TIMEOUT then
+                local winner = gameResult == COLOR.WHITE and "White" or "Black"
+                resultText = "|cFFFF4444Timeout — " .. winner .. " wins|r"
+            else
+                resultText = "|cFFFF4444Game Over|r"
+            end
+            frame.turnLabel:SetText(resultText)
+        elseif status == STATUS.PAUSED then
             frame.turnLabel:SetText("|cFFFFFF00Game Paused|r")
         else
             local turn = board:GetCurrentTurn()
@@ -2389,7 +2417,7 @@ function DeltaChess.UI:ApplyGameEndUIState(frame)
         frame.resignButton:Disable()
     end
     if frame.drawButton then
-        if board:OneOpponentIsEngine() then
+        if board:OneOpponentIsEngine() and #board:GetMoveHistory() > 0 then
             frame.drawButton:Enable()
         else
             frame.drawButton:Disable()
