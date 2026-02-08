@@ -618,32 +618,7 @@ function DeltaChess:RefreshMainMenuContent()
             -- Game info (opponents with class colors)
             local info = entry:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             info:SetPoint("TOPLEFT", entry, "TOPLEFT", 5, -4)
-            
-            -- Get class colors for both players (use saved class if available)
-            local whiteR, whiteG, whiteB = DeltaChess.UI:GetPlayerColor(white or "?", board:GetWhitePlayerClass())
-            local blackR, blackG, blackB = DeltaChess.UI:GetPlayerColor(black or "?", board:GetBlackPlayerClass())
-            
-            -- Convert to hex color codes
-            local whiteHex = string.format("|cFF%02X%02X%02X", whiteR * 255, whiteG * 255, whiteB * 255)
-            local blackHex = string.format("|cFF%02X%02X%02X", blackR * 255, blackG * 255, blackB * 255)
-            
-            -- Format names (remove realm for display, show engine name for computer games)
-            local whiteName = (white or "?"):match("^([^%-]+)") or white or "?"
-            local blackName = (black or "?"):match("^([^%-]+)") or black or "?"
-            
-            -- Replace "Computer" with "Computer (engine)" for vs computer games
-            if isVsComputer and computerEngine then
-                local engine = DeltaChess.Engines:Get(computerEngine)
-                local engineName = engine and engine.name or computerEngine
-                if whiteName == "Computer" then
-                    whiteName = "Computer (" .. engineName .. ")"
-                end
-                if blackName == "Computer" then
-                    blackName = "Computer (" .. engineName .. ")"
-                end
-            end
-            
-            info:SetText(string.format("%s%s|r vs %s%s|r", whiteHex, whiteName, blackHex, blackName))
+            info:SetText(DeltaChess.UI:FormatGameTitle(board))
             
             -- Date line
             local dateText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -716,7 +691,7 @@ function DeltaChess:RefreshMainMenuContent()
                 resignBtn:SetText("Resign")
                 resignBtn:SetScript("OnClick", function()
                     DeltaChess._resignConfirmGameId = gameId
-                    StaticPopup_Show("CHESS_RESIGN_CONFIRM", nil, nil, gameId)
+                    DeltaChess.UI:ShowGamePopup(gameId, "CHESS_RESIGN_CONFIRM", nil, gameId)
                     DeltaChess:RefreshMainMenuContent()
                 end)
                 
@@ -1987,7 +1962,7 @@ StaticPopupDialogs["CHESS_CHALLENGE_RECEIVED"] = {
 }
 
 StaticPopupDialogs["CHESS_RESIGN_CONFIRM"] = {
-    text = "Are you sure you want to resign?",
+    text = "%s\n\nAre you sure you want to resign?",
     button1 = "Resign",
     button2 = "Cancel",
     OnShow = function(dialog)
@@ -2021,7 +1996,7 @@ StaticPopupDialogs["CHESS_RESIGN_CONFIRM"] = {
 }
 
 StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
-    text = "Your opponent wants to pause the game. Do you accept?",
+    text = "%s\n\nYour opponent wants to pause the game. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
     OnShow = function(dialog)
@@ -2053,7 +2028,7 @@ StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
 }
 
 StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
-    text = "Your opponent wants to resume the game. Do you accept?",
+    text = "%s\n\nYour opponent wants to resume the game. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
     OnShow = function(dialog)

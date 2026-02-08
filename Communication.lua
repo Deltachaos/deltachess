@@ -392,7 +392,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         if not success or not data then return end
         
         if data.offer then
-            StaticPopup_Show("CHESS_DRAW_OFFER", nil, nil, data.gameId)
+            DeltaChess.UI:ShowGamePopup(data.gameId, "CHESS_DRAW_OFFER", nil, data.gameId)
         elseif data.accepted then
             self:HandleDrawAccepted(data.gameId)
         else
@@ -786,13 +786,13 @@ function DeltaChess:HandleResignation(gameId, opponent)
     local resigningColor = (myColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
     board:Resign(resigningColor)
     
-    -- Save to history
-    self:SaveGameToHistory(board)
-    
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
         DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
     end
+    
+    -- Save to history
+    self:SaveGameToHistory(board)
     
     self:Print(opponent .. " resigned. You win!")
 end
@@ -915,7 +915,7 @@ function DeltaChess:HandlePauseRequest(data)
     local board = DeltaChess.GetBoard(gameId)
     if not board or board:OneOpponentIsEngine() or not board:IsActive() then return end
     if data.accepted == nil then
-        StaticPopup_Show("CHESS_PAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
+        DeltaChess.UI:ShowGamePopup(gameId, "CHESS_PAUSE_REQUEST", nil, { gameId = gameId, sender = sender })
     else
         if data.accepted then
             board:PauseGame()
@@ -960,7 +960,7 @@ function DeltaChess:HandleUnpauseRequest(data)
     local board = DeltaChess.GetBoard(gameId)
     if not board or board:OneOpponentIsEngine() or not board:IsPaused() then return end
     if data.accepted == nil then
-        StaticPopup_Show("CHESS_UNPAUSE_REQUEST", nil, nil, { gameId = gameId, sender = sender })
+        DeltaChess.UI:ShowGamePopup(gameId, "CHESS_UNPAUSE_REQUEST", nil, { gameId = gameId, sender = sender })
     else
         if data.accepted then
             local timeSpentClosed = board:GetGameMeta("timeSpentClosed") or 0

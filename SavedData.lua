@@ -8,6 +8,8 @@ local STATUS = {
 
 -- Save game to history using Board serialization
 function DeltaChess:SaveGameToHistory(board)
+    -- todo check if already saved into history
+
     -- Ensure the board has an end time set
     if not board:GetEndTime() then
         board:EndGame()

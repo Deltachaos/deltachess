@@ -1474,7 +1474,7 @@ function DeltaChess:ShowChessBoard(gameId)
         local board = DeltaChess.GetBoard(gameId)
         if not board or not board:IsActive() then return end
         DeltaChess._resignConfirmGameId = gameId
-        StaticPopup_Show("CHESS_RESIGN_CONFIRM", nil, nil, gameId)
+        DeltaChess.UI:ShowGamePopup(gameId, "CHESS_RESIGN_CONFIRM", nil, gameId)
     end)
     frame.resignButton = resignButton
     
@@ -2376,6 +2376,55 @@ function DeltaChess.UI:ApplyGameEndUIState(frame)
     end
 end
 
+--- Format a color-coded game title string: "|cFFRRGGBBWhite|r vs |cFFRRGGBBBlack|r".
+-- Uses class colors for each player and shows engine name for computer games.
+-- @param board Board object
+-- @return string The formatted title (e.g. "|cFF00FF00PlayerA|r vs |cFFFF0000PlayerB|r")
+function DeltaChess.UI:FormatGameTitle(board)
+    if not board then return "" end
+
+    local white = board:GetWhitePlayerName()
+    local black = board:GetBlackPlayerName()
+    local isVsComputer = board:OneOpponentIsEngine()
+    local computerEngine = board:GetEngineId()
+
+    -- Class colors
+    local whiteR, whiteG, whiteB = DeltaChess.UI:GetPlayerColor(white or "?", board:GetWhitePlayerClass())
+    local blackR, blackG, blackB = DeltaChess.UI:GetPlayerColor(black or "?", board:GetBlackPlayerClass())
+    local whiteHex = string.format("|cFF%02X%02X%02X", whiteR * 255, whiteG * 255, whiteB * 255)
+    local blackHex = string.format("|cFF%02X%02X%02X", blackR * 255, blackG * 255, blackB * 255)
+
+    -- Display names: strip realm, substitute engine name for computer
+    local whiteName = (white or "?"):match("^([^%-]+)") or white or "?"
+    local blackName = (black or "?"):match("^([^%-]+)") or black or "?"
+
+    if isVsComputer and computerEngine then
+        local engine = DeltaChess.Engines:Get(computerEngine)
+        local engineName = engine and engine.name or computerEngine
+        if whiteName == "Computer" then whiteName = "Computer (" .. engineName .. ")" end
+        if blackName == "Computer" then blackName = "Computer (" .. engineName .. ")" end
+    end
+
+    return string.format("%s%s|r vs %s%s|r", whiteHex, whiteName, blackHex, blackName)
+end
+
+--- Show a game-related popup with the "Player1 vs Player2" title automatically added.
+-- Builds the title from the board's white/black player names and delegates to StaticPopup_Show.
+-- @param gameIdOrBoard string|Board  A game ID string or a Board object (useful when the board is already in history)
+-- @param popupName string The StaticPopupDialogs key (e.g. "CHESS_GAME_END")
+-- @param bodyText string|nil  Optional body text (maps to the second %s in the dialog template)
+-- @param data any|nil     Optional data forwarded as the 4th arg to StaticPopup_Show
+function DeltaChess.UI:ShowGamePopup(gameIdOrBoard, popupName, bodyText, data)
+    local board
+    if type(gameIdOrBoard) == "string" then
+        board = DeltaChess.GetBoard(gameIdOrBoard)
+    else
+        board = gameIdOrBoard
+    end
+    local titleText = DeltaChess.UI:FormatGameTitle(board)
+    StaticPopup_Show(popupName, titleText, bodyText, data)
+end
+
 -- Show game end screen (dialog, sound, save to history). Can be called with or without a board frame.
 -- @param gameId string The game ID
 -- @param frame table|nil Optional board frame (if open)
@@ -2401,9 +2450,6 @@ function DeltaChess.UI:ShowGameEnd(gameId, frame)
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
     local resignedPlayer = board:GetResignedPlayer()
-    
-    -- Build title: "Player1 vs Player2"
-    local titleText = (white or "White") .. " vs " .. (black or "Black")
 
     local resultText = ""
 
@@ -2437,8 +2483,8 @@ function DeltaChess.UI:ShowGameEnd(gameId, frame)
         boardToSave:SetEndTime(DeltaChess.Util.TimeNow())
         DeltaChess:SaveGameToHistory(boardToSave)
     end
-    
-    StaticPopup_Show("CHESS_GAME_END", titleText, resultText)
+
+    DeltaChess.UI:ShowGamePopup(board, "CHESS_GAME_END", resultText)
 end
 
 -- Game end popup
@@ -2458,7 +2504,7 @@ StaticPopupDialogs["CHESS_GAME_END"] = {
 
 -- Draw offer popup
 StaticPopupDialogs["CHESS_DRAW_OFFER"] = {
-    text = "Your opponent offers a remis. Do you accept?",
+    text = "%s\n\nYour opponent offers a remis. Do you accept?",
     button1 = "Accept",
     button2 = "Decline",
     OnAccept = function(self, gameId)
