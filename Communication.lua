@@ -722,7 +722,7 @@ function DeltaChess:ResignGame(gameId)
     end
 
     -- Save to history
-    self:SaveGameToHistory(board, "resigned")
+    self:SaveGameToHistory(board)
 
     self:Print("You resigned.")
 end
@@ -737,7 +737,7 @@ function DeltaChess:HandleResignation(gameId, opponent)
     board:Resign(resigningColor)
     
     -- Save to history
-    self:SaveGameToHistory(board, "won")
+    self:SaveGameToHistory(board)
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -784,7 +784,7 @@ function DeltaChess:AcceptDraw(gameId)
     self:SendCommMessage("ChessDraw", self:Serialize(data), "WHISPER", opponent)
     
     -- Save to history
-    self:SaveGameToHistory(board, "draw")
+    self:SaveGameToHistory(board)
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -818,7 +818,7 @@ function DeltaChess:HandleDrawAccepted(gameId)
     board:EndGame()
 
     -- Save to history
-    self:SaveGameToHistory(board, "draw")
+    self:SaveGameToHistory(board)
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -839,12 +839,8 @@ function DeltaChess:TimeOut(gameId, color)
     board:SetGameMeta("timeoutPlayer", color == COLOR.WHITE and white or black)
     board:EndGame()
 
-    -- Determine result for this player
-    local myColor = self:GetMyColor(gameId)
-    local result = myColor == color and "lost" or "won"
-    
     -- Save to history
-    self:SaveGameToHistory(board, result)
+    self:SaveGameToHistory(board)
     
     -- Update UI
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then

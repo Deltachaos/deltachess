@@ -7,8 +7,7 @@ local STATUS = {
 }
 
 -- Save game to history using Board serialization
--- The entire game state (result derived from board) is stored in the serialized board
-function DeltaChess:SaveGameToHistory(board, result)
+function DeltaChess:SaveGameToHistory(board)
     -- Serialize the board state (contains ALL game data; result is derived in GetGameResult())
     local serializedBoard = board:Serialize()
     local gameId = board:GetGameMeta("id")
@@ -89,7 +88,7 @@ function DeltaChess:CleanupOldGames()
             -- Move to history as abandoned
             board:EndGame(currentTime)
 
-            self:SaveGameToHistory(board, "abandoned")
+            self:SaveGameToHistory(board)
         end
     end
 end

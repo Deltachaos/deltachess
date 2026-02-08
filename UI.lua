@@ -1546,13 +1546,7 @@ function DeltaChess:ShowChessBoard(gameId)
     
     -- Update the board display
     DeltaChess.UI:UpdateBoard(frame)
-    
-    -- Start clock if applicable
-    local status = board:GetGameStatus()
-    if settings.useClock and status == STATUS.ACTIVE then
-        DeltaChess.UI:StartClock(frame)
-    end
-    
+
     frame:Show()
     
     -- Store frame reference
@@ -1774,6 +1768,8 @@ function DeltaChess.UI:UpdateBoard(frame)
             end
         end
     end
+
+    print(board:GetGameStatus())
     
     -- Restore selection highlight and valid moves (UpdateBoard clears them above)
     -- Don't restore when game has ended - no moves to make
@@ -1867,10 +1863,7 @@ function DeltaChess.UI:UpdateBoard(frame)
     if status == STATUS.ACTIVE and boardGameStatus == STATUS.ACTIVE and not pausedByClose and frame:IsShown() then
         C_Timer.After(1, function()
             local board = DeltaChess.GetBoard(frame.gameId)
-            if board and frame.gameId and DeltaChess.UI.activeFrame == frame and frame:IsShown()
-               and DeltaChess.GetGameStatus(board) == STATUS.ACTIVE then
-                DeltaChess.UI:UpdateBoard(frame)
-            end
+            DeltaChess.UI:UpdateBoard(frame)
         end)
     end
     
@@ -2370,51 +2363,6 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
     end
 end
 
--- Start clock (recalculates time from timestamps each tick)
-function DeltaChess.UI:StartClock(frame)
-    local myColor = frame.myChessColor
-    local opponentColor = frame.opponentChessColor
-    
-    frame.clockTicker = C_Timer.NewTicker(1, function()
-        local board = DeltaChess.GetBoard(frame.gameId)
-        if not board then return end
-        local gameStatus = DeltaChess.GetGameStatus(board)
-        local status = board:GetGameStatus()
-        local pausedByClose = board:GetGameMeta("pausedByClose")
-        if not frame:IsShown() or status ~= STATUS.ACTIVE or pausedByClose or gameStatus ~= STATUS.ACTIVE then
-            if frame.clockTicker then
-                frame.clockTicker:Cancel()
-            end
-            return
-        end
-        
-        -- Per-side: remaining clock if that side has a clock, else thinking time
-        local currentTurn = board:GetCurrentTurn()
-        if frame.playerClock then
-            local myHasClock = (board:GetClock(myColor) or 0) > 0
-            local myTime = myHasClock and board:TimeLeft(myColor) or board:TimeThinking(myColor)
-            local myTurn = currentTurn == myColor
-            local timeColor = myTurn and "|cFFFFFF00" or "|cFFFFFFFF"
-            frame.playerClock:SetText(timeColor .. DeltaChess.UI:FormatTime(myTime or 0) .. "|r")
-        end
-        if frame.opponentClock then
-            local opponentHasClock = (board:GetClock(opponentColor) or 0) > 0
-            local opponentTime = opponentHasClock and board:TimeLeft(opponentColor) or board:TimeThinking(opponentColor)
-            local opponentTurn = currentTurn == opponentColor
-            local timeColor = opponentTurn and "|cFFFFFF00" or "|cFFFFFFFF"
-            frame.opponentClock:SetText(timeColor .. DeltaChess.UI:FormatTime(opponentTime or 0) .. "|r")
-        end
-        -- Timeout only when the side to move has a clock and time left <= 0
-        local stmHasClock = (board:GetClock(currentTurn) or 0) > 0
-        if stmHasClock then
-            local stmLeft = board:TimeLeft(currentTurn)
-            if stmLeft ~= nil and stmLeft <= 0 then
-                DeltaChess:TimeOut(frame.gameId, currentTurn)
-            end
-        end
-    end)
-end
-
 -- Apply game-over UI state (clock stopped, buttons disabled). Idempotent; safe to call whenever game is ended.
 -- Does not show dialog, play sound, or save to history.
 function DeltaChess.UI:ApplyGameEndUIState(frame)
@@ -2459,8 +2407,7 @@ function DeltaChess.UI:ShowGameEnd(frame)
     local timeoutPlayer = board:GetGameMeta("timeoutPlayer")
     
     local resultText = ""
-    local playerResult = "draw" -- default
-    
+
     local gameStatus = DeltaChess.GetGameStatus(board)
     local currentTurn = board:GetCurrentTurn()
     
@@ -2468,28 +2415,16 @@ function DeltaChess.UI:ShowGameEnd(frame)
         local winner = currentTurn == COLOR.WHITE and "Black" or "White"
         local winnerName = currentTurn == COLOR.WHITE and black or white
         resultText = winner .. " wins by checkmate!"
-        
-        -- Determine result from player's perspective
-        if isVsComputer then
-            playerResult = (storedPlayerColor ~= currentTurn) and "won" or "lost"
-        else
-            playerResult = (winnerName == playerName) and "won" or "lost"
-        end
     elseif gameStatus == "stalemate" then
         resultText = "Draw by stalemate!"
-        playerResult = "draw"
     elseif gameStatus == "draw" then
         resultText = "Draw!"
-        playerResult = "draw"
     elseif gameStatus == "resignation" or resignedPlayer then
         resultText = (resignedPlayer or "Someone") .. " resigned. " .. 
                      ((resignedPlayer == white) and black or white) .. " wins!"
-        playerResult = (resignedPlayer == playerName or 
-                       (isVsComputer and resignedPlayer ~= "Computer")) and "resigned" or "won"
     elseif gameStatus == "timeout" or timeoutPlayer then
         resultText = (timeoutPlayer or "Someone") .. " ran out of time. " ..
                      ((timeoutPlayer == white) and black or white) .. " wins!"
-        playerResult = (timeoutPlayer == playerName) and "lost" or "won"
     end
     
     -- Play game end sound
@@ -2499,7 +2434,7 @@ function DeltaChess.UI:ShowGameEnd(frame)
     local boardToSave = DeltaChess.GetBoard(frame.gameId)
     if boardToSave then
         boardToSave:SetEndTime(DeltaChess.Util.TimeNow())
-        DeltaChess:SaveGameToHistory(boardToSave, playerResult)
+        DeltaChess:SaveGameToHistory(boardToSave)
     end
     
     StaticPopup_Show("CHESS_GAME_END", resultText)
