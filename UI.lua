@@ -60,19 +60,33 @@ function DeltaChess.UI:GetGameStatusText(board, playerColor)
     local reason = board:GetEndReason()
     local result = board:GetResult()
     local winnerLabel = result == Constants.WHITE and "White" or (result == Constants.BLACK and "Black" or nil)
+    
+    -- Determine if player won or lost (if playerColor is provided)
+    local playerWon = false
+    if playerColor and result ~= Constants.DRAWN and result ~= Constants.TIMEOUT and result ~= Constants.ERROR then
+        if (result == Constants.WHITE and playerColor == COLOR.WHITE) or
+           (result == Constants.BLACK and playerColor == COLOR.BLACK) then
+            playerWon = true
+        end
+    end
+    
+    -- Choose color: green for win, red for loss, yellow for draws
+    local winColor = playerWon and "|cFF00FF00" or "|cFFFF4444"  -- Green if won, red if lost
+    local drawColor = "|cFFFFFF00"  -- Yellow for draws
+    
     if reason == Constants.REASON_CHECKMATE then
-        return "|cFFFF4444Checkmate - " .. (winnerLabel or "???") .. " wins|r"
+        return winColor .. "Checkmate - " .. (winnerLabel or "???") .. " wins|r"
     elseif reason == Constants.REASON_STALEMATE then
-        return "|cFFFFFF00Stalemate - Remis|r"
+        return drawColor .. "Stalemate - Remis|r"
     elseif reason == Constants.REASON_FIFTY_MOVE then
         local drawDetail = " (50-move rule)"
-        return "|cFFFFFF00Remis" .. drawDetail .. "|r"
+        return drawColor .. "Remis" .. drawDetail .. "|r"
     elseif reason == Constants.REASON_REMIS then
-        return "|cFFFFFF00Remis by agreement|r"
+        return drawColor .. "Remis by agreement|r"
     elseif reason == Constants.REASON_RESIGNATION then
-        return "|cFFFF4444Resignation - " .. (winnerLabel or "???") .. " wins|r"
+        return winColor .. "Resignation - " .. (winnerLabel or "???") .. " wins|r"
     elseif reason == Constants.REASON_TIMEOUT then
-        return "|cFFFF4444Timeout - " .. (winnerLabel or "???") .. " wins|r"
+        return winColor .. "Timeout - " .. (winnerLabel or "???") .. " wins|r"
     else
         return "|cFFFF4444Game Over|r"
     end
