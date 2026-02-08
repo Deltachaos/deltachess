@@ -62,6 +62,15 @@ local function Initialize()
         ChessDB.settings.boardMinimized = false
     end
     
+    -- Version check: if no version exists, clear games and history (old database format)
+    if not ChessDB.version then
+        ChessDB.games = {}
+        ChessDB.history = {}
+    end
+    
+    -- Save current addon version
+    ChessDB.version = DeltaChess.version
+    
     DeltaChess.db = ChessDB
 
     -- Register slash commands (slash names unchanged)
@@ -100,6 +109,8 @@ local function Initialize()
             DeltaChess.Minimap:Initialize()
         end
     end)
+
+    print(DeltaChess.Util.Dump(DeltaChess.db.history))
 
     -- Periodic ticker: archive ended games and update minimap highlight
     DeltaChess.CreateTicker(2, function()
