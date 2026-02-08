@@ -443,11 +443,12 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
     -- Update UI if board is open (with animation for the player's move)
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
         DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, true)
-        
-        -- Check for game end
-        if board:IsEnded() then
-            DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
-        end
+    end
+    
+    -- Check for game end (show dialog even if board window is closed)
+    if board:IsEnded() then
+        local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
+        DeltaChess.UI:ShowGameEnd(gameId, frame)
     end
     
     -- Play sound based on move type (player's own move)
@@ -637,6 +638,18 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     local lastMove = board:GetLastMove()
     local wasCapture = lastMove and lastMove:IsCapture()
     DeltaChess.Sound:PlayMoveSound(board, false, wasCapture, board)
+    
+    -- Update UI if board is open
+    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == moveData.gameId then
+        DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, false)
+    end
+    
+    -- Check for game end (show dialog even if board window is closed)
+    if board:IsEnded() then
+        local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == moveData.gameId) and DeltaChess.UI.activeFrame or nil
+        DeltaChess.UI:ShowGameEnd(moveData.gameId, frame)
+        return
+    end
     
     local opponentName = sender:match("^([^%-]+)") or sender
     DeltaChess:NotifyItIsYourTurn(moveData.gameId, opponentName)

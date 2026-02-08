@@ -1938,7 +1938,7 @@ function DeltaChess.UI:UpdateBoard(frame)
     
     -- Check for game end
     if board:IsEnded() then
-        DeltaChess.UI:ShowGameEnd(frame)
+        DeltaChess.UI:ShowGameEnd(frame.gameId, frame)
     end
 end
 
@@ -2111,7 +2111,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComp
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
                 end
                 if board:IsEnded() then
-                    DeltaChess.UI:ShowGameEnd(pm.frame)
+                    DeltaChess.UI:ShowGameEnd(pm.frame.gameId, pm.frame)
                     return
                 end
                 DeltaChess.AI:MakeMove(pm.frame.gameId, 500)
@@ -2156,7 +2156,7 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComp
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
                 end
                 if board:IsEnded() then
-                    DeltaChess.UI:ShowGameEnd(frame)
+                    DeltaChess.UI:ShowGameEnd(frame.gameId, frame)
                     return
                 end
                 DeltaChess.AI:MakeMove(frame.gameId, 500)
@@ -2300,7 +2300,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
                 
                 -- Check for game end
                 if board:IsEnded() then
-                    DeltaChess.UI:ShowGameEnd(frame)
+                    DeltaChess.UI:ShowGameEnd(frame.gameId, frame)
                     return
                 end
                 
@@ -2374,23 +2374,35 @@ function DeltaChess.UI:ApplyGameEndUIState(frame)
     end
 end
 
--- Show game end screen (dialog, sound, save to history). Call ApplyGameEndUIState for UI; this is one-time presentation.
-function DeltaChess.UI:ShowGameEnd(frame)
-    self:ApplyGameEndUIState(frame)
-    if frame.gameEndShown then return end
-    frame.gameEndShown = true
-
-    local board = DeltaChess.GetBoard(frame.gameId)
+-- Show game end screen (dialog, sound, save to history). Can be called with or without a board frame.
+-- @param gameId string The game ID
+-- @param frame table|nil Optional board frame (if open)
+function DeltaChess.UI:ShowGameEnd(gameId, frame)
+    -- Apply frame UI state if a frame is provided
+    if frame then
+        self:ApplyGameEndUIState(frame)
+    end
+    
+    local board = DeltaChess.GetBoard(gameId)
     if not board then return end
-    local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+    
+    -- Guard against showing the dialog more than once per game (stored on the board)
+    if board:GetGameMeta("_gameEndShown") then return end
+    board:SetGameMeta("_gameEndShown", true)
+    
+    -- Also mark the frame so legacy checks still work
+    if frame then
+        frame.gameEndShown = true
+    end
     
     -- Get game metadata
-    local isVsComputer = board:OneOpponentIsEngine()
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
-    local storedPlayerColor = board:GetPlayerColor()
     local resignedPlayer = board:GetResignedPlayer()
     
+    -- Build title: "Player1 vs Player2"
+    local titleText = (white or "White") .. " vs " .. (black or "Black")
+
     local resultText = ""
 
     local reason = board:GetEndReason()
@@ -2416,18 +2428,18 @@ function DeltaChess.UI:ShowGameEnd(frame)
     DeltaChess.Sound:PlayGameEndSound(board, board)
     
     -- Save the game to history (only if still in active games) — use current board instance
-    local boardToSave = DeltaChess.GetBoard(frame.gameId)
+    local boardToSave = DeltaChess.GetBoard(gameId)
     if boardToSave then
         boardToSave:SetEndTime(DeltaChess.Util.TimeNow())
         DeltaChess:SaveGameToHistory(boardToSave)
     end
     
-    StaticPopup_Show("CHESS_GAME_END", resultText)
+    StaticPopup_Show("CHESS_GAME_END", titleText, resultText)
 end
 
 -- Game end popup
 StaticPopupDialogs["CHESS_GAME_END"] = {
-    text = "%s",
+    text = "%s\n\n%s",
     button1 = "OK",
     timeout = 0,
     whileDead = true,

@@ -99,9 +99,8 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
                 -- Check if game ended
                 if finalBoard:IsEnded() then
                     finalBoard:EndGame()
-                    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
-                        DeltaChess.UI:ShowGameEnd(DeltaChess.UI.activeFrame)
-                    end
+                    local frame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
+                    DeltaChess.UI:ShowGameEnd(gameId, frame)
                 end
             end)
         end
