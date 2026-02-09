@@ -197,7 +197,7 @@ function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flip
             square.bg = square:CreateTexture(nil, "BACKGROUND")
             square.bg:SetAllPoints()
             
-            local isLightSquare = (row + col) % 2 == 0
+            local isLightSquare = (row + col) % 2 ~= 0
             square.isLightSquare = isLightSquare
             if isLightSquare then
                 square.bg:SetColorTexture(0.9, 0.9, 0.8, 1)
