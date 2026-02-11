@@ -1307,6 +1307,13 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     popup:Show()
     DeltaChess:PingPlayers(candidates, function(respondedList)
         statusText:SetText(string.format("%d player(s) with DeltaChess online.", #respondedList))
+        
+        -- If searching party/raid and no players responded, send message to chat
+        if source == "party" and #respondedList == 0 and #candidates > 0 then
+            local chatChannel = IsInRaid() and "RAID" or "PARTY"
+            SendChatMessage("I want to challenge someone to a game of chess. Install Delta Chess from Curseforge so that we can play together: https://www.curseforge.com/wow/addons/deltachess", chatChannel)
+        end
+        
         for _, child in ipairs({ scrollChild:GetChildren() }) do
             child:Hide()
             child:SetParent(nil)
@@ -1525,6 +1532,9 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 sendBtn:SetText("Send Challenge")
                 if not hasAddon then
                     DeltaChess:Print("|cFFFF0000Player doesn't have DeltaChess installed or is offline.|r")
+                    -- Extract player name without realm for whisper
+                    local whisperName = playerName:match("^([^%-]+)") or playerName
+                    SendChatMessage("I want to challenge you to a game of chess but you dont have Delta Chess installed :( Download from Curseforge so that we can play together: https://www.curseforge.com/wow/addons/deltachess", "WHISPER", nil, whisperName)
                     return
                 end
                 
