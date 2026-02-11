@@ -243,17 +243,20 @@ function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flip
 end
 
 -- Recreate board squares with current frame.flipBoard (used when swapping sides).
--- Clears existing squares from frame.boardContainer and creates new ones.
+-- Clears all children (labels + squares) from frame.boardContainer and creates new ones.
 -- frame must have: boardContainer, flipBoard. After call, frame.squares is updated.
 function DeltaChess.UI:RecreateBoardSquares(frame, interactive)
     local container = frame.boardContainer
     if not container then return end
-    -- Remove old square frames
-    if frame.squares then
-        for _, sq in pairs(frame.squares) do
-            sq:ClearAllPoints()
-            sq:SetParent(nil)
-        end
+    -- Remove all regions (rank/file labels are FontStrings, not returned by GetChildren)
+    for _, region in ipairs({ container:GetRegions() }) do
+        region:ClearAllPoints()
+        region:SetParent(nil)
+    end
+    -- Remove all child frames (square frames)
+    for _, child in ipairs({ container:GetChildren() }) do
+        child:ClearAllPoints()
+        child:SetParent(nil)
     end
     frame.squares = self:CreateBoardSquares(container, SQUARE_SIZE, LABEL_SIZE, frame.flipBoard, interactive)
 end
@@ -827,6 +830,47 @@ function DeltaChess.UI:CreatePlayerBar(config)
         capturedContainer = capturedContainer,
         timeDisplay = timeDisplay,
     }
+end
+
+-- Update top/bottom bar name labels and reassign clock/captured refs based on frame.flipBoard.
+-- Call after toggling flipBoard so the bar at top shows the side at top of board (opponent when not flipped, player when flipped).
+-- frame must have: flipBoard, myChessColor, topBarNameText, bottomBarNameText, topBarClock, bottomBarClock, topBarCapturedContainer, bottomBarCapturedContainer, and board or replayBoard.
+function DeltaChess.UI:UpdatePlayerBarLabels(frame)
+    local board = frame.board or frame.replayBoard
+    if not board or not frame.topBarNameText or not frame.bottomBarNameText then return end
+    local white = board:GetWhitePlayerName()
+    local black = board:GetBlackPlayerName()
+    local whiteClass = board:GetWhitePlayerClass()
+    local blackClass = board:GetBlackPlayerClass()
+    local myColor = frame.myChessColor
+    local opponentColor = frame.opponentChessColor
+    local playerName = (myColor == COLOR.WHITE) and white or black
+    local playerClass = (myColor == COLOR.WHITE) and whiteClass or blackClass
+    local opponentName = (opponentColor == COLOR.WHITE) and white or black
+    local opponentClass = (opponentColor == COLOR.WHITE) and whiteClass or blackClass
+    local playerDisplay = self:FormatDisplayName(playerName, board)
+    local opponentDisplay = self:FormatDisplayName(opponentName, board)
+    local pr, pg, pb = self:GetPlayerColor(playerName, playerClass)
+    local oppR, oppG, oppB = self:GetPlayerColor(opponentName, opponentClass)
+    if frame.flipBoard then
+        frame.topBarNameText:SetText(playerDisplay)
+        frame.topBarNameText:SetTextColor(pr, pg, pb)
+        frame.bottomBarNameText:SetText(opponentDisplay)
+        frame.bottomBarNameText:SetTextColor(oppR, oppG, oppB)
+        frame.playerClock = frame.topBarClock
+        frame.opponentClock = frame.bottomBarClock
+        frame.playerCapturedContainer = frame.topBarCapturedContainer
+        frame.opponentCapturedContainer = frame.bottomBarCapturedContainer
+    else
+        frame.topBarNameText:SetText(opponentDisplay)
+        frame.topBarNameText:SetTextColor(oppR, oppG, oppB)
+        frame.bottomBarNameText:SetText(playerDisplay)
+        frame.bottomBarNameText:SetTextColor(pr, pg, pb)
+        frame.playerClock = frame.bottomBarClock
+        frame.opponentClock = frame.topBarClock
+        frame.playerCapturedContainer = frame.bottomBarCapturedContainer
+        frame.opponentCapturedContainer = frame.topBarCapturedContainer
+    end
 end
 
 -- Create clock configuration panel (use clock checkbox, time slider, increment, optional handicap).
@@ -1406,6 +1450,7 @@ function DeltaChess:ShowChessBoard(gameId)
                 DeltaChess.UI:OnSquareClick(frame, uci)
             end)
         end
+        DeltaChess.UI:UpdatePlayerBarLabels(frame)
         DeltaChess.UI:UpdateBoard(frame)
     end)
     frame.flipButton = flipBtn
@@ -1445,6 +1490,9 @@ function DeltaChess:ShowChessBoard(gameId)
         chessColor = opponentChessColor,
     })
     local opponentBar = opponentBarInfo.bar
+    frame.topBarNameText = opponentBarInfo.nameText
+    frame.topBarClock = opponentBarInfo.timeDisplay
+    frame.topBarCapturedContainer = opponentBarInfo.capturedContainer
     frame.opponentCapturedContainer = opponentBarInfo.capturedContainer
     frame.opponentCapturedColor = myChessColor  -- Opponent captures MY pieces
     frame.opponentClock = opponentBarInfo.timeDisplay
@@ -1481,6 +1529,9 @@ function DeltaChess:ShowChessBoard(gameId)
         chessColor = myChessColor,
     })
     local playerBar = playerBarInfo.bar
+    frame.bottomBarNameText = playerBarInfo.nameText
+    frame.bottomBarClock = playerBarInfo.timeDisplay
+    frame.bottomBarCapturedContainer = playerBarInfo.capturedContainer
     frame.playerCapturedContainer = playerBarInfo.capturedContainer
     frame.playerCapturedColor = opponentChessColor  -- Player captures OPPONENT pieces
     frame.playerClock = playerBarInfo.timeDisplay

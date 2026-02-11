@@ -801,6 +801,7 @@ function DeltaChess:ShowReplayWindow(board)
     titleFlipBtn:SetScript("OnClick", function()
         frame.flipBoard = not frame.flipBoard
         DeltaChess.UI:RecreateBoardSquares(frame, false)
+        DeltaChess.UI:UpdatePlayerBarLabels(frame)
         if frame.RefreshReplayDisplay then
             frame.RefreshReplayDisplay()
         end
@@ -836,6 +837,9 @@ function DeltaChess:ShowReplayWindow(board)
         chessColor = opponentChessColor,
     })
     local opponentBar = opponentBarInfo.bar
+    frame.topBarNameText = opponentBarInfo.nameText
+    frame.topBarClock = opponentBarInfo.timeDisplay
+    frame.topBarCapturedContainer = opponentBarInfo.capturedContainer
     frame.opponentCapturedContainer = opponentBarInfo.capturedContainer
     frame.opponentCapturedColor = myChessColor
     frame.opponentClock = opponentBarInfo.timeDisplay
@@ -866,6 +870,9 @@ function DeltaChess:ShowReplayWindow(board)
         chessColor = myChessColor,
     })
     local playerBar = playerBarInfo.bar
+    frame.bottomBarNameText = playerBarInfo.nameText
+    frame.bottomBarClock = playerBarInfo.timeDisplay
+    frame.bottomBarCapturedContainer = playerBarInfo.capturedContainer
     frame.playerCapturedContainer = playerBarInfo.capturedContainer
     frame.playerCapturedColor = opponentChessColor
     frame.playerClock = playerBarInfo.timeDisplay
