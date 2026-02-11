@@ -793,6 +793,19 @@ function DeltaChess:ShowReplayWindow(board)
     frame:SetFrameLevel(250)
     frame.TitleText:SetText("Replay")
     
+    -- Flip board button in title bar (to the left of close button)
+    local titleFlipBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    titleFlipBtn:SetSize(35, 22)
+    titleFlipBtn:SetPoint("TOPRIGHT", frame.CloseButton, "TOPLEFT", 0, 0)
+    titleFlipBtn:SetText("Flip")
+    titleFlipBtn:SetScript("OnClick", function()
+        frame.flipBoard = not frame.flipBoard
+        DeltaChess.UI:RecreateBoardSquares(frame, false)
+        if frame.RefreshReplayDisplay then
+            frame.RefreshReplayDisplay()
+        end
+    end)
+    
     self.frames.replayWindow = frame
     
     -- Store replay state: full board (for GetBoardAtIndex) and move list for history/animation
@@ -832,6 +845,8 @@ function DeltaChess:ShowReplayWindow(board)
     local boardContainer = CreateFrame("Frame", nil, frame)
     boardContainer:SetSize(BOARD_SIZE + LABEL_SIZE, BOARD_SIZE + LABEL_SIZE)
     boardContainer:SetPoint("TOPLEFT", opponentBar, "BOTTOMLEFT", 0, 0)
+    frame.boardContainer = boardContainer
+    frame.flipBoard = flipBoard
     
     -- Create squares using shared function (non-interactive)
     frame.squares = DeltaChess.UI:CreateBoardSquares(boardContainer, SQUARE_SIZE, LABEL_SIZE, flipBoard, false)
@@ -971,6 +986,7 @@ function DeltaChess:ShowReplayWindow(board)
             DeltaChess.UI:AnimateReplayMove(frame, animateMove)
         end
     end
+    frame.RefreshReplayDisplay = UpdateReplayBoard
     
     -- Button handlers
     firstBtn:SetScript("OnClick", function()

@@ -242,6 +242,22 @@ function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flip
     return squares
 end
 
+-- Recreate board squares with current frame.flipBoard (used when swapping sides).
+-- Clears existing squares from frame.boardContainer and creates new ones.
+-- frame must have: boardContainer, flipBoard. After call, frame.squares is updated.
+function DeltaChess.UI:RecreateBoardSquares(frame, interactive)
+    local container = frame.boardContainer
+    if not container then return end
+    -- Remove old square frames
+    if frame.squares then
+        for _, sq in pairs(frame.squares) do
+            sq:ClearAllPoints()
+            sq:SetParent(nil)
+        end
+    end
+    frame.squares = self:CreateBoardSquares(container, SQUARE_SIZE, LABEL_SIZE, frame.flipBoard, interactive)
+end
+
 -- Update piece display on squares from a board state (2D array or DeltaChess.Board object)
 -- lastMove can be a BoardMove object or have fromSquare/toSquare UCI strings
 function DeltaChess.UI:RenderPieces(squares, boardState, lastMove)
@@ -1356,7 +1372,7 @@ function DeltaChess:ShowChessBoard(gameId)
     -- Minimize button in title bar (to the left of the close button)
     local minimizeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     minimizeBtn:SetSize(28, 22)
-    minimizeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20,0)
+    minimizeBtn:SetPoint("TOPRIGHT", frame.CloseButton, "TOPLEFT", 0, 0)
     minimizeBtn:SetText("−")
     minimizeBtn:SetScript("OnClick", function()
         frame.isMinimized = not frame.isMinimized
@@ -1376,6 +1392,23 @@ function DeltaChess:ShowChessBoard(gameId)
         end
     end)
     frame.minimizeBtn = minimizeBtn
+    
+    -- Flip board button in title bar (to the left of minimize)
+    local flipBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    flipBtn:SetSize(35, 22)
+    flipBtn:SetPoint("TOPRIGHT", minimizeBtn, "TOPLEFT", 0, 0)
+    flipBtn:SetText("Flip")
+    flipBtn:SetScript("OnClick", function()
+        frame.flipBoard = not frame.flipBoard
+        DeltaChess.UI:RecreateBoardSquares(frame, true)
+        for uci, square in pairs(frame.squares) do
+            square:SetScript("OnClick", function()
+                DeltaChess.UI:OnSquareClick(frame, uci)
+            end)
+        end
+        DeltaChess.UI:UpdateBoard(frame)
+    end)
+    frame.flipButton = flipBtn
     
     -- Store references
     frame.gameId = gameId
