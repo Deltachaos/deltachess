@@ -245,7 +245,9 @@ function DeltaChess.Sound:PlayGameEndSound(board)
         else
             self:PlayWin()
         end
-    elseif reason == DeltaChess.Constants.REASON_STALEMATE or reason == DeltaChess.Constants.REASON_FIFTY_MOVE then
+    elseif reason == DeltaChess.Constants.REASON_STALEMATE or reason == DeltaChess.Constants.REASON_FIFTY_MOVE
+        or reason == DeltaChess.Constants.REASON_THREEFOLD_REPETITION or reason == DeltaChess.Constants.REASON_FIVEFOLD_REPETITION
+        or reason == DeltaChess.Constants.REASON_REMIS then
         self:PlayStalemate()
     elseif reason == DeltaChess.Constants.REASON_RESIGNATION then
         local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))

@@ -392,7 +392,13 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         if not success or not data then return end
         
         if data.offer then
-            DeltaChess.UI:ShowGamePopup(data.gameId, "CHESS_DRAW_OFFER", nil, data.gameId)
+            local board = self:GetBoard(data.gameId)
+            if board and board:IsThreefoldRepetitionDrawPossible() then
+                -- Threefold repetition: accept draw immediately without asking
+                self:AcceptDraw(data.gameId)
+            else
+                DeltaChess.UI:ShowGamePopup(data.gameId, "CHESS_DRAW_OFFER", nil, data.gameId)
+            end
         elseif data.accepted then
             self:HandleDrawAccepted(data.gameId)
         else
@@ -822,7 +828,7 @@ function DeltaChess:AcceptDraw(gameId)
     local opponent = self:GetOpponent(gameId)
     if not opponent then return end
     
-    -- Update game status
+    -- Update game status (end reason derived from position, e.g. threefold if applicable)
     board:EndGame()
 
     -- Send acceptance

@@ -81,6 +81,10 @@ function DeltaChess.UI:GetGameStatusText(board, playerColor)
     elseif reason == Constants.REASON_FIFTY_MOVE then
         local drawDetail = " (50-move rule)"
         return drawColor .. "Remis" .. drawDetail .. "|r"
+    elseif reason == Constants.REASON_THREEFOLD_REPETITION then
+        return drawColor .. "Remis (threefold repetition)|r"
+    elseif reason == Constants.REASON_FIVEFOLD_REPETITION then
+        return drawColor .. "Remis (fivefold repetition)|r"
     elseif reason == Constants.REASON_REMIS then
         return drawColor .. "Remis by agreement|r"
     elseif reason == Constants.REASON_RESIGNATION then
@@ -1988,7 +1992,26 @@ function DeltaChess.UI:UpdateBoard(frame)
             if frame.resignButton then frame.resignButton:Disable() end
             if frame.drawButton then frame.drawButton:Disable() end
         else
+            local threefold = board:IsThreefoldRepetitionDrawPossible()
             if frame.resignButton then
+                if isVsComputer and threefold then
+                    frame.resignButton:SetText("Draw")
+                    frame.resignButton:SetScript("OnClick", function()
+                        local b = DeltaChess.GetBoard(frame.gameId)
+                        if b and b:IsThreefoldRepetitionDrawPossible() then
+                            b:EndGame()
+                            DeltaChess.UI:ShowGameEnd(frame.gameId, frame)
+                        end
+                    end)
+                else
+                    frame.resignButton:SetText("Resign")
+                    frame.resignButton:SetScript("OnClick", function()
+                        local b = DeltaChess.GetBoard(frame.gameId)
+                        if not b or not b:IsActive() then return end
+                        DeltaChess._resignConfirmGameId = frame.gameId
+                        DeltaChess.UI:ShowGamePopup(frame.gameId, "CHESS_RESIGN_CONFIRM", nil, frame.gameId)
+                    end)
+                end
                 frame.resignButton:Enable()
             end
             if frame.drawButton then
@@ -2004,8 +2027,21 @@ function DeltaChess.UI:UpdateBoard(frame)
                     else
                         frame.drawButton:Disable()
                     end
+                    if frame.drawButton.LockHighlight then frame.drawButton:UnlockHighlight() end
                 else
+                    frame.drawButton:SetText("Remis")
+                    frame.drawButton:SetScript("OnClick", function()
+                        DeltaChess:OfferDraw(frame.gameId)
+                    end)
                     frame.drawButton:Enable()
+                    if threefold then
+                        if not frame.drawButton:GetHighlightTexture() then
+                            frame.drawButton:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+                        end
+                        if frame.drawButton.LockHighlight then frame.drawButton:LockHighlight() end
+                    else
+                        if frame.drawButton.UnlockHighlight then frame.drawButton:UnlockHighlight() end
+                    end
                 end
             end
         end
@@ -2463,6 +2499,7 @@ function DeltaChess.UI:ApplyGameEndUIState(frame)
         frame.resignButton:Disable()
     end
     if frame.drawButton then
+        if frame.drawButton.UnlockHighlight then frame.drawButton:UnlockHighlight() end
         if board:OneOpponentIsEngine() and #board:GetMoveHistory() > 0 then
             frame.drawButton:Enable()
         else
