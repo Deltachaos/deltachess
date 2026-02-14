@@ -725,6 +725,14 @@ end
 
 -- Get board participant info (who is "me" vs "opponent", colors, classes, flip)
 -- Returns a table with: myName, opponentName, myChessColor, opponentChessColor, myClass, opponentClass, flipBoard
+-- Get display name for a player (name is already the display name - BattleTag or character name)
+function DeltaChess.UI:GetPlayerDisplayName(name)
+    if not name then return "?" end
+    
+    -- Name is already the display name (BattleTag for BNet friends, character name with realm otherwise)
+    return name
+end
+
 function DeltaChess.UI:GetBoardParticipants(board)
     local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
     local isVsComputer = board:OneOpponentIsEngine()
@@ -778,22 +786,34 @@ function DeltaChess.UI:GetBoardParticipants(board)
     }
 end
 
--- Format display name (handles "Computer (engine - ELO)" format)
-function DeltaChess.UI:FormatDisplayName(name, board)
-    local displayName = (name or "?"):match("^([^%-]+)") or name or "?"
+-- Format display name (handles "Computer (engine - ELO)" format and BattleNet friends)
+-- name: player name string (can be BattleTag if BNet friend)
+-- board: optional board object for computer game detection
+-- showCurrentChar: if true and name is BattleTag, show "BattleTag (CurrentChar-Realm)" format
+function DeltaChess.UI:FormatDisplayName(name, board, showCurrentChar)
+    if not name then return "?" end
     
-    local isVsComputer = board:OneOpponentIsEngine()
-    local computerEngine = board:GetEngineId()
-    local computerDifficulty = board:GetEngineElo()
+    -- If name is a BattleTag (contains #) and showCurrentChar is requested, append current character
+    if showCurrentChar and name:find("#") and DeltaChess.Bnet and DeltaChess.Bnet.GetCurrentCharacterForDisplay then
+        local currentChar = DeltaChess.Bnet:GetCurrentCharacterForDisplay(name)
+        if currentChar then
+            return name .. " (" .. currentChar .. ")"
+        end
+    end
     
-    if isVsComputer and displayName == "Computer" and computerEngine then
+    -- Check if this is a computer game and format accordingly
+    local isVsComputer = board and board:OneOpponentIsEngine()
+    local computerEngine = board and board:GetEngineId()
+    local computerDifficulty = board and board:GetEngineElo()
+    
+    if isVsComputer and name == "Computer" and computerEngine then
         local engine = DeltaChess.Engines:Get(computerEngine)
         local engineName = engine and engine.name or computerEngine
         local eloStr = computerDifficulty and (" - " .. computerDifficulty .. " ELO") or ""
-        displayName = "Computer (" .. engineName .. eloStr .. ")"
+        return "Computer (" .. engineName .. eloStr .. ")"
     end
     
-    return displayName
+    return name
 end
 
 -- Create a player info bar (for top opponent bar or bottom player bar)
@@ -808,8 +828,8 @@ function DeltaChess.UI:CreatePlayerBar(config)
     bg:SetAllPoints()
     bg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
     
-    -- Name with class color
-    local displayName = DeltaChess.UI:FormatDisplayName(config.playerName, config.board)
+    -- Name with class color - show current character for BNet friends
+    local displayName = DeltaChess.UI:FormatDisplayName(config.playerName, config.board, true)
     local r, g, b = DeltaChess.UI:GetPlayerColor(config.playerName, config.playerClass)
     local nameText = bar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     nameText:SetPoint("LEFT", bar, "LEFT", 5, 8)
@@ -2529,9 +2549,9 @@ function DeltaChess.UI:FormatGameTitle(board)
     local whiteHex = string.format("|cFF%02X%02X%02X", whiteR * 255, whiteG * 255, whiteB * 255)
     local blackHex = string.format("|cFF%02X%02X%02X", blackR * 255, blackG * 255, blackB * 255)
 
-    -- Display names: strip realm, substitute engine name for computer
-    local whiteName = (white or "?"):match("^([^%-]+)") or white or "?"
-    local blackName = (black or "?"):match("^([^%-]+)") or black or "?"
+    -- Display names: already BattleTags for BNet friends, character names with realm otherwise
+    local whiteName = self:GetPlayerDisplayName(white)
+    local blackName = self:GetPlayerDisplayName(black)
 
     if isVsComputer and computerEngine then
         local engine = DeltaChess.Engines:Get(computerEngine)

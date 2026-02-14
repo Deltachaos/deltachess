@@ -39,6 +39,7 @@ EngineBridge.lua
 
 ChessAI.lua
 UI.lua
+Bnet.lua
 Communication.lua
 SavedData.lua
 Minimap.lua

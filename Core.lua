@@ -92,9 +92,12 @@ local function Initialize()
     
     -- Register for addon messages
     eventFrame:RegisterEvent("CHAT_MSG_ADDON")
+    eventFrame:RegisterEvent("CHAT_MSG_BN_WHISPER")
     eventFrame:SetScript("OnEvent", function(self, event, ...)
         if event == "CHAT_MSG_ADDON" then
             DeltaChess:OnCommReceived(...)
+        elseif event == "CHAT_MSG_BN_WHISPER" then
+            DeltaChess:OnBNetWhisperReceived(...)
         end
     end)
     
@@ -1115,43 +1118,44 @@ end
 --------------------------------------------------------------------------------
 function DeltaChess:GetRecentOpponents()
     local playerName = self:GetFullPlayerName(UnitName("player"))
-    local opponents = {} -- fullName -> lastPlayed
+    local opponents = {} -- name -> timestamp
 
-    local function addOpponent(name, timestamp)
+    local function addOpponent(board, isWhite)
+        local name = isWhite and board:GetWhitePlayerName() or board:GetBlackPlayerName()
+        
         if name and name ~= playerName and name ~= "Computer" then
-            local existing = opponents[name]
-            if not existing or timestamp > existing then
-                opponents[name] = timestamp
+            local ts = board:GetStartTime() or 0
+            if not opponents[name] or ts > opponents[name] then
+                opponents[name] = ts
             end
         end
     end
 
     -- Active games (board IS the game)
     for _, board in pairs(self.db.games) do
-        local ts = board:GetStartTime() or 0
-        addOpponent(board:GetWhitePlayerName(), ts)
-        addOpponent(board:GetBlackPlayerName(), ts)
+        addOpponent(board, true)  -- white
+        addOpponent(board, false) -- black
     end
     -- History games (deserialize to board)
     for _, entry in pairs(self.db.history) do
         local board = self:DeserializeHistoryEntry(entry)
         if board then
-            local ts = board:GetStartTime() or 0
-            addOpponent(board:GetWhitePlayerName(), ts)
-            addOpponent(board:GetBlackPlayerName(), ts)
+            addOpponent(board, true)  -- white
+            addOpponent(board, false) -- black
         end
     end
 
+    -- Convert to sorted list
     local list = {}
-    for fullName, lastPlayed in pairs(opponents) do
-        table.insert(list, { fullName = fullName, lastPlayed = lastPlayed })
+    for name, timestamp in pairs(opponents) do
+        table.insert(list, { name = name, timestamp = timestamp })
     end
-    table.sort(list, function(a, b) return a.lastPlayed > b.lastPlayed end)
+    table.sort(list, function(a, b) return a.timestamp > b.timestamp end)
 
+    -- Return top 15
     local result = {}
     for i = 1, math.min(15, #list) do
-        local name = list[i].fullName:match("^([^%-]+)") or list[i].fullName
-        table.insert(result, { fullName = list[i].fullName, displayName = name })
+        table.insert(result, list[i].name)
     end
     return result
 end
@@ -1161,12 +1165,8 @@ end
 function DeltaChess:GetPastOpponentsFullNames()
     local recent = self:GetRecentOpponents()
     local out = {}
-    local myName = self:GetFullPlayerName(UnitName("player"))
     for i = 1, math.min(5, #recent) do
-        local opp = recent[i]
-        if opp and opp.fullName and opp.fullName ~= myName then
-            table.insert(out, opp.fullName)
-        end
+        table.insert(out, recent[i])
     end
     return out
 end
@@ -1211,13 +1211,14 @@ function DeltaChess:GetPartyFullNames()
     return out
 end
 
--- Get list of online friend full names (WoW + Battle.net friends)
-function DeltaChess:GetFriendsOnlineFullNames()
+-- Get list of online friends with BattleNet info
+-- Returns array of { type="bnet", battleTag, characterName, fullName } or { type="wow", fullName }
+function DeltaChess:GetFriendsOnline()
     local out = {}
     local seen = {}
     local myName = self:GetFullPlayerName(UnitName("player"))
     
-    -- WoW friend list
+    -- WoW friend list (non-BNet friends)
     if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
         local num = C_FriendList.GetNumFriends()
         for i = 1, num do
@@ -1226,7 +1227,10 @@ function DeltaChess:GetFriendsOnlineFullNames()
                 local fullName = self:GetFullPlayerName(info.name)
                 if not seen[fullName] then
                     seen[fullName] = true
-                    table.insert(out, fullName)
+                    table.insert(out, {
+                        type = "wow",
+                        fullName = fullName
+                    })
                 end
             end
         end
@@ -1238,37 +1242,70 @@ function DeltaChess:GetFriendsOnlineFullNames()
                 local fullName = self:GetFullPlayerName(name)
                 if not seen[fullName] then
                     seen[fullName] = true
-                    table.insert(out, fullName)
+                    table.insert(out, {
+                        type = "wow",
+                        fullName = fullName
+                    })
                 end
             end
         end
     end
     
-    -- Battle.net friends (online in WoW, same region only - cross-region whisper causes "player not online" errors)
-    if BNGetNumFriends and C_BattleNet and C_BattleNet.GetFriendNumGameAccounts and C_BattleNet.GetFriendGameAccountInfo then
-        local wowClient = BNET_CLIENT_WOW or "WoW"
-        for i = 1, BNGetNumFriends() do
-            local numAccounts = C_BattleNet.GetFriendNumGameAccounts(i)
-            for j = 1, numAccounts do
-                local game = C_BattleNet.GetFriendGameAccountInfo(i, j)
-                if game and game.isOnline and game.clientProgram == wowClient and game.characterName then
-                    if game.isInCurrentRegion == false then
-                        -- Skip cross-region: whisper would fail with "player not online"
-                    else
-                        local realm = game.realmDisplayName or game.realmName
-                        local fullName = realm and (game.characterName .. "-" .. realm)
-                            or self:GetFullPlayerName(game.characterName)
-                        if fullName ~= myName and not seen[fullName] then
-                            seen[fullName] = true
-                            table.insert(out, fullName)
-                        end
-                    end
-                end
-            end
+    -- Battle.net friends (online in WoW, same region only)
+    local bnetFriends = DeltaChess.Bnet:GetOnlineBattleNetFriends()
+    for _, friend in ipairs(bnetFriends) do
+        if not seen[friend.battleTag] then
+            seen[friend.battleTag] = true
+            table.insert(out, {
+                type = "bnet",
+                battleTag = friend.battleTag,
+                characterName = friend.characterName,
+                realmName = friend.realmName,
+                fullName = friend.fullName
+            })
         end
     end
     
     return out
+end
+
+-- Legacy function for backwards compatibility
+function DeltaChess:GetFriendsOnlineFullNames()
+    local friends = self:GetFriendsOnline()
+    local out = {}
+    for _, friend in ipairs(friends) do
+        table.insert(out, friend.fullName)
+    end
+    return out
+end
+
+--------------------------------------------------------------------------------
+-- Helper: Format player entry for challenge list (checks if BNet friend)
+--------------------------------------------------------------------------------
+-- Takes a character full name and returns display info
+-- Returns: { displayName, selectValue, battleTag }
+function DeltaChess:FormatPlayerEntry(characterFullName)
+    if not characterFullName then return nil end
+    
+    -- Check if this character is a BattleNet friend
+    local battleTag = DeltaChess.Bnet:GetBattleTagForCharacter(characterFullName)
+    
+    if battleTag then
+        -- BattleNet friend: show "BattleTag (CharacterName-Realm)"
+        local displayName = string.format("%s (%s)", battleTag, characterFullName)
+        return {
+            displayName = displayName,
+            selectValue = battleTag,
+            battleTag = battleTag
+        }
+    else
+        -- Regular player: show character name with realm
+        return {
+            displayName = characterFullName,
+            selectValue = characterFullName,
+            battleTag = nil
+        }
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -1277,15 +1314,22 @@ end
 function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     -- source: "past", "guild", "friends", "party"
     local candidates = {}
+    
     if source == "past" then
         candidates = self:GetPastOpponentsFullNames()
     elseif source == "guild" then
         candidates = self:GetGuildOnlineFullNames()
     elseif source == "friends" then
-        candidates = self:GetFriendsOnlineFullNames()
+        local friendsInfo = self:GetFriendsOnline()
+        -- Use character full names for ping check, FormatPlayerEntry will convert to BattleTag display
+        for _, friendInfo in ipairs(friendsInfo) do
+            table.insert(candidates, friendInfo.fullName)
+        end
     elseif source == "party" then
         candidates = self:GetPartyFullNames()
     end
+    
+    -- Filter out self
     local myName = self:GetFullPlayerName(UnitName("player"))
     local filtered = {}
     for _, name in ipairs(candidates) do
@@ -1328,6 +1372,7 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     end
 
     popup:Show()
+    
     DeltaChess:PingPlayers(candidates, function(respondedList)
         statusText:SetText(string.format("%d player(s) with DeltaChess online.", #respondedList))
         
@@ -1345,10 +1390,23 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
         for _, entry in ipairs(respondedList) do
             local fullName = entry.fullName
             local dnd = entry.dnd
-            local displayName = fullName:match("^([^%-]+)") or fullName
+            
+            -- Format entry using shared helper (checks against BNet friends list)
+            local entryInfo = self:FormatPlayerEntry(fullName)
+            if not entryInfo then
+                entryInfo = {
+                    displayName = fullName,
+                    selectValue = fullName
+                }
+            end
+            
+            local displayName = entryInfo.displayName
+            local selectValue = entryInfo.selectValue
+            
             if dnd then
                 displayName = displayName .. " |cFFFF6666(DND)|r"
             end
+            
             local btn = CreateFrame("Button", nil, scrollChild)
             btn:SetSize(260, 24)
             btn:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -y)
@@ -1357,7 +1415,7 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
             label:SetPoint("LEFT", btn, "LEFT", 6, 0)
             label:SetText(displayName)
             btn:SetScript("OnClick", function()
-                if onSelect then onSelect(fullName) end
+                if onSelect then onSelect(selectValue) end
                 popup:Hide()
                 popup:SetParent(nil)
                 popup:ClearAllPoints()
@@ -1428,8 +1486,9 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         friendsBtn:SetPoint("LEFT", guildBtn, "RIGHT", 5, 0)
         friendsBtn:SetText("Friends")
         friendsBtn:SetScript("OnClick", function()
-            DeltaChess:ShowPlayerListPopup("friends", frame, function(fullName)
-                frame.nameInput:SetText(fullName)
+            DeltaChess:ShowPlayerListPopup("friends", frame, function(selectValue)
+                -- selectValue can be BattleTag or CharName-Realm
+                frame.nameInput:SetText(selectValue)
             end)
         end)
         
@@ -1529,22 +1588,50 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         sendBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 10)
         sendBtn:SetText("Send Challenge")
         sendBtn:SetScript("OnClick", function()
-            local playerName = frame.nameInput:GetText()
-            if not playerName or playerName == "" then
+            local input = frame.nameInput:GetText()
+            if not input or input == "" then
                 DeltaChess:Print("Please enter a player name!")
                 return
             end
             
-            -- Add realm if not present
-            if not playerName:find("-") then
-                playerName = playerName .. "-" .. GetRealmName()
-            end
-
-            -- Cannot challenge yourself
-            local myName = DeltaChess:GetFullPlayerName(UnitName("player"))
-            if playerName == myName then
-                DeltaChess:Print("You cannot challenge yourself!")
-                return
+            local battleTag = nil
+            local playerName = nil
+            
+            -- Check if input is a BattleTag (contains #)
+            if input:find("#") then
+                -- It's a BattleTag
+                if not DeltaChess.Bnet:IsBattleNetFriend(input) then
+                    DeltaChess:Print("|cFFFF0000BattleTag not found in friends list.|r")
+                    return
+                end
+                battleTag = input
+                -- Get current character name for message ping
+                playerName = DeltaChess.Bnet:GetCurrentCharacterForBattleTag(battleTag)
+                if not playerName then
+                    DeltaChess:Print("|cFFFF0000Friend is offline or not playing WoW.|r")
+                    return
+                end
+                DeltaChess:Print("Found BattleNet friend: " .. battleTag)
+            else
+                -- Regular character name
+                playerName = input
+                -- Add realm if not present
+                if not playerName:find("-") then
+                    playerName = playerName .. "-" .. GetRealmName()
+                end
+                
+                -- Cannot challenge yourself
+                local myName = DeltaChess:GetFullPlayerName(UnitName("player"))
+                if playerName == myName then
+                    DeltaChess:Print("You cannot challenge yourself!")
+                    return
+                end
+                
+                -- Check if this character is a BattleNet friend
+                battleTag = DeltaChess.Bnet:GetBattleTagForCharacter(playerName)
+                if battleTag then
+                    DeltaChess:Print("Detected BattleNet friend: " .. battleTag)
+                end
             end
             
             sendBtn:SetEnabled(false)
@@ -1577,7 +1664,8 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 end
                 local gameSettings = {
                     challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
-                    opponent = playerName,
+                    opponent = battleTag or playerName,  -- Use BattleTag if friend, otherwise character name
+                    opponentBattleTag = battleTag,  -- Store BattleTag if friend
                     challengerColor = finalColor,
                     isRandom = wasRandom,
                     useClock = frame.clockCheck:GetChecked(),
@@ -1612,6 +1700,15 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
             end
         end
     end
+    
+    -- If target is a BNet friend, use BattleTag instead of character name
+    if targetPlayer and not targetPlayer:find("#") then
+        local battleTag = DeltaChess.Bnet:GetBattleTagForCharacter(targetPlayer)
+        if battleTag then
+            targetPlayer = battleTag
+        end
+    end
+    
     self.frames.challengeWindow.nameInput:SetText(targetPlayer or "")
     self.frames.challengeWindow.selectedColor = "random"
     self.frames.challengeWindow.clockCheck:SetChecked(false)
