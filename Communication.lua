@@ -487,9 +487,11 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
 end
 
 --- Handle BattleNet whisper messages (cross-project communication)
--- Event args for CHAT_MSG_BN_WHISPER: text, sender (BattleTag), languageID, ...
-function DeltaChess:OnBNetWhisperReceived(text, senderBattleTag, ...)
-    if not text or not senderBattleTag then
+-- Event args for CHAT_MSG_BN_WHISPER: text, playerName, languageName, channelName, playerName2, specialFlags, zoneChannelID, channelIndex, channelBaseName, languageID, lineID, guid, bnSenderID, ...
+function DeltaChess:OnBNetWhisperReceived(...)
+    -- Extract the relevant arguments from CHAT_MSG_BN_WHISPER
+    local text, playerName, languageName, channelName, playerName2, specialFlags, zoneChannelID, channelIndex, channelBaseName, languageID, lineID, guid, bnSenderID = ...
+    if not text or not bnSenderID then
         return
     end
     
@@ -498,15 +500,9 @@ function DeltaChess:OnBNetWhisperReceived(text, senderBattleTag, ...)
         return
     end
     
-    -- Get BNet account ID for the sender
-    local bnetAccountID = DeltaChess.Bnet:GetBNetAccountIDForBattleTag(senderBattleTag)
-    if not bnetAccountID then
-        return
-    end
-    
     -- Try to decode as DeltaChess message
-    local decodedPrefix, decodedMessage, _ = DeltaChess.Bnet:HandleBNetWhisper(bnetAccountID, text)
-    if not decodedPrefix or not decodedMessage then
+    local decodedPrefix, decodedMessage, senderBattleTag = DeltaChess.Bnet:HandleBNetWhisper(bnSenderID, text)
+    if not decodedPrefix or not decodedMessage or not senderBattleTag then
         return
     end
     

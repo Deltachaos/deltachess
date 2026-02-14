@@ -1594,57 +1594,46 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 return
             end
             
+            local target = input
             local battleTag = nil
-            local playerName = nil
             
             -- Check if input is a BattleTag (contains #)
             if input:find("#") then
-                -- It's a BattleTag
-                if not DeltaChess.Bnet:IsBattleNetFriend(input) then
-                    DeltaChess:Print("|cFFFF0000BattleTag not found in friends list.|r")
-                    return
-                end
                 battleTag = input
-                -- Get current character name for message ping
-                playerName = DeltaChess.Bnet:GetCurrentCharacterForBattleTag(battleTag)
-                if not playerName then
-                    DeltaChess:Print("|cFFFF0000Friend is offline or not playing WoW.|r")
-                    return
-                end
-                DeltaChess:Print("Found BattleNet friend: " .. battleTag)
+                target = input  -- Use BattleTag as target
             else
-                -- Regular character name
-                playerName = input
-                -- Add realm if not present
-                if not playerName:find("-") then
-                    playerName = playerName .. "-" .. GetRealmName()
+                -- Regular character name - add realm if not present
+                if not input:find("-") then
+                    target = input .. "-" .. GetRealmName()
+                else
+                    target = input
                 end
                 
                 -- Cannot challenge yourself
                 local myName = DeltaChess:GetFullPlayerName(UnitName("player"))
-                if playerName == myName then
+                if target == myName then
                     DeltaChess:Print("You cannot challenge yourself!")
                     return
                 end
                 
                 -- Check if this character is a BattleNet friend
-                battleTag = DeltaChess.Bnet:GetBattleTagForCharacter(playerName)
-                if battleTag then
-                    DeltaChess:Print("Detected BattleNet friend: " .. battleTag)
-                end
+                battleTag = DeltaChess.Bnet:GetBattleTagForCharacter(target)
             end
             
             sendBtn:SetEnabled(false)
             sendBtn:SetText("Checking...")
             
-            DeltaChess:PingPlayer(playerName, function(hasAddon)
+            -- PingPlayer will validate and handle BattleTag resolution automatically
+            DeltaChess:PingPlayer(target, function(hasAddon)
                 sendBtn:SetEnabled(true)
                 sendBtn:SetText("Send Challenge")
                 if not hasAddon then
                     DeltaChess:Print("|cFFFF0000Player doesn't have DeltaChess installed or is offline.|r")
-                    -- Extract player name without realm for whisper
-                    local whisperName = playerName:match("^([^%-]+)") or playerName
-                    SendChatMessage("I want to challenge you to a game of chess but you dont have Delta Chess installed :( Download from Curseforge so that we can play together: https://www.curseforge.com/wow/addons/deltachess", "WHISPER", nil, whisperName)
+                    -- Send chat whisper (handles both BattleTag and character name)
+                    DeltaChess.Bnet:SendChatWhisper(
+                        "I want to challenge you to a game of chess but you dont have Delta Chess installed :( Download from Curseforge so that we can play together: https://www.curseforge.com/wow/addons/deltachess",
+                        target
+                    )
                     return
                 end
                 
@@ -1664,7 +1653,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 end
                 local gameSettings = {
                     challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
-                    opponent = battleTag or playerName,  -- Use BattleTag if friend, otherwise character name
+                    opponent = target,  -- BattleTag or character name
                     opponentBattleTag = battleTag,  -- Store BattleTag if friend
                     challengerColor = finalColor,
                     isRandom = wasRandom,

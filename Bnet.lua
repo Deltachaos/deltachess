@@ -110,6 +110,25 @@ function DeltaChess.Bnet:GetBNetAccountIDForBattleTag(battleTag)
     return nil
 end
 
+--- Get BattleTag for a BattleNet sender ID
+-- @param bnSenderID number BattleNet sender ID from CHAT_MSG_BN_WHISPER event
+-- @return string|nil BattleTag (FriendName#1234) or nil if not found
+function DeltaChess.Bnet:GetBattleTagForBNSenderID(bnSenderID)
+    if not bnSenderID then return nil end
+    
+    if not (C_BattleNet and C_BattleNet.GetAccountInfoByID) then
+        return nil
+    end
+    
+    -- C_BattleNet.GetFriendAccountInfo can take bnetAccountID directly
+    local accountInfo = C_BattleNet.GetAccountInfoByID(bnSenderID)
+    if accountInfo and accountInfo.battleTag then
+        return accountInfo.battleTag
+    end
+    
+    return nil
+end
+
 --- Get BattleTag for a character name (if they are a BNet friend)
 -- @param characterFullName string Character full name (CharName-Realm)
 -- @return string|nil BattleTag (FriendName#1234) or nil if not a BNet friend
@@ -232,7 +251,10 @@ end
 -- @param encodedMessage string Encoded message
 -- @return string|nil prefix, string|nil message
 local function DecodeBNetMessage(encodedMessage)
-    if not encodedMessage:match("^DeltaChess:") then
+    -- Trim whitespaces from start and end
+    encodedMessage = encodedMessage:match("^%s*(.-)%s*$")
+    
+    if not encodedMessage or not encodedMessage:match("^DeltaChess:") then
         return nil, nil
     end
     
@@ -252,6 +274,7 @@ local function DecodeBNetMessage(encodedMessage)
     for i = 1, #fullMessage do
         checksum = (checksum + string.byte(fullMessage, i)) % 256
     end
+    
     local expectedChecksum = tonumber(checksumStr, 16)
     if checksum ~= expectedChecksum then
         return nil, nil  -- Checksum mismatch
@@ -320,17 +343,33 @@ function DeltaChess.Bnet:HandleBNetWhisper(bnetAccountID, message)
         return nil, nil, nil
     end
     
-    -- Get sender's BattleTag
-    local senderBattleTag = nil
-    if BNGetNumFriends and C_BattleNet and C_BattleNet.GetFriendAccountInfo then
-        for i = 1, BNGetNumFriends() do
-            local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
-            if accountInfo and accountInfo.bnetAccountID == bnetAccountID then
-                senderBattleTag = accountInfo.battleTag
-                break
-            end
-        end
-    end
+    -- Get sender's BattleTag using helper
+    local senderBattleTag = self:GetBattleTagForBNSenderID(bnetAccountID)
     
     return prefix, decodedMessage, senderBattleTag
+end
+
+--- Send regular chat whisper (not addon message) to BattleTag or character name
+-- @param message string Chat message to send
+-- @param target string Target (BattleTag or CharName-Realm)
+-- @return boolean Success
+function DeltaChess.Bnet:SendChatWhisper(message, target)
+    if not target or not message then return false end
+    
+    -- Check if target is a BattleTag (contains #)
+    if target:find("#") then
+        local bnetAccountID = self:GetBNetAccountIDForBattleTag(target)
+        if bnetAccountID and BNSendWhisper then
+            BNSendWhisper(bnetAccountID, message)
+            return true
+        else
+            -- Friend not found or offline
+            return false
+        end
+    else
+        -- Regular character name - strip realm for whisper
+        local whisperName = target:match("^([^%-]+)") or target
+        SendChatMessage(message, "WHISPER", nil, whisperName)
+        return true
+    end
 end
