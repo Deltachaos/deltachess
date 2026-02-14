@@ -226,10 +226,21 @@ function DeltaChess:GetFullPlayerName(name)
     return name
 end
 
+-- Get local player's info (character name and preferred display name)
+-- Returns: characterName, preferredName
+-- characterName: always the character name with realm (CharName-Realm)
+-- preferredName: BattleTag if available, otherwise character name (for display)
+function DeltaChess:GetLocalPlayerInfo()
+    local characterName = self:GetFullPlayerName(UnitName("player"))
+    local battleTag = DeltaChess.Bnet:GetMyBattleTag()
+    local preferredName = battleTag or characterName
+    return characterName, preferredName
+end
+
 -- Check if it's the player's turn in any active game
 function DeltaChess:IsMyTurnInAnyGame()
     if not self.db or not self.db.games then return false end
-    local playerName = self:GetFullPlayerName(UnitName("player"))
+    local playerCharName, playerName = self:GetLocalPlayerInfo()
     for _, board in pairs(self.db.games) do
         if board:IsActive() then
             local currentTurn = board:GetCurrentTurn()
@@ -556,7 +567,7 @@ function DeltaChess:RefreshMainMenuContent()
     end)
     
     -- Helper to compute player color and turn status
-    local playerName = self:GetFullPlayerName(UnitName("player"))
+    local playerCharName, playerName = self:GetLocalPlayerInfo()
     local function getPlayerInfo(board)
         local isVsComputer = board:OneOpponentIsEngine()
         local white = board:GetWhitePlayerName()
@@ -1117,7 +1128,7 @@ end
 -- RECENT OPPONENTS
 --------------------------------------------------------------------------------
 function DeltaChess:GetRecentOpponents()
-    local playerName = self:GetFullPlayerName(UnitName("player"))
+    local playerCharName, playerName = self:GetLocalPlayerInfo()
     local opponents = {} -- name -> timestamp
 
     local function addOpponent(board, isWhite)
@@ -1174,7 +1185,7 @@ end
 -- Get list of online guild member full names
 function DeltaChess:GetGuildOnlineFullNames()
     local out = {}
-    local myName = self:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = self:GetLocalPlayerInfo()
     if not IsInGuild() then return out end
     C_GuildInfo.GuildRoster()
     local num = GetNumGuildMembers()
@@ -1191,7 +1202,7 @@ end
 -- Get list of party/raid member full names (excludes self)
 function DeltaChess:GetPartyFullNames()
     local out = {}
-    local myName = self:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = self:GetLocalPlayerInfo()
     local numGroup = GetNumGroupMembers()
     if numGroup <= 0 then return out end
     local prefix = IsInRaid() and "raid" or "party"
@@ -1216,7 +1227,7 @@ end
 function DeltaChess:GetFriendsOnline()
     local out = {}
     local seen = {}
-    local myName = self:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = self:GetLocalPlayerInfo()
     
     -- WoW friend list (non-BNet friends)
     if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
@@ -1330,10 +1341,10 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     end
     
     -- Filter out self
-    local myName = self:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = self:GetLocalPlayerInfo()
     local filtered = {}
     for _, name in ipairs(candidates) do
-        if name ~= myName then
+        if name ~= myCharName and name ~= myName then
             table.insert(filtered, name)
         end
     end
@@ -1610,8 +1621,8 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 end
                 
                 -- Cannot challenge yourself
-                local myName = DeltaChess:GetFullPlayerName(UnitName("player"))
-                if target == myName then
+                local myCharName, myName = DeltaChess:GetLocalPlayerInfo()
+                if target == myCharName or target == myName then
                     DeltaChess:Print("You cannot challenge yourself!")
                     return
                 end
@@ -1684,7 +1695,8 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     if not targetPlayer or targetPlayer == "" then
         if UnitExists("target") and UnitIsPlayer("target") then
             local targetName = self:GetFullPlayerName(UnitName("target"))
-            if targetName ~= self:GetFullPlayerName(UnitName("player")) then
+            local myCharName, myName = self:GetLocalPlayerInfo()
+            if targetName ~= myCharName and targetName ~= myName then
                 targetPlayer = targetName
             end
         end

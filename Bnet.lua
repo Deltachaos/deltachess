@@ -6,6 +6,22 @@ DeltaChess.Bnet = DeltaChess.Bnet or {}
 -- BattleNet Friend Lookup Functions
 --------------------------------------------------------------------------------
 
+--- Get player's own BattleTag
+-- @return string|nil Player's BattleTag (e.g., "PlayerName#1234") or nil if not available
+function DeltaChess.Bnet:GetMyBattleTag()
+    if not BNGetInfo then
+        return nil
+     end
+     
+     local presenceID, toonID = BNGetInfo()
+     
+     if not toonID then
+        return nil
+     end
+     
+     return toonID
+end
+
 --- Get current online character name for a BattleTag (for display purposes)
 -- Returns character name regardless of WoW project ID (Classic, Retail, etc.)
 -- @param battleTag string BattleTag (e.g., "FriendName#1234")
@@ -188,7 +204,7 @@ function DeltaChess.Bnet:GetOnlineBattleNetFriends()
     end
     
     local wowClient = BNET_CLIENT_WOW or "WoW"
-    local myName = DeltaChess:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = DeltaChess:GetLocalPlayerInfo()
     
     for i = 1, BNGetNumFriends() do
         local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
@@ -290,7 +306,7 @@ end
 -- @return boolean Success
 function DeltaChess.Bnet:SendMessage(prefix, message, target)
     if not target then return false end
-    
+
     -- Check if target is a BattleTag (contains #)
     if target:find("#") then
         -- Try to resolve to current character (same project ID)

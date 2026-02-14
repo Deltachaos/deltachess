@@ -183,9 +183,9 @@ local function GetPlayerColor(board)
     if isVsComputer then
         return board:GetPlayerColor()
     else
-        local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+        local playerCharName, playerName = DeltaChess:GetLocalPlayerInfo()
         local white = board:GetWhitePlayerName()
-        if white == playerName then
+        if white == playerCharName or white == playerName then
             return COLOR.WHITE
         else
             return COLOR.BLACK
@@ -250,19 +250,19 @@ function DeltaChess.Sound:PlayGameEndSound(board)
         or reason == DeltaChess.Constants.REASON_REMIS then
         self:PlayStalemate()
     elseif reason == DeltaChess.Constants.REASON_RESIGNATION then
-        local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+        local playerCharName, playerName = DeltaChess:GetLocalPlayerInfo()
         local resignedPlayer = board:GetResignedPlayer()
         local isVsComputer = board:OneOpponentIsEngine()
-        if resignedPlayer == playerName or 
+        if resignedPlayer == playerCharName or resignedPlayer == playerName or 
            (isVsComputer and resignedPlayer ~= "Computer") then
             self:PlayLose()
         else
             self:PlayWin()
         end
     elseif reason == DeltaChess.Constants.REASON_TIMEOUT then
-        local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+        local playerCharName, playerName = DeltaChess:GetLocalPlayerInfo()
         local timeoutPlayer = board:GetGameMeta("timeoutPlayer")
-        if timeoutPlayer == playerName then
+        if timeoutPlayer == playerCharName or timeoutPlayer == playerName then
             self:PlayLose()
         else
             self:PlayWin()

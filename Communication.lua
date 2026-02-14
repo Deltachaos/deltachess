@@ -115,7 +115,6 @@ end
 function DeltaChess:SerializeChallenge(gs)
     local data = {
         g = gs.gameId,
-        o = gs.opponent,
         cc = gs.challengerColor or "random",
         uc = gs.useClock or false,
         tm = gs.timeMinutes or 10,
@@ -124,8 +123,7 @@ function DeltaChess:SerializeChallenge(gs)
         ccl = gs.challengerClass,
         hsec = gs.handicapSeconds,
         hs = (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or nil,
-        ir = gs.isRandom or false,
-        obt = gs.opponentBattleTag
+        ir = gs.isRandom or false
     }
     local json, err = DeltaChess.Util.SerializeJSON(data)
     return json or ""
@@ -138,7 +136,7 @@ function DeltaChess:DeserializeChallenge(str)
     -- Map shorthand keys back to full property names
     local result = {
         gameId = data.g,
-        opponent = data.o,
+        -- challenger and opponent are set from sender/receiver in OnCommReceived
         challengerColor = data.cc,
         useClock = data.uc,
         timeMinutes = data.tm,
@@ -147,8 +145,7 @@ function DeltaChess:DeserializeChallenge(str)
         challengerClass = data.ccl,
         handicapSeconds = data.hsec,
         handicapSide = (data.hs == "white" or data.hs == "black") and data.hs or nil,
-        isRandom = data.ir or false,
-        opponentBattleTag = data.obt
+        isRandom = data.ir or false
     }
     return result, result
 end
@@ -205,8 +202,8 @@ function DeltaChess:PingPlayer(targetName, callback)
         if callback then callback(false, false) end
         return
     end
-    local myName = self:GetFullPlayerName(UnitName("player"))
-    if targetName == myName then
+    local myCharName, myName = self:GetLocalPlayerInfo()
+    if targetName == myCharName or targetName == myName then
         if callback then callback(true, self.db.settings.dnd) end
         return
     end
@@ -304,7 +301,11 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         
         -- Set challenger from sender (BattleTag or character name)
         data.challenger = sender
-
+        
+        -- Set opponent from local player info (use BattleTag if available)
+        local myCharName, myName = self:GetLocalPlayerInfo()
+        data.opponent = myName
+        
         -- Do Not Disturb: auto-decline and do not show popup
         if self.db.settings.dnd then
             local response = { accepted = false }
@@ -372,27 +373,21 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
             -- Create the game on challenger's side
             if self.pendingChallenge then
                 local challengeData = self.pendingChallenge
-                local myName = self:GetFullPlayerName(UnitName("player"))
+                local myCharName, myName = self:GetLocalPlayerInfo()
                 local _, myClass = UnitClass("player")
                 
-                -- Determine class info based on colors
-                local whiteClass, blackClass
-                if challengeData.challengerColor == COLOR.WHITE then
-                    whiteClass = myClass
-                    blackClass = data.acceptorClass
-                else
-                    whiteClass = data.acceptorClass
-                    blackClass = myClass
-                end
-                
-                -- Opponent is the sender (BattleTag or character name)
-                local whiteName, blackName
+                -- Determine names and classes based on colors
+                local whiteName, blackName, whiteClass, blackClass
                 if challengeData.challengerColor == COLOR.WHITE then
                     whiteName = myName
                     blackName = sender
+                    whiteClass = myClass
+                    blackClass = data.acceptorClass
                 else
                     whiteName = sender
                     blackName = myName
+                    whiteClass = data.acceptorClass
+                    blackClass = myClass
                 end
                 
                 -- Create board with names
@@ -597,32 +592,26 @@ function DeltaChess:AcceptChallenge(challengeData)
     local gameId = challengeData.gameId or (tostring(DeltaChess.Util.TimeNow()) .. "_" .. math.random(1000, 9999))
     
     -- Determine colors - swap: if challenger is white, we are black
-    local myName = self:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = self:GetLocalPlayerInfo()
     local myColor = challengeData.challengerColor == COLOR.WHITE and COLOR.BLACK or COLOR.WHITE
     
     -- Acceptor's timestamp and class
     local acceptorTimestamp = DeltaChess.Util.TimeNow()
     local _, acceptorClass = UnitClass("player")
 
-    -- Determine class info based on colors
-    local whiteClass, blackClass
-    if challengeData.challengerColor == COLOR.WHITE then
-        whiteClass = challengeData.challengerClass
-        blackClass = acceptorClass
-    else
-        whiteClass = acceptorClass
-        blackClass = challengeData.challengerClass
-    end
-    
-    -- For BNet friends, challenger is BattleTag; for regular players, it's character name
+    -- Determine names and classes based on colors
     -- challengeData.challenger is already the sender (BattleTag or character name)
-    local whiteName, blackName
+    local whiteName, blackName, whiteClass, blackClass
     if challengeData.challengerColor == COLOR.WHITE then
         whiteName = challengeData.challenger
         blackName = myName
+        whiteClass = challengeData.challengerClass
+        blackClass = acceptorClass
     else
         whiteName = myName
         blackName = challengeData.challenger
+        whiteClass = acceptorClass
+        blackClass = challengeData.challengerClass
     end
     
     -- Create board with names
@@ -657,17 +646,13 @@ function DeltaChess:AcceptChallenge(challengeData)
     
     -- Play sound for accepting challenge
     DeltaChess.Sound:PlayChallengeAccepted()
-    
-    -- Check if we (acceptor) are a BNet friend of the challenger
-    local acceptorBattleTag = DeltaChess.Bnet:GetBattleTagForCharacter(myName)
-    
+
     -- Send response with the same game ID, our timestamp, class, and BattleTag
     local response = {
         accepted = true,
         gameId = gameId,
         acceptorTimestamp = acceptorTimestamp,
-        acceptorClass = acceptorClass,
-        acceptorBattleTag = acceptorBattleTag
+        acceptorClass = acceptorClass
     }
 
     -- Send response (target can be BattleTag or character name)
@@ -1100,14 +1085,15 @@ function DeltaChess:GetOpponent(gameId)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return nil end
     
-    local myName = self:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = self:GetLocalPlayerInfo()
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
     
     -- Determine opponent name (BattleTag or character name)
-    if black == myName then
+    -- Check against both character name and BattleTag
+    if black == myCharName or black == myName then
         return white
-    elseif white == myName then
+    elseif white == myCharName or white == myName then
         return black
     end
     
@@ -1119,13 +1105,13 @@ function DeltaChess:GetMyColor(gameId)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return nil end
     
-    local myName = self:GetFullPlayerName(UnitName("player"))
+    local myCharName, myName = self:GetLocalPlayerInfo()
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
     
-    if white == myName then
+    if white == myCharName or white == myName then
         return COLOR.WHITE
-    elseif black == myName then
+    elseif black == myCharName or black == myName then
         return COLOR.BLACK
     end
     

@@ -734,39 +734,40 @@ function DeltaChess.UI:GetPlayerDisplayName(name)
 end
 
 function DeltaChess.UI:GetBoardParticipants(board)
-    local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+    local playerCharName, myPreferredName = DeltaChess:GetLocalPlayerInfo()
     local isVsComputer = board:OneOpponentIsEngine()
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
     local whiteClass = board:GetWhitePlayerClass()
     local blackClass = board:GetBlackPlayerClass()
-    
-    -- Determine player color
+
+    -- Determine player color by checking if white or black is the player
+    -- Check both character name and preferred name (BattleTag)
     local playerColor
     if isVsComputer then
         playerColor = board:GetPlayerColor()
     else
-        if white == playerName then
+        if white == playerCharName or white == myPreferredName then
             playerColor = COLOR.WHITE
-        elseif black == playerName then
+        elseif black == playerCharName or black == myPreferredName then
             playerColor = COLOR.BLACK
         end
     end
     
     -- Flip board if player is black
-    local flipBoard = (playerColor == COLOR.BLACK) or (black == playerName)
+    local flipBoard = (playerColor == COLOR.BLACK) or (black == playerCharName) or (black == myPreferredName)
     
     -- Determine who is "me" and who is "opponent"
     local myName, opponentName, myChessColor, opponentChessColor, myClass, opponentClass
     if flipBoard then
-        myName = black or "Black"
+        myName = myPreferredName  -- Always use BattleTag if available
         opponentName = white or "White"
         myChessColor = COLOR.BLACK
         opponentChessColor = COLOR.WHITE
         myClass = blackClass
         opponentClass = whiteClass
     else
-        myName = white or "White"
+        myName = myPreferredName  -- Always use BattleTag if available
         opponentName = black or "Black"
         myChessColor = COLOR.WHITE
         opponentChessColor = COLOR.BLACK
@@ -1209,6 +1210,11 @@ local PIECE_VALUES = DeltaChess.Board.PIECE_VALUES
 function DeltaChess.UI:GetPlayerColor(playerName, savedClass)
     if playerName == "Computer" then
         return 0.7, 0.7, 0.7 -- Gray for computer
+    end
+    
+    -- If it's a BattleTag (contains #), we can't get class from UnitClass, use default
+    if playerName and playerName:find("#") then
+        return 1, 0.82, 0 -- Gold default
     end
     
     -- If savedClass is provided, use it directly
@@ -2330,7 +2336,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
     local board = DeltaChess.GetBoard(frame.gameId)
     if not board then return end
     local piece = DeltaChess.GetPieceAt(board, uci)
-    local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+    local playerCharName, playerName = DeltaChess:GetLocalPlayerInfo()
     
     -- Block moves while a user action is pending (resign confirm or promotion dialog)
     if (DeltaChess._actionBlocked or 0) > 0 then
