@@ -1384,6 +1384,7 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
 
     popup:Show()
     
+    -- Ping players (noBNet=true skips BNet whispers, only shows same-project players)
     DeltaChess:PingPlayers(candidates, function(respondedList)
         statusText:SetText(string.format("%d player(s) with DeltaChess online.", #respondedList))
         
@@ -1435,7 +1436,7 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
         end
         scrollChild:SetHeight(y)
         popup:Show()
-    end)
+    end, true)
     popup:Show()
 end
 

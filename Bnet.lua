@@ -299,12 +299,13 @@ end
 
 --- Send addon message with automatic BattleTag resolution
 -- If target is a BattleTag (contains #), resolves to current character
--- If friend is on different WoW project, uses BNet whisper
+-- If friend is on different WoW project, uses BNet whisper (unless noBNet is true)
 -- @param prefix string Message prefix (ChessPing, ChessChallenge, etc.)
 -- @param message string Message content
 -- @param target string Target (BattleTag or CharName-Realm)
+-- @param noBNet boolean Optional: if true, skip BNet whispers (same-project only)
 -- @return boolean Success
-function DeltaChess.Bnet:SendMessage(prefix, message, target)
+function DeltaChess.Bnet:SendMessage(prefix, message, target, noBNet)
     if not target then return false end
 
     -- Check if target is a BattleTag (contains #)
@@ -317,6 +318,11 @@ function DeltaChess.Bnet:SendMessage(prefix, message, target)
             return true
         else
             -- Friend is offline or on different WoW project
+            -- If noBNet is true, don't try BNet whispers
+            if noBNet then
+                return false
+            end
+            
             -- Check if they're online at all (any WoW project)
             local displayChar = self:GetCurrentCharacterForDisplay(target)
             if displayChar then

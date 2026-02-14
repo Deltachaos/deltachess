@@ -73,11 +73,11 @@ function DeltaChess:GenerateMessageId()
 end
 
 -- Send addon message with automatic BattleTag resolution (always uses WHISPER)
-function DeltaChess:SendCommMessage(prefix, message, target)
+function DeltaChess:SendCommMessage(prefix, message, target, noBNet)
     if not target then return false end
     
     -- Use Bnet module to handle BattleTag resolution
-    return DeltaChess.Bnet:SendMessage(prefix, message, target)
+    return DeltaChess.Bnet:SendMessage(prefix, message, target, noBNet)
 end
 
 -- Send message that requires acknowledgment
@@ -197,7 +197,10 @@ function DeltaChess:ReplyToPing(sender)
 end
 
 -- Ping a single player; callback(hasAddon, isDND) after reply or timeout
-function DeltaChess:PingPlayer(targetName, callback)
+-- @param targetName string Target (BattleTag or CharName-Realm)
+-- @param callback function Callback(hasAddon, isDND)
+-- @param noBNet boolean Optional: if true, skip BNet whispers (prevents cross-project pings)
+function DeltaChess:PingPlayer(targetName, callback, noBNet)
     if not targetName or targetName == "" then
         if callback then callback(false, false) end
         return
@@ -228,7 +231,7 @@ function DeltaChess:PingPlayer(targetName, callback)
     end
     
     -- SendCommMessage handles BattleTag resolution and cross-project communication automatically
-    local success = self:SendCommMessage("ChessPing", "PING", targetName)
+    local success = self:SendCommMessage("ChessPing", "PING", targetName, noBNet)
     if not success then
         -- Failed to send (friend offline)
         self.pendingPings[targetName] = nil
@@ -246,7 +249,10 @@ function DeltaChess:PingPlayer(targetName, callback)
 end
 
 -- Ping multiple players; callback(respondedList) after timeout. respondedList = array of { fullName, dnd }.
-function DeltaChess:PingPlayers(listOfNames, callback)
+-- @param listOfNames table Array of player names (BattleTag or CharName-Realm)
+-- @param callback function Callback(respondedList)
+-- @param noBNet boolean Optional: if true, skip BNet whispers (prevents cross-project pings)
+function DeltaChess:PingPlayers(listOfNames, callback, noBNet)
     if not listOfNames or #listOfNames == 0 then
         if callback then callback({}) end
         return
@@ -266,7 +272,7 @@ function DeltaChess:PingPlayers(listOfNames, callback)
                 table.insert(responded, { fullName = name, dnd = isDND })
             end
             checkDone()
-        end)
+        end, noBNet)
     end
 end
 
