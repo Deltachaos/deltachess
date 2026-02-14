@@ -111,50 +111,46 @@ function DeltaChess:GenerateGameId()
     return string.format("%s_%d_%s", UnitName("player"), DeltaChess.Util.TimeNow(), uuid)
 end
 
--- Compact challenge serialization (within 255-byte addon message limit)
-local function escapeForLua(s)
-    return (tostring(s or ""):gsub("\\", "\\\\"):gsub('"', '\\"'))
-end
-
+-- Compact challenge serialization using JSON with shorthand keys (within 255-byte addon message limit)
 function DeltaChess:SerializeChallenge(gs)
-    return string.format('{g="%s",o="%s",cc="%s",uc=%s,tm=%d,inc=%d,ct=%d,ccl="%s",hsec=%s,hs="%s",ir=%s,obt="%s"}',
-        escapeForLua(gs.gameId),
-        escapeForLua(gs.opponent),
-        gs.challengerColor or "random",
-        tostring(gs.useClock or false),
-        gs.timeMinutes or 10,
-        gs.incrementSeconds or 0,
-        gs.challengerTimestamp or 0,
-        escapeForLua(gs.challengerClass),
-        gs.handicapSeconds and tostring(gs.handicapSeconds) or "nil",
-        (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or "",
-        tostring(gs.isRandom or false),
-        escapeForLua(gs.opponentBattleTag))
+    local data = {
+        g = gs.gameId,
+        o = gs.opponent,
+        cc = gs.challengerColor or "random",
+        uc = gs.useClock or false,
+        tm = gs.timeMinutes or 10,
+        inc = gs.incrementSeconds or 0,
+        ct = gs.challengerTimestamp or 0,
+        ccl = gs.challengerClass,
+        hsec = gs.handicapSeconds,
+        hs = (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or nil,
+        ir = gs.isRandom or false,
+        obt = gs.opponentBattleTag
+    }
+    local json, err = DeltaChess.Util.SerializeJSON(data)
+    return json or ""
 end
 
 function DeltaChess:DeserializeChallenge(str)
-    local ok, result = pcall(function()
-        local fn, err = loadstring("return " .. str)
-        if not fn then error(err or "parse failed") end
-        local t = fn()
-        if not t then return nil end
-        return {
-            gameId = t.g,
-            -- challenger is set from sender in OnCommReceived
-            opponent = t.o,
-            challengerColor = t.cc,
-            useClock = t.uc,
-            timeMinutes = t.tm,
-            incrementSeconds = t.inc,
-            challengerTimestamp = t.ct,
-            challengerClass = t.ccl,
-            handicapSeconds = t.hsec,
-            handicapSide = (t.hs == "white" or t.hs == "black") and t.hs or nil,
-            isRandom = t.ir or false,
-            opponentBattleTag = t.obt
-        }
-    end)
-    return ok and result, ok and result or nil
+    if not str or str == "" then return nil, nil end
+    local data, err = DeltaChess.Util.DeserializeJSON(str)
+    if not data then return nil, nil end
+    -- Map shorthand keys back to full property names
+    local result = {
+        gameId = data.g,
+        opponent = data.o,
+        challengerColor = data.cc,
+        useClock = data.uc,
+        timeMinutes = data.tm,
+        incrementSeconds = data.inc,
+        challengerTimestamp = data.ct,
+        challengerClass = data.ccl,
+        handicapSeconds = data.hsec,
+        handicapSide = (data.hs == "white" or data.hs == "black") and data.hs or nil,
+        isRandom = data.ir or false,
+        opponentBattleTag = data.obt
+    }
+    return result, result
 end
 
 -- Send challenge to another player
@@ -308,7 +304,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
         
         -- Set challenger from sender (BattleTag or character name)
         data.challenger = sender
-        
+
         -- Do Not Disturb: auto-decline and do not show popup
         if self.db.settings.dnd then
             local response = { accepted = false }
@@ -607,7 +603,7 @@ function DeltaChess:AcceptChallenge(challengeData)
     -- Acceptor's timestamp and class
     local acceptorTimestamp = DeltaChess.Util.TimeNow()
     local _, acceptorClass = UnitClass("player")
-    
+
     -- Determine class info based on colors
     local whiteClass, blackClass
     if challengeData.challengerColor == COLOR.WHITE then
@@ -1136,52 +1132,19 @@ function DeltaChess:GetMyColor(gameId)
     return nil
 end
 
--- Simple serialization
+-- JSON serialization using DeltaChess.Util
 function DeltaChess:Serialize(data)
-    -- Convert table to string (simple implementation)
-    -- In production, use a proper serialization library like AceSerializer
-    return self:TableToString(data)
+    local json, err = DeltaChess.Util.SerializeJSON(data)
+    return json
 end
 
 function DeltaChess:Deserialize(str)
-    -- Convert string back to table
-    -- In production, use a proper deserialization library
-    local success, data = pcall(function() return self:StringToTable(str) end)
-    return success, data
-end
-
-function DeltaChess:TableToString(tbl)
-    local result = "{"
-    for k, v in pairs(tbl) do
-        local key = type(k) == "string" and string.format("%q", k) or tostring(k)
-        local value
-        if type(v) == "table" then
-            value = self:TableToString(v)
-        elseif type(v) == "string" then
-            value = string.format("%q", v)
-        else
-            value = tostring(v)
-        end
-        result = result .. "[" .. key .. "]=" .. value .. ","
-    end
-    result = result .. "}"
-    return result
-end
-
-function DeltaChess:StringToTable(str)
-    -- Use loadstring (deprecated) or load depending on Lua version
-    local func, err
-    if loadstring then
-        func, err = loadstring("return " .. str)
+    if not str or str == "" then return false, nil end
+    local data, err = DeltaChess.Util.DeserializeJSON(str)
+    if data then
+        return true, data
     else
-        func, err = load("return " .. str)
+        return false, nil
     end
-    
-    if func then
-        local success, result = pcall(func)
-        if success then
-            return result
-        end
-    end
-    return nil
 end
+
