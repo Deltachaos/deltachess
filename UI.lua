@@ -725,40 +725,49 @@ end
 
 -- Get board participant info (who is "me" vs "opponent", colors, classes, flip)
 -- Returns a table with: myName, opponentName, myChessColor, opponentChessColor, myClass, opponentClass, flipBoard
+-- Get display name for a player (name is already the display name - BattleTag or character name)
+function DeltaChess.UI:GetPlayerDisplayName(name)
+    if not name then return "?" end
+    
+    -- Name is already the display name (BattleTag for BNet friends, character name with realm otherwise)
+    return name
+end
+
 function DeltaChess.UI:GetBoardParticipants(board)
-    local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+    local playerCharName, myPreferredName = DeltaChess:GetLocalPlayerInfo()
     local isVsComputer = board:OneOpponentIsEngine()
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
     local whiteClass = board:GetWhitePlayerClass()
     local blackClass = board:GetBlackPlayerClass()
-    
-    -- Determine player color
+
+    -- Determine player color by checking if white or black is the player
+    -- Check both character name and preferred name (BattleTag)
     local playerColor
     if isVsComputer then
         playerColor = board:GetPlayerColor()
     else
-        if white == playerName then
+        if white == playerCharName or white == myPreferredName then
             playerColor = COLOR.WHITE
-        elseif black == playerName then
+        elseif black == playerCharName or black == myPreferredName then
             playerColor = COLOR.BLACK
         end
     end
     
     -- Flip board if player is black
-    local flipBoard = (playerColor == COLOR.BLACK) or (black == playerName)
+    local flipBoard = (playerColor == COLOR.BLACK) or (black == playerCharName) or (black == myPreferredName)
     
     -- Determine who is "me" and who is "opponent"
     local myName, opponentName, myChessColor, opponentChessColor, myClass, opponentClass
     if flipBoard then
-        myName = black or "Black"
+        myName = myPreferredName  -- Always use BattleTag if available
         opponentName = white or "White"
         myChessColor = COLOR.BLACK
         opponentChessColor = COLOR.WHITE
         myClass = blackClass
         opponentClass = whiteClass
     else
-        myName = white or "White"
+        myName = myPreferredName  -- Always use BattleTag if available
         opponentName = black or "Black"
         myChessColor = COLOR.WHITE
         opponentChessColor = COLOR.BLACK
@@ -778,22 +787,34 @@ function DeltaChess.UI:GetBoardParticipants(board)
     }
 end
 
--- Format display name (handles "Computer (engine - ELO)" format)
-function DeltaChess.UI:FormatDisplayName(name, board)
-    local displayName = (name or "?"):match("^([^%-]+)") or name or "?"
+-- Format display name (handles "Computer (engine - ELO)" format and BattleNet friends)
+-- name: player name string (can be BattleTag if BNet friend)
+-- board: optional board object for computer game detection
+-- showCurrentChar: if true and name is BattleTag, show "BattleTag (CurrentChar-Realm)" format
+function DeltaChess.UI:FormatDisplayName(name, board, showCurrentChar)
+    if not name then return "?" end
     
-    local isVsComputer = board:OneOpponentIsEngine()
-    local computerEngine = board:GetEngineId()
-    local computerDifficulty = board:GetEngineElo()
+    -- If name is a BattleTag (contains #) and showCurrentChar is requested, append current character
+    if showCurrentChar and name:find("#") and DeltaChess.Bnet and DeltaChess.Bnet.GetCurrentCharacterForDisplay then
+        local currentChar = DeltaChess.Bnet:GetCurrentCharacterForDisplay(name)
+        if currentChar then
+            return name .. " (" .. currentChar .. ")"
+        end
+    end
     
-    if isVsComputer and displayName == "Computer" and computerEngine then
+    -- Check if this is a computer game and format accordingly
+    local isVsComputer = board and board:OneOpponentIsEngine()
+    local computerEngine = board and board:GetEngineId()
+    local computerDifficulty = board and board:GetEngineElo()
+    
+    if isVsComputer and name == "Computer" and computerEngine then
         local engine = DeltaChess.Engines:Get(computerEngine)
         local engineName = engine and engine.name or computerEngine
         local eloStr = computerDifficulty and (" - " .. computerDifficulty .. " ELO") or ""
-        displayName = "Computer (" .. engineName .. eloStr .. ")"
+        return "Computer (" .. engineName .. eloStr .. ")"
     end
     
-    return displayName
+    return name
 end
 
 -- Create a player info bar (for top opponent bar or bottom player bar)
@@ -808,8 +829,8 @@ function DeltaChess.UI:CreatePlayerBar(config)
     bg:SetAllPoints()
     bg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
     
-    -- Name with class color
-    local displayName = DeltaChess.UI:FormatDisplayName(config.playerName, config.board)
+    -- Name with class color - show current character for BNet friends
+    local displayName = DeltaChess.UI:FormatDisplayName(config.playerName, config.board, true)
     local r, g, b = DeltaChess.UI:GetPlayerColor(config.playerName, config.playerClass)
     local nameText = bar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     nameText:SetPoint("LEFT", bar, "LEFT", 5, 8)
@@ -1189,6 +1210,11 @@ local PIECE_VALUES = DeltaChess.Board.PIECE_VALUES
 function DeltaChess.UI:GetPlayerColor(playerName, savedClass)
     if playerName == "Computer" then
         return 0.7, 0.7, 0.7 -- Gray for computer
+    end
+    
+    -- If it's a BattleTag (contains #), we can't get class from UnitClass, use default
+    if playerName and playerName:find("#") then
+        return 1, 0.82, 0 -- Gold default
     end
     
     -- If savedClass is provided, use it directly
@@ -2310,7 +2336,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
     local board = DeltaChess.GetBoard(frame.gameId)
     if not board then return end
     local piece = DeltaChess.GetPieceAt(board, uci)
-    local playerName = DeltaChess:GetFullPlayerName(UnitName("player"))
+    local playerCharName, playerName = DeltaChess:GetLocalPlayerInfo()
     
     -- Block moves while a user action is pending (resign confirm or promotion dialog)
     if (DeltaChess._actionBlocked or 0) > 0 then
@@ -2529,9 +2555,9 @@ function DeltaChess.UI:FormatGameTitle(board)
     local whiteHex = string.format("|cFF%02X%02X%02X", whiteR * 255, whiteG * 255, whiteB * 255)
     local blackHex = string.format("|cFF%02X%02X%02X", blackR * 255, blackG * 255, blackB * 255)
 
-    -- Display names: strip realm, substitute engine name for computer
-    local whiteName = (white or "?"):match("^([^%-]+)") or white or "?"
-    local blackName = (black or "?"):match("^([^%-]+)") or black or "?"
+    -- Display names: already BattleTags for BNet friends, character names with realm otherwise
+    local whiteName = self:GetPlayerDisplayName(white)
+    local blackName = self:GetPlayerDisplayName(black)
 
     if isVsComputer and computerEngine then
         local engine = DeltaChess.Engines:Get(computerEngine)

@@ -144,7 +144,7 @@ end
 function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, settings)
     settings = settings or {}
     local gameId = "computer_" .. tostring(DeltaChess.Util.TimeNow()) .. "_" .. math.random(1000, 9999)
-    local playerName = self:GetFullPlayerName(UnitName("player"))
+    local playerCharName, playerName = self:GetLocalPlayerInfo()
     local engineIdResolved = engineId or DeltaChess.Engines:GetEffectiveDefaultId()
     local engine = DeltaChess.Engines:Get(engineIdResolved)
     local computerPlayer = { name = "Computer", engine = { id = engine and engine.id or engineIdResolved, elo = difficulty } }
