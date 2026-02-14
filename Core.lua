@@ -1652,7 +1652,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                     handicapSide = (finalColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
                 end
                 local gameSettings = {
-                    challenger = DeltaChess:GetFullPlayerName(UnitName("player")),
+                    -- challenger will be set from sender in OnCommReceived
                     opponent = target,  -- BattleTag or character name
                     opponentBattleTag = battleTag,  -- Store BattleTag if friend
                     challengerColor = finalColor,
