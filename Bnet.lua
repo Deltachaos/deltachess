@@ -28,13 +28,9 @@ function DeltaChess.Bnet:GetCurrentCharacterForDisplay(battleTag)
             for j = 1, numGameAccounts do
                 local gameAccountInfo = C_BattleNet.GetFriendGameAccountInfo(i, j)
                 if gameAccountInfo and gameAccountInfo.isOnline and gameAccountInfo.clientProgram == wowClient and gameAccountInfo.characterName then
-                    if gameAccountInfo.isInCurrentRegion == false then
-                        -- Skip cross-region characters
-                    else
-                        local realm = gameAccountInfo.realmDisplayName or gameAccountInfo.realmName
-                        local fullName = realm and (gameAccountInfo.characterName .. "-" .. realm) or DeltaChess:GetFullPlayerName(gameAccountInfo.characterName)
-                        return fullName
-                    end
+                    local realm = gameAccountInfo.realmDisplayName or gameAccountInfo.realmName
+                    local fullName = realm and (gameAccountInfo.characterName .. "-" .. realm) or DeltaChess:GetFullPlayerName(gameAccountInfo.characterName)
+                    return fullName
                 end
             end
             -- Friend found but not online in WoW or in a different region
