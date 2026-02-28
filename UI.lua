@@ -1375,7 +1375,16 @@ function DeltaChess:ShowChessBoard(gameId)
     if isVsComputer and board:IsPaused() then
         board:ContinueGame()
     end
-    
+
+    -- Start AI when it's the computer's turn (new game or resume)
+    if isVsComputer and board:IsActive() then
+        local aiColor = board:GetEnginePlayerColor()
+        local currentTurn = board:IsWhiteToMove() and COLOR.WHITE or COLOR.BLACK
+        if currentTurn == aiColor then
+            DeltaChess.AI:MakeMove(gameId, 500)
+        end
+    end
+
     -- Close existing board if open
     if DeltaChess.UI.activeFrame then
         DeltaChess.UI.activeFrame:Hide()

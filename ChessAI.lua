@@ -181,9 +181,5 @@ function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, setting
     DeltaChess.StoreBoard(gameId, board)
     self:ShowChessBoard(gameId)
 
-    if board:GetEnginePlayerColor() == COLOR.WHITE then
-        DeltaChess.AI:MakeMove(gameId, 1000)
-    end
-
     return gameId
 end
