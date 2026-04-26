@@ -263,6 +263,12 @@ end
 -- @param encodedMessage string Encoded message
 -- @return string|nil prefix, string|nil message
 local function DecodeBNetMessage(encodedMessage)
+    -- Check if encodedMessage is a secret value
+    local issecretvalue = issecretvalue or function() return false end
+    if issecretvalue(encodedMessage) then
+        return nil, nil
+    end
+    
     -- Trim whitespaces from start and end
     encodedMessage = encodedMessage:match("^%s*(.-)%s*$")
     
@@ -350,6 +356,12 @@ end
 -- @param message string Message content
 -- @return string|nil prefix, string|nil decodedMessage, string|nil senderBattleTag
 function DeltaChess.Bnet:HandleBNetWhisper(bnetAccountID, message)
+    -- Check if message is a secret value (cannot perform string operations on secret values)
+    local issecretvalue = issecretvalue or function() return false end
+    if issecretvalue(message) then
+        return nil, nil, nil
+    end
+    
     -- Check if this is a DeltaChess message
     if not message:match("^DeltaChess:") then
         return nil, nil, nil

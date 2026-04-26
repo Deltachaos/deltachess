@@ -494,6 +494,13 @@ function DeltaChess:OnBNetWhisperReceived(...)
         return
     end
     
+    -- Check if text is a secret value (cannot perform string operations on secret values)
+    -- issecretvalue is available in WoW 12.0.0+, provide fallback for older versions
+    local issecretvalue = issecretvalue or function() return false end
+    if issecretvalue(text) then
+        return
+    end
+    
     -- Check if this is a DeltaChess encoded message
     if not text:match("^DeltaChess:") then
         return
