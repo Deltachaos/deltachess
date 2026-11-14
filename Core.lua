@@ -210,20 +210,76 @@ function DeltaChess:SlashCommand(input)
         self:ShowComputerGameWindow()
     elseif command:find("-") then
         -- Player-realm notation
-        self:ShowChallengeWindow(command)
+        self:ShowChallengeWindow(self:NormalizePlayerName(command))
     else
         -- Try to find player on same realm
-        local playerName = command .. "-" .. GetRealmName()
+        local playerName = self:NormalizePlayerName(command)
         self:ShowChallengeWindow(playerName)
     end
 end
 
+-- Get the local realm in the same normalized form WoW uses for addon message senders
+-- (no spaces/hyphens, e.g. "My Realm 2 PvP" -> "MyRealm2PvP")
+function DeltaChess:GetMyRealm()
+    local realm = GetNormalizedRealmName and GetNormalizedRealmName()
+    if not realm or realm == "" then
+        realm = (GetRealmName() or ""):gsub("[%s%-]", "")
+    end
+    return realm
+end
+
+-- True if the given realm string is the player's own realm (ignoring spaces/hyphens/case)
+function DeltaChess:IsMyRealm(realm)
+    if not realm or realm == "" then return true end
+    local r = realm:gsub("[%s%-]", ""):lower()
+    if r == self:GetMyRealm():lower() then return true end
+    local display = (GetRealmName() or ""):gsub("[%s%-]", ""):lower()
+    return r == display
+end
+
+-- WoW Forever: players are addressed by "Firstname Surname" (that is the sender name
+-- CHAT_MSG_ADDON reports and the only whisper target that works), but UnitName() and
+-- typed names may be just "Firstname". Expand a bare first name to the full name using
+-- the guild roster (only if exactly one guild member matches).
+function DeltaChess:ExpandSurname(char)
+    if char:find(" ") or not (IsInGuild and IsInGuild() and GetNumGuildMembers and GetGuildRosterInfo) then
+        return char
+    end
+    local found
+    for i = 1, (GetNumGuildMembers() or 0) do
+        local n = GetGuildRosterInfo(i)
+        if n then
+            local base = n:match("^(.-)%-") or n
+            if base ~= char and base:match("^(%S+)") == char then
+                if found and found ~= base then return char end
+                found = base
+            end
+        end
+    end
+    return found or char
+end
+
+-- Canonical player name used for addon messaging and name comparisons.
+-- Same-realm players are just "Name" (realm stripped) - some servers (e.g. WoW Forever,
+-- where names and realms contain spaces) reject "Name-Realm" whisper targets, and
+-- GetRealmName() (with spaces) never matched the normalized realm in sender names.
+-- Other-realm players are "Name-NormalizedRealm". BattleTags pass through.
+function DeltaChess:NormalizePlayerName(name)
+    if not name or name == "" or name:find("#") then return name end
+    name = strtrim(name)
+    local char, realm = name:match("^(.-)%-(.+)$")
+    if not char or char == "" then
+        char, realm = name, nil
+    end
+    if not realm or self:IsMyRealm(realm) then
+        return self:ExpandSurname(char)
+    end
+    return char .. "-" .. (realm:gsub("[%s%-]", ""))
+end
+
 -- Get full player name with realm
 function DeltaChess:GetFullPlayerName(name)
-    if not name:find("-") then
-        return name .. "-" .. GetRealmName()
-    end
-    return name
+    return self:NormalizePlayerName(name)
 end
 
 -- Get local player's info (character name and preferred display name)
@@ -1192,7 +1248,7 @@ function DeltaChess:GetGuildOnlineFullNames()
     for i = 1, num do
         local name, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
         if name and online and name ~= myName then
-            local fullName = name:find("-") and name or (name .. "-" .. GetRealmName())
+            local fullName = self:NormalizePlayerName(name)
             table.insert(out, fullName)
         end
     end
@@ -1614,12 +1670,8 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 battleTag = input
                 target = input  -- Use BattleTag as target
             else
-                -- Regular character name - add realm if not present
-                if not input:find("-") then
-                    target = input .. "-" .. GetRealmName()
-                else
-                    target = input
-                end
+                -- Regular character name - normalize to the form used for addon messages
+                target = DeltaChess:NormalizePlayerName(input)
                 
                 -- Cannot challenge yourself
                 local myCharName, myName = DeltaChess:GetLocalPlayerInfo()

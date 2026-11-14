@@ -75,6 +75,7 @@ end
 -- Send addon message with automatic BattleTag resolution (always uses WHISPER)
 function DeltaChess:SendCommMessage(prefix, message, target, noBNet)
     if not target then return false end
+    target = self:NormalizePlayerName(target)
     
     -- Use Bnet module to handle BattleTag resolution
     return DeltaChess.Bnet:SendMessage(prefix, message, target, noBNet)
@@ -205,6 +206,7 @@ function DeltaChess:PingPlayer(targetName, callback, noBNet)
         if callback then callback(false, false) end
         return
     end
+    targetName = self:NormalizePlayerName(targetName)
     local myCharName, myName = self:GetLocalPlayerInfo()
     if targetName == myCharName or targetName == myName then
         if callback then callback(true, self.db.settings.dnd) end
@@ -278,6 +280,7 @@ end
 
 -- Handle received addon message
 function DeltaChess:OnCommReceived(prefix, message, channel, sender)
+    sender = self:NormalizePlayerName(sender)
     if prefix == "ChessPing" then
         if message == "PING" then
             self:ReplyToPing(sender)
