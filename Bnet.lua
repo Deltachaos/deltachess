@@ -320,7 +320,7 @@ function DeltaChess.Bnet:SendMessage(prefix, message, target, noBNet)
         local currentChar = self:GetCurrentCharacterForBattleTag(target)
         if currentChar then
             -- Friend is online on same WoW project, use addon message
-            C_ChatInfo.SendAddonMessage(prefix, message, "WHISPER", currentChar)
+            DeltaChess:SendAddon(prefix, message, "WHISPER", currentChar)
             return true
         else
             -- Friend is offline or on different WoW project
@@ -347,7 +347,7 @@ function DeltaChess.Bnet:SendMessage(prefix, message, target, noBNet)
     end
     
     -- Send to character name (regular player)
-    C_ChatInfo.SendAddonMessage(prefix, message, "WHISPER", target)
+    DeltaChess:SendAddon(prefix, message, "WHISPER", target)
     return true
 end
 
