@@ -861,9 +861,14 @@ function DeltaChess:ResignGame(gameId)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
     
-    -- playerColor is only stored for computer games; for human games derive it from
-    -- the player names instead of assuming white
-    local playerColor = board:GetPlayerColor() or self:GetMyColor(gameId) or COLOR.WHITE
+    local playerColor
+    if board:OneOpponentIsEngine() then
+        -- Stored at game start; stays correct if resigned from an alt or after a name change
+        playerColor = board:GetPlayerColor()
+    else
+        playerColor = self:GetMyColor(gameId)
+    end
+    playerColor = playerColor or COLOR.WHITE
     board:Resign(playerColor)
 
     -- Send resignation to opponent (skip for computer games)
@@ -891,7 +896,7 @@ function DeltaChess:HandleResignation(gameId, opponent)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
     
-    local myColor = board:GetPlayerColor() or self:GetMyColor(gameId) or COLOR.WHITE
+    local myColor = self:GetMyColor(gameId) or COLOR.WHITE
     local resigningColor = (myColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
     board:Resign(resigningColor)
     
