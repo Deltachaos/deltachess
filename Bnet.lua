@@ -45,7 +45,7 @@ function DeltaChess.Bnet:GetCurrentCharacterForDisplay(battleTag)
                 local gameAccountInfo = C_BattleNet.GetFriendGameAccountInfo(i, j)
                 if gameAccountInfo and gameAccountInfo.isOnline and gameAccountInfo.clientProgram == wowClient and gameAccountInfo.characterName then
                     local realm = gameAccountInfo.realmDisplayName or gameAccountInfo.realmName
-                    local fullName = realm and (gameAccountInfo.characterName .. "-" .. realm) or DeltaChess:GetFullPlayerName(gameAccountInfo.characterName)
+                    local fullName = DeltaChess:NormalizePlayerName(realm and (gameAccountInfo.characterName .. "-" .. realm) or gameAccountInfo.characterName)
                     return fullName
                 end
             end
@@ -87,7 +87,7 @@ function DeltaChess.Bnet:GetCurrentCharacterForBattleTag(battleTag)
                         -- Skip different WoW project (e.g., friend is on Classic, we're on Retail)
                     else
                         local realm = gameAccountInfo.realmDisplayName or gameAccountInfo.realmName
-                        local fullName = realm and (gameAccountInfo.characterName .. "-" .. realm) or DeltaChess:GetFullPlayerName(gameAccountInfo.characterName)
+                        local fullName = DeltaChess:NormalizePlayerName(realm and (gameAccountInfo.characterName .. "-" .. realm) or gameAccountInfo.characterName)
                         return fullName
                     end
                 end
@@ -160,7 +160,7 @@ function DeltaChess.Bnet:GetBattleTagForCharacter(characterFullName)
                 local gameAccountInfo = C_BattleNet.GetFriendGameAccountInfo(i, j)
                 if gameAccountInfo and gameAccountInfo.characterName then
                     local realm = gameAccountInfo.realmDisplayName or gameAccountInfo.realmName
-                    local fullName = realm and (gameAccountInfo.characterName .. "-" .. realm) or DeltaChess:GetFullPlayerName(gameAccountInfo.characterName)
+                    local fullName = DeltaChess:NormalizePlayerName(realm and (gameAccountInfo.characterName .. "-" .. realm) or gameAccountInfo.characterName)
                     if fullName == characterFullName then
                         return accountInfo.battleTag
                     end
@@ -217,7 +217,7 @@ function DeltaChess.Bnet:GetOnlineBattleNetFriends()
                         -- Skip cross-region
                     else
                         local realm = gameAccountInfo.realmDisplayName or gameAccountInfo.realmName
-                        local fullName = realm and (gameAccountInfo.characterName .. "-" .. realm) or DeltaChess:GetFullPlayerName(gameAccountInfo.characterName)
+                        local fullName = DeltaChess:NormalizePlayerName(realm and (gameAccountInfo.characterName .. "-" .. realm) or gameAccountInfo.characterName)
                         if fullName ~= myName and not seen[accountInfo.battleTag] then
                             seen[accountInfo.battleTag] = true
                             table.insert(out, {
