@@ -169,6 +169,28 @@ function DeltaChess:Print(msg)
     print("|cFF33FF99DeltaChess:|r " .. tostring(msg))
 end
 
+-- Debug logging for addon communication (/chess debug)
+function DeltaChess:CommDebug(fmt, ...)
+    if not self.debugComm then return end
+    local ok, text = pcall(string.format, fmt, ...)
+    local line = ok and text or tostring(fmt)
+    print("|cFFFFAA00DeltaChess debug:|r " .. line)
+    -- Also keep it in SavedVariables (written to WTF/.../SavedVariables/DeltaChess.lua on /reload or logout)
+    if ChessDB then
+        ChessDB.debugLog = ChessDB.debugLog or {}
+        table.insert(ChessDB.debugLog, date("%H:%M:%S") .. " " .. line)
+        while #ChessDB.debugLog > 300 do table.remove(ChessDB.debugLog, 1) end
+    end
+end
+
+-- Send an addon message and log the result in debug mode
+function DeltaChess:SendAddon(prefix, message, channel, target)
+    local ok, result = pcall(C_ChatInfo.SendAddonMessage, prefix, message, channel, target)
+    self:CommDebug("OUT %s %q via %s to %s -> %s", prefix, tostring(message):sub(1, 40), channel,
+        tostring(target), ok and tostring(result) or ("error: " .. tostring(result)))
+    return ok
+end
+
 -- Load on player login
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:SetScript("OnEvent", function(self, event)
@@ -184,10 +206,19 @@ function DeltaChess:SlashCommand(input)
     if command == "" then
         -- Challenge target
         if UnitExists("target") and UnitIsPlayer("target") then
-            local targetName = self:GetFullPlayerName(UnitName("target"))
+            local targetName = self:GetUnitFullName("target")
             self:ShowChallengeWindow(targetName)
         else
             self:ShowMainMenu()
+        end
+    elseif command == "debug" then
+        self.debugComm = not self.debugComm
+        self:Print("Communication debug " .. (self.debugComm and "ON" or "OFF"))
+        if self.debugComm and ChessDB then ChessDB.debugLog = {} end
+        if self.debugComm then
+            local n, r = UnitName("player")
+            self:CommDebug("me: UnitName=%s realm=%s GetRealmName=%s normalized=%s", tostring(n), tostring(r),
+                tostring(GetRealmName()), tostring(GetNormalizedRealmName and GetNormalizedRealmName()))
         end
     elseif command == "menu" or command == "help" then
         self:ShowMainMenu()
@@ -282,12 +313,85 @@ function DeltaChess:GetFullPlayerName(name)
     return self:NormalizePlayerName(name)
 end
 
+-- WoW Forever: UnitName(unit) returns (firstName, surname) instead of (name, realm).
+-- Detect it from the player unit, which never has a realm on regular WoW clients.
+function DeltaChess:UsesForeverNames()
+    if self._foreverNames == nil then
+        local _, second = UnitName("player")
+        self._foreverNames = (type(second) == "string" and second ~= "")
+    end
+    return self._foreverNames
+end
+
+-- Canonical name of a unit. Uses UnitName's second return value: the realm on regular
+-- clients, the surname on WoW Forever ("Firstname Surname", the form senders use).
+function DeltaChess:GetUnitFullName(unit)
+    local name, second = UnitName(unit)
+    if not name then return nil end
+    if second and second ~= "" then
+        if self:UsesForeverNames() then
+            return self:NormalizePlayerName(name .. " " .. second)
+        end
+        return self:NormalizePlayerName(name .. "-" .. second)
+    end
+    return self:NormalizePlayerName(name)
+end
+
+-- Comparison key for a player name (never used for sending): the normalized name,
+-- ignoring case, spaces and hyphens.
+function DeltaChess:NormalizeNameKey(name)
+    if type(name) ~= "string" or name == "" then return "" end
+    if issecretvalue and issecretvalue(name) then return "" end
+    local n = self:NormalizePlayerName(name) or name
+    return (n:gsub("[%s%-]", "")):lower()
+end
+
+-- True if two names refer to the same character
+function DeltaChess:IsSamePlayer(a, b)
+    if a == b then return true end
+    if type(a) ~= "string" or type(b) ~= "string" then return false end
+    if a:find("#") or b:find("#") then return false end -- BattleTags must match exactly
+    local ka = self:NormalizeNameKey(a)
+    return ka ~= "" and ka == self:NormalizeNameKey(b)
+end
+
+-- True if the given name belongs to someone in our party/raid
+function DeltaChess:IsGroupMember(name)
+    local num = GetNumGroupMembers and GetNumGroupMembers() or 0
+    if num <= 0 or type(name) ~= "string" or name:find("#") then return false end
+    local prefix = IsInRaid() and "raid" or "party"
+    local count = IsInRaid() and num or (num - 1)
+    for i = 1, count do
+        local unit = prefix .. i
+        if UnitExists(unit) then
+            local full = self:GetUnitFullName(unit)
+            if full and self:IsSamePlayer(name, full) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Addon-message channel for the current group, or nil when not grouped
+function DeltaChess:GetGroupAddonChannel()
+    if LE_PARTY_CATEGORY_INSTANCE and LE_PARTY_CATEGORY_HOME and IsInGroup
+        and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) and not IsInGroup(LE_PARTY_CATEGORY_HOME) then
+        return "INSTANCE_CHAT"
+    end
+    if IsInRaid and IsInRaid() then return "RAID" end
+    if (IsInGroup and IsInGroup()) or (GetNumGroupMembers and GetNumGroupMembers() > 0) then
+        return "PARTY"
+    end
+    return nil
+end
+
 -- Get local player's info (character name and preferred display name)
 -- Returns: characterName, preferredName
 -- characterName: always the character name with realm (CharName-Realm)
 -- preferredName: BattleTag if available, otherwise character name (for display)
 function DeltaChess:GetLocalPlayerInfo()
-    local characterName = self:GetFullPlayerName(UnitName("player"))
+    local characterName = self:GetUnitFullName("player")
     local battleTag = DeltaChess.Bnet:GetMyBattleTag()
     local preferredName = battleTag or characterName
     return characterName, preferredName
@@ -1266,10 +1370,9 @@ function DeltaChess:GetPartyFullNames()
     for i = 1, count do
         local unit = prefix .. i
         if UnitExists(unit) and UnitIsPlayer(unit) and UnitIsConnected(unit) then
-            local name = UnitName(unit)
-            if name then
-                local fullName = self:GetFullPlayerName(name)
-                if fullName ~= myName then
+            local fullName = self:GetUnitFullName(unit)
+            if fullName then
+                if not self:IsSamePlayer(fullName, myName) and not self:IsSamePlayer(fullName, myCharName) then
                     table.insert(out, fullName)
                 end
             end
@@ -1400,7 +1503,7 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     local myCharName, myName = self:GetLocalPlayerInfo()
     local filtered = {}
     for _, name in ipairs(candidates) do
-        if name ~= myCharName and name ~= myName then
+        if not self:IsSamePlayer(name, myCharName) and not self:IsSamePlayer(name, myName) then
             table.insert(filtered, name)
         end
     end
@@ -1441,7 +1544,16 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     popup:Show()
     
     -- Ping players (noBNet=true skips BNet whispers, only shows same-project players)
-    DeltaChess:PingPlayers(candidates, function(respondedList)
+    -- Party/raid: broadcast one ping on the group channel and use the sender names the
+    -- server reports instead of building a whisper target per member.
+    local pingFn = function(cb, noBNet)
+        if source == "party" and DeltaChess:GetGroupAddonChannel() then
+            DeltaChess:PingGroup(cb)
+        else
+            DeltaChess:PingPlayers(candidates, cb, noBNet)
+        end
+    end
+    pingFn(function(respondedList)
         statusText:SetText(string.format("%d player(s) with DeltaChess online.", #respondedList))
         
         -- If searching party/raid and no players responded, send message to chat
@@ -1675,7 +1787,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 
                 -- Cannot challenge yourself
                 local myCharName, myName = DeltaChess:GetLocalPlayerInfo()
-                if target == myCharName or target == myName then
+                if DeltaChess:IsSamePlayer(target, myCharName) or DeltaChess:IsSamePlayer(target, myName) then
                     DeltaChess:Print("You cannot challenge yourself!")
                     return
                 end
@@ -1747,7 +1859,7 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
     -- Reset values (pre-fill with target if no player specified)
     if not targetPlayer or targetPlayer == "" then
         if UnitExists("target") and UnitIsPlayer("target") then
-            local targetName = self:GetFullPlayerName(UnitName("target"))
+            local targetName = self:GetUnitFullName("target")
             local myCharName, myName = self:GetLocalPlayerInfo()
             if targetName ~= myCharName and targetName ~= myName then
                 targetPlayer = targetName
