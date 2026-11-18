@@ -2364,14 +2364,17 @@ end
 
 -- ==================== PRE-MOVES ====================
 -- While the opponent is thinking, the player can queue ONE move (click or drag).
--- It is kept client-side only and played automatically as soon as it's our turn,
--- if it is legal then; otherwise it is silently dropped. Right-click cancels.
+-- Only semi-legal targets are allowed (moves that could be legal after the
+-- opponent's reply). It is kept client-side only and played as soon as it's our
+-- turn if it is legal then; otherwise it is dropped. Right-click cancels.
 
 local PREMOVE_COLOR = { 0.25, 0.55, 1, 0.5 }
 
 local function RenderPremove(frame)
     if not frame.squares then return end
     local pm = frame.premove
+    local targets = {}
+    for _, move in ipairs(frame.premoveTargets or {}) do targets[move.square] = true end
     for sq, sqFrame in pairs(frame.squares) do
         local show = sq == frame.premoveFrom or (pm and (sq == pm.from or sq == pm.to))
         if show and not sqFrame.premoveMark then
@@ -2382,13 +2385,37 @@ local function RenderPremove(frame)
         if sqFrame.premoveMark then
             if show then sqFrame.premoveMark:Show() else sqFrame.premoveMark:Hide() end
         end
+        local dot = targets[sq] and frame.premoveFrom ~= nil
+        if dot and not sqFrame.premoveDot then
+            sqFrame.premoveDot = sqFrame:CreateTexture(nil, "OVERLAY")
+            sqFrame.premoveDot:SetSize(15, 15)
+            sqFrame.premoveDot:SetPoint("CENTER")
+            sqFrame.premoveDot:SetColorTexture(unpack(PREMOVE_COLOR))
+        end
+        if sqFrame.premoveDot then
+            if dot then sqFrame.premoveDot:Show() else sqFrame.premoveDot:Hide() end
+        end
     end
 end
 
 local function ClearPremove(frame)
     frame.premove = nil
     frame.premoveFrom = nil
+    frame.premoveTargets = nil
     RenderPremove(frame)
+end
+
+local function IsPremoveTarget(frame, uci)
+    if not frame.premoveFrom then return false end
+    for _, move in ipairs(frame.premoveTargets or {}) do
+        if move.square == uci then return true end
+    end
+    return false
+end
+
+local function PickPremovePiece(frame, board, myColor, uci)
+    frame.premoveFrom = uci
+    frame.premoveTargets = DeltaChess.GetPremoveMovesAt(board, uci, myColor)
 end
 
 -- Handle a square click while it's the opponent's turn. Returns true if handled.
@@ -2402,20 +2429,23 @@ function DeltaChess.UI:HandlePremoveClick(frame, uci)
     frame._premoveGameId = frame.gameId
     local mine = IsMyPiece(frame, uci)
     if frame.premove then
-        -- Any click replaces/cancels the queued pre-move (single depth only)
-        frame.premove = nil
-        frame.premoveFrom = mine and uci or nil
-    elseif frame.premoveFrom then
-        if uci == frame.premoveFrom then
-            frame.premoveFrom = nil
-        elseif mine then
-            frame.premoveFrom = uci
-        else
-            frame.premove = { from = frame.premoveFrom, to = uci }
-            frame.premoveFrom = nil
-        end
+        -- Only one pre-move: any click cancels it, and clicking a piece picks it up
+        ClearPremove(frame)
+        if mine then PickPremovePiece(frame, board, myColor, uci) end
+    elseif frame.premoveFrom and uci == frame.premoveFrom then
+        ClearPremove(frame)
+    elseif IsPremoveTarget(frame, uci) then
+        -- Also covers our own pieces' squares (recapture after the opponent takes)
+        frame.premove = { from = frame.premoveFrom, to = uci }
+        frame.premoveFrom = nil
+        frame.premoveTargets = nil
     elseif mine then
-        frame.premoveFrom = uci
+        PickPremovePiece(frame, board, myColor, uci)
+    else
+        if frame.premoveFrom and DeltaChess.GetPieceAt(board, uci) then
+            DeltaChess.Sound:PlayInvalidMove()
+        end
+        ClearPremove(frame)
     end
     RenderPremove(frame)
     return true
@@ -2467,8 +2497,7 @@ function DeltaChess.UI:RefreshPremove(frame, board)
     else
         -- Only a piece was picked: turn it into a normal selection
         local from = frame.premoveFrom
-        frame.premoveFrom = nil
-        RenderPremove(frame)
+        ClearPremove(frame)
         if IsMyPiece(frame, from) then
             frame.selectedSquare = from
             frame.validMoves = DeltaChess.GetLegalMovesAt(board, from)
@@ -2520,8 +2549,10 @@ local function FinishDrag(frame)
     if not target or target == drag.from then return end
     if frame.premoveFrom == drag.from then
         -- Opponent's turn: queue the drop as a pre-move
-        if not IsMyPiece(frame, target) then
+        if IsPremoveTarget(frame, target) then
             DeltaChess.UI:OnSquareClick(frame, target)
+        else
+            DeltaChess.Sound:PlayInvalidMove()
         end
         return
     end
@@ -2553,6 +2584,8 @@ function DeltaChess.UI:AttachSquareHandlers(frame)
                 return
             end
             if button ~= "LeftButton" or not IsMyPiece(frame, uci) then return end
+            -- Own piece on a pre-move target: the click queues a recapture, don't pick it up
+            if IsPremoveTarget(frame, uci) then return end
             if frame.selectedSquare ~= uci and frame.premoveFrom ~= uci then
                 DeltaChess.UI:OnSquareClick(frame, uci)  -- selects, or picks a pre-move piece
             end
