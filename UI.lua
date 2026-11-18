@@ -1484,11 +1484,7 @@ function DeltaChess:ShowChessBoard(gameId)
     flipBtn:SetScript("OnClick", function()
         frame.flipBoard = not frame.flipBoard
         DeltaChess.UI:RecreateBoardSquares(frame, true)
-        for uci, square in pairs(frame.squares) do
-            square:SetScript("OnClick", function()
-                DeltaChess.UI:OnSquareClick(frame, uci)
-            end)
-        end
+        DeltaChess.UI:AttachSquareHandlers(frame)
         DeltaChess.UI:UpdatePlayerBarLabels(frame)
         DeltaChess.UI:UpdateBoard(frame)
     end)
@@ -1546,12 +1542,8 @@ function DeltaChess:ShowChessBoard(gameId)
     -- Create squares (keyed by UCI notation)
     frame.squares = DeltaChess.UI:CreateBoardSquares(boardContainer, SQUARE_SIZE, LABEL_SIZE, flipBoard, true)
     
-    -- Add click handlers
-    for uci, square in pairs(frame.squares) do
-        square:SetScript("OnClick", function()
-            DeltaChess.UI:OnSquareClick(frame, uci)
-        end)
-    end
+    -- Add click and drag handlers
+    DeltaChess.UI:AttachSquareHandlers(frame)
     
     -- ==================== PLAYER BAR (BOTTOM) ====================
     local playerBarInfo = DeltaChess.UI:CreatePlayerBar({
@@ -2341,6 +2333,141 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComp
 end
 
 -- Handle square click (uci is the UCI square notation like "e4")
+-- Drag-and-drop for the interactive board. Click-to-move keeps working: dragging is
+-- just "click the piece, then click the target" driven by mouse down/up.
+local DRAG_THRESHOLD = 4
+
+local function SquareUnderCursor(frame)
+    for sq, sqFrame in pairs(frame.squares) do
+        if sqFrame:IsVisible() and sqFrame:IsMouseOver() then return sq end
+    end
+end
+
+local function IsMyMovablePiece(frame, uci)
+    local board = DeltaChess.GetBoard(frame.gameId)
+    if not board or board:IsEnded() then return false end
+    local piece = DeltaChess.GetPieceAt(board, uci)
+    local turn = board:GetCurrentTurn()
+    if not piece or not DeltaChess.Board.IsPieceColor(piece, turn) then return false end
+    local myColor
+    if board:OneOpponentIsEngine() then
+        myColor = board:GetPlayerColor()
+    else
+        myColor = DeltaChess:GetMyColor(frame.gameId)
+    end
+    return myColor == turn
+end
+
+local function StopDrag(frame)
+    local drag = frame._drag
+    frame._drag = nil
+    if frame._dragGhost then
+        frame._dragGhost:SetScript("OnUpdate", nil)
+        frame._dragGhost:Hide()
+    end
+    if drag and drag.texture then drag.texture:SetAlpha(1) end
+    return drag
+end
+
+local function GetDragGhost(frame)
+    local ghost = frame._dragGhost
+    if not ghost then
+        ghost = CreateFrame("Frame", nil, frame)
+        ghost:SetFrameStrata("TOOLTIP")
+        ghost:EnableMouse(false)
+        ghost.tex = ghost:CreateTexture(nil, "OVERLAY")
+        ghost.tex:SetAllPoints()
+        ghost:Hide()
+        frame._dragGhost = ghost
+    end
+    return ghost
+end
+
+local function MoveGhostToCursor(ghost)
+    local x, y = GetCursorPosition()
+    local scale = ghost:GetEffectiveScale()
+    ghost:ClearAllPoints()
+    ghost:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+end
+
+-- Drop the dragged piece on the square under the cursor (if it's a legal move)
+local function FinishDrag(frame)
+    local drag = StopDrag(frame)
+    if not drag or not drag.started then return end
+    local target = SquareUnderCursor(frame)
+    if target ~= drag.from then
+        -- No click fires on the origin square when released elsewhere
+        frame._dragSuppressClick = nil
+    end
+    if not target or target == drag.from or frame.selectedSquare ~= drag.from then return end
+    for _, move in ipairs(frame.validMoves or {}) do
+        if move.square == target then
+            DeltaChess.UI:OnSquareClick(frame, target)
+            return
+        end
+    end
+    -- Dropped on an illegal square: piece snaps back and stays selected
+end
+
+function DeltaChess.UI:AttachSquareHandlers(frame)
+    for uci, square in pairs(frame.squares) do
+        square:SetScript("OnClick", function()
+            if frame._dragSuppressClick == uci then
+                frame._dragSuppressClick = nil
+                return
+            end
+            DeltaChess.UI:OnSquareClick(frame, uci)
+        end)
+
+        square:SetScript("OnMouseDown", function(_, button)
+            frame._dragSuppressClick = nil
+            StopDrag(frame)
+            if button ~= "LeftButton" or not IsMyMovablePiece(frame, uci) then return end
+            if frame.selectedSquare ~= uci then
+                DeltaChess.UI:OnSquareClick(frame, uci)
+            end
+            if frame.selectedSquare ~= uci then return end  -- selection refused (paused, locked, ...)
+            frame._dragSuppressClick = uci
+
+            local x, y = GetCursorPosition()
+            local drag = { from = uci, x = x, y = y, texture = square.pieceTexture, started = false }
+            frame._drag = drag
+            local ghost = GetDragGhost(frame)
+            ghost:SetScript("OnUpdate", function(self)
+                if frame._drag ~= drag then
+                    self:SetScript("OnUpdate", nil)
+                    return
+                end
+                if not IsMouseButtonDown("LeftButton") then
+                    FinishDrag(frame)  -- released before OnMouseUp reached us
+                    return
+                end
+                if not drag.started then
+                    local cx, cy = GetCursorPosition()
+                    local s = UIParent:GetEffectiveScale()
+                    if math.abs(cx - drag.x) / s < DRAG_THRESHOLD and math.abs(cy - drag.y) / s < DRAG_THRESHOLD then
+                        return
+                    end
+                    drag.started = true
+                    self:SetSize(drag.texture:GetWidth(), drag.texture:GetHeight())
+                    self.tex:SetTexture(drag.texture:GetTexture())
+                    drag.texture:SetAlpha(0.35)
+                    self:Show()
+                end
+                MoveGhostToCursor(self)
+            end)
+            ghost.tex:SetTexture(nil)
+            ghost:SetSize(1, 1)
+            MoveGhostToCursor(ghost)
+            ghost:Show()
+        end)
+
+        square:SetScript("OnMouseUp", function(_, button)
+            if button == "LeftButton" then FinishDrag(frame) end
+        end)
+    end
+end
+
 function DeltaChess.UI:OnSquareClick(frame, uci)
     local board = DeltaChess.GetBoard(frame.gameId)
     if not board then return end
