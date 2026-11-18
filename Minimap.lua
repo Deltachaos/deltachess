@@ -8,7 +8,7 @@ local STATUS = {
 }
 
 -- Detect WoW version for compatibility (with nil checks for older clients)
-local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
+local isRetail = WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and ((WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) or (WOW_PROJECT_ID == WOW_PROJECT_CAMELOT))
 
 -- Initialize minimap button
 function DeltaChess.Minimap:Initialize()
