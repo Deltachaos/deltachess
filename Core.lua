@@ -1,6 +1,7 @@
 -- Core.lua - Main addon initialization and slash commands
 
-DeltaChess = DeltaChess or {}
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
 DeltaChess.version = "1.0.0"
 
 -- Local reference for constants (set after Constants loads)
@@ -35,11 +36,11 @@ DeltaChess.frames = {}
 -- Initialize the addon
 local function Initialize()
     -- Set local reference to constants now that all files are loaded
-    COLOR = DeltaChess.Constants.COLOR
+    COLOR = DeltaChessFramework.Constants.COLOR
     STATUS = {
-        ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
-        PAUSED = DeltaChess.Constants.STATUS_PAUSED,
-        ENDED = DeltaChess.Constants.STATUS_ENDED,
+        ACTIVE = DeltaChessFramework.Constants.STATUS_ACTIVE,
+        PAUSED = DeltaChessFramework.Constants.STATUS_PAUSED,
+        ENDED = DeltaChessFramework.Constants.STATUS_ENDED,
     }
     
     -- Initialize saved variables
@@ -143,7 +144,7 @@ function DeltaChess:RestoreSavedGames()
         -- Board IS the game - restore metatable directly
         if board and not getmetatable(board) then
             -- Restore the board metatable using the Board prototype
-            setmetatable(board, DeltaChess.Board.Prototype)
+            setmetatable(board, DeltaChessFramework.Board.Prototype)
             
             -- Ensure the board has all required data structures
             if not board.moves then
@@ -625,7 +626,7 @@ function DeltaChess:ShowSupportDialog()
         
         -- Build engine credits from registered engines
         local creditLines = {}
-        for _, engine in pairs(DeltaChess.Engines.Registry or {}) do
+        for _, engine in pairs(DeltaChessFramework.Engines.Registry or {}) do
             local line = engine.name or engine.id
             if engine.author then
                 line = line .. " by " .. engine.author
@@ -987,7 +988,7 @@ function DeltaChess:ShowReplayWindow(board)
     frame.replayBoard = board
     frame.moves = {}
     for i, moveData in ipairs(board:GetMoveHistory() or {}) do
-        frame.moves[i] = DeltaChess.BoardMove.Wrap(moveData, nil, i)
+        frame.moves[i] = DeltaChessFramework.BoardMove.Wrap(moveData, nil, i)
     end
     frame.currentMoveIndex = 0
     frame.myChessColor = myChessColor
@@ -1987,7 +1988,7 @@ function DeltaChess:ShowComputerGameWindow()
 
         -- AI Strength slider (ELO) - moved above engine selection
         -- Uses global ELO range across all engines
-        local globalRange = DeltaChess.Engines:GetGlobalEloRange()
+        local globalRange = DeltaChessFramework.Engines:GetGlobalEloRange()
         local hasEloEngines = (globalRange ~= nil)
         
         local diffLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -2043,7 +2044,7 @@ function DeltaChess:ShowComputerGameWindow()
 
         yPos = yPos - 25
 
-        frame.selectedEngine = DeltaChess.Engines:GetEffectiveDefaultId()
+        frame.selectedEngine = DeltaChessFramework.Engines:GetEffectiveDefaultId()
 
         local engineDropdown = CreateFrame("Frame", "ChessEngineDropdown", frame, "UIDropDownMenuTemplate")
         engineDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, yPos)
@@ -2061,7 +2062,7 @@ function DeltaChess:ShowComputerGameWindow()
         
         -- Function to update engine description
         local function updateEngineDescription(engineId)
-            local engine = DeltaChess.Engines:Get(engineId)
+            local engine = DeltaChessFramework.Engines:Get(engineId)
             if engine then
                 local desc = engine.description or ""
                 if engine.author then
@@ -2082,9 +2083,9 @@ function DeltaChess:ShowComputerGameWindow()
         
         -- Helper function to get display name with ELO range
         local function getEngineDisplayName(engineId)
-            local engine = DeltaChess.Engines:Get(engineId)
+            local engine = DeltaChessFramework.Engines:Get(engineId)
             if not engine then return "Select Engine" end
-            local range = DeltaChess.Engines:GetEloRange(engineId)
+            local range = DeltaChessFramework.Engines:GetEloRange(engineId)
             if range then
                 return engine.name .. " (" .. range[1] .. "-" .. range[2] .. ")"
             else
@@ -2095,7 +2096,7 @@ function DeltaChess:ShowComputerGameWindow()
         
         -- Function to update engine dropdown based on selected ELO
         local function updateEngineDropdownForElo(elo, startButton)
-            local availableEngines = DeltaChess.Engines:GetEnginesForElo(elo)
+            local availableEngines = DeltaChessFramework.Engines:GetEnginesForElo(elo)
             
             -- List is sorted by CPU efficiency (fastest first), then by ELO support
             -- Find the most efficient engine with ELO support
@@ -2138,7 +2139,7 @@ function DeltaChess:ShowComputerGameWindow()
             -- Re-initialize dropdown with filtered engines
             UIDropDownMenu_Initialize(engineDropdown, function(self, level)
                 local info = UIDropDownMenu_CreateInfo()
-                local filteredEngines = DeltaChess.Engines:GetEnginesForElo(frame.selectedDifficulty or 1200)
+                local filteredEngines = DeltaChessFramework.Engines:GetEnginesForElo(frame.selectedDifficulty or 1200)
                 for _, eng in ipairs(filteredEngines) do
                     local engineId = eng.id
                     local displayName = getEngineDisplayName(engineId)
@@ -2159,7 +2160,7 @@ function DeltaChess:ShowComputerGameWindow()
         
         -- Slider OnValueChanged handler
         diffSlider:SetScript("OnValueChanged", function(self, value)
-            local gRange = DeltaChess.Engines:GetGlobalEloRange()
+            local gRange = DeltaChessFramework.Engines:GetGlobalEloRange()
             if not gRange then return end
             local minVal, maxVal = gRange[1], gRange[2]
             local elo = math.floor((value + 50) / 100) * 100
@@ -2202,11 +2203,11 @@ function DeltaChess:ShowComputerGameWindow()
     -- Reset to defaults
     local frame = self.frames.computerWindow
     frame.selectedColor = COLOR.WHITE
-    frame.selectedEngine = DeltaChess.Engines:GetEffectiveDefaultId()
+    frame.selectedEngine = DeltaChessFramework.Engines:GetEffectiveDefaultId()
     frame.selectedDifficulty = 1200
     
     -- Reset slider to global range and default value
-    local globalRange = DeltaChess.Engines:GetGlobalEloRange()
+    local globalRange = DeltaChessFramework.Engines:GetGlobalEloRange()
     if globalRange and frame.diffSlider then
         frame.diffSlider:SetMinMaxValues(globalRange[1], globalRange[2])
         frame.diffSlider.Low:SetText(tostring(globalRange[1]))
@@ -2313,7 +2314,7 @@ StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
         local board = DeltaChess.GetBoard(popupData.gameId)
         if board then
             board:PauseGame()
-            board:SetGameMeta("pauseStartTime", DeltaChess.Util.TimeNow())
+            board:SetGameMeta("pauseStartTime", DeltaChessFramework.Util.TimeNow())
             board:SetGameMeta("_lastMoveCountWhenPaused", board:GetHalfMoveCount())
             DeltaChess:SendPauseResponse(popupData.gameId, true)
             DeltaChess:Print("Game paused.")
@@ -2345,7 +2346,7 @@ StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
         local board = DeltaChess.GetBoard(popupData.gameId)
         if board then
             local pauseStartTime = board:GetGameMeta("pauseStartTime")
-            local now = DeltaChess.Util.TimeNow()
+            local now = DeltaChessFramework.Util.TimeNow()
             local increment = pauseStartTime and (now - pauseStartTime) or 0
             local timeSpentClosed = (board:GetGameMeta("timeSpentClosed") or 0) + increment
             board:SetGameMeta("timeSpentClosed", timeSpentClosed)

@@ -1,12 +1,13 @@
 -- EngineBridge.lua - WoW-specific bridge for EngineFramework
 -- Provides WoW timer-based yielding and coordinate conversion helpers
 
-DeltaChess = DeltaChess or {}
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
 
 local STATUS = {
-    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
-    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
-    ENDED = DeltaChess.Constants.STATUS_ENDED,
+    ACTIVE = DeltaChessFramework.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChessFramework.Constants.STATUS_PAUSED,
+    ENDED = DeltaChessFramework.Constants.STATUS_ENDED,
 }
 
 --------------------------------------------------------------------------------
@@ -191,7 +192,7 @@ end
 -- @param square string UCI square (e.g., "e2")
 -- @return string|nil Piece character (K, Q, R, B, N, P or lowercase) or nil
 function DeltaChess.GetPieceAt(board, square)
-    local row, col = DeltaChess.Board.FromSquare(square)
+    local row, col = DeltaChessFramework.Board.FromSquare(square)
     if not row then return nil end
     
     local pos = board:GetPos()
@@ -216,7 +217,7 @@ end
 -- @param fromSquare string UCI square (e.g., "e2")
 -- @return table array of {square, promotion} targets
 function DeltaChess.GetLegalMovesAt(board, fromSquare)
-    local fromRow, fromCol = DeltaChess.Board.FromSquare(fromSquare)
+    local fromRow, fromCol = DeltaChessFramework.Board.FromSquare(fromSquare)
     if not fromRow then return {} end
     
     local fromSq = (fromRow - 1) * 8 + fromCol
@@ -228,7 +229,7 @@ function DeltaChess.GetLegalMovesAt(board, fromSquare)
             local toRow = math.floor((mv.to - 1) / 8) + 1
             local toCol = (mv.to - 1) % 8 + 1
             table.insert(moves, {
-                square = DeltaChess.Board.ToSquare(toRow, toCol),
+                square = DeltaChessFramework.Board.ToSquare(toRow, toCol),
                 promotion = mv.prom
             })
         end
@@ -247,7 +248,7 @@ end
 -- @return boolean
 function DeltaChess.IsLegalMove(board, fromRow, fromCol, toRow, toCol, promotion)
     local uci = DeltaChess.CoordsToUci(fromRow, fromCol, toRow, toCol, promotion)
-    return DeltaChess.MoveGen.IsLegalMove(board:GetFen(), uci)
+    return DeltaChessFramework.MoveGen.IsLegalMove(board:GetFen(), uci)
 end
 
 --------------------------------------------------------------------------------
@@ -269,7 +270,7 @@ end
 -- @param uci string UCI move (e.g., "e2e4", "e7e8q")
 -- @return Board or nil, error message
 function DeltaChess.MakeMove(board, uci)
-    return board:MakeMoveUci(uci, { timestamp = DeltaChess.Util.TimeNow() })
+    return board:MakeMoveUci(uci, { timestamp = DeltaChessFramework.Util.TimeNow() })
 end
 
 --------------------------------------------------------------------------------
@@ -316,8 +317,8 @@ end
 -- @param extraMeta table|nil additional metadata to set
 -- @return Board the new board object
 function DeltaChess.CreateGameBoard(gameId, white, black, settings, extraMeta)
-    local board = DeltaChess.Board.New()
-    local Constants = DeltaChess.Constants
+    local board = DeltaChessFramework.Board.New()
+    local Constants = DeltaChessFramework.Constants
 
     -- Core game metadata
     board:SetGameMeta("id", gameId)
@@ -332,7 +333,7 @@ function DeltaChess.CreateGameBoard(gameId, white, black, settings, extraMeta)
         end
     end
     -- Start game and sync Board clock from clockData when using clock
-    local startTs = DeltaChess.Util.TimeNow()
+    local startTs = DeltaChessFramework.Util.TimeNow()
     local clockData = extraMeta and extraMeta.clockData
     if clockData and clockData.gameStartTimestamp then
         startTs = clockData.gameStartTimestamp

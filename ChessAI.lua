@@ -1,13 +1,16 @@
 -- ChessAI.lua - AI orchestrator for chess engine integration
 -- Uses EngineFramework's EngineRunner for async calculations
 
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
+
 DeltaChess.AI = {}
 
-local COLOR = DeltaChess.Constants.COLOR
+local COLOR = DeltaChessFramework.Constants.COLOR
 local STATUS = {
-    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
-    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
-    ENDED = DeltaChess.Constants.STATUS_ENDED,
+    ACTIVE = DeltaChessFramework.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChessFramework.Constants.STATUS_PAUSED,
+    ENDED = DeltaChessFramework.Constants.STATUS_ENDED,
 }
 
 local AI_INITIAL_DELAY_MS = 500
@@ -16,7 +19,7 @@ local AI_AFTER_DELAY_MS = 500
 -- Get the engine ID for a game (or default)
 local function getEngineId(board)
     local engineId = board and board:GetEngineId()
-    return engineId or DeltaChess.Engines:GetEffectiveDefaultId()
+    return engineId or DeltaChessFramework.Engines:GetEffectiveDefaultId()
 end
 
 -- Make AI move (game integration - calls engine and applies result)
@@ -33,7 +36,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
         if currentTurn ~= aiColor then return end
 
         local engineId = getEngineId(board)
-        local engine = DeltaChess.Engines:Get(engineId)
+        local engine = DeltaChessFramework.Engines:Get(engineId)
         if not engine then
             DeltaChess:Print("No chess engine available!")
             return
@@ -77,7 +80,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
                 if not finalBoard then return end
                 
                 -- Make the move using UCI notation
-                local result, err = finalBoard:MakeMoveUci(uci, { timestamp = DeltaChess.Util.TimeNow() })
+                local result, err = finalBoard:MakeMoveUci(uci, { timestamp = DeltaChessFramework.Util.TimeNow() })
                 
                 if not result then
                     DeltaChess:Print("|cFFFF0000ERROR: Failed to apply move " .. uci .. ": " .. (err or "unknown error") .. "|r")
@@ -106,7 +109,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
         end
 
         -- Use EngineRunner for async calculation
-        DeltaChess.EngineRunner.Create(engineId)
+        DeltaChessFramework.EngineRunner.Create(engineId)
             :Fen(board:GetFen())
             :Elo(difficulty)
             :LoopFn(DeltaChess.WowLoop)
@@ -143,10 +146,10 @@ end
 -- Start a game against the computer
 function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, settings)
     settings = settings or {}
-    local gameId = "computer_" .. tostring(DeltaChess.Util.TimeNow()) .. "_" .. math.random(1000, 9999)
+    local gameId = "computer_" .. tostring(DeltaChessFramework.Util.TimeNow()) .. "_" .. math.random(1000, 9999)
     local playerCharName, playerName = self:GetLocalPlayerInfo()
-    local engineIdResolved = engineId or DeltaChess.Engines:GetEffectiveDefaultId()
-    local engine = DeltaChess.Engines:Get(engineIdResolved)
+    local engineIdResolved = engineId or DeltaChessFramework.Engines:GetEffectiveDefaultId()
+    local engine = DeltaChessFramework.Engines:Get(engineIdResolved)
     local computerPlayer = { name = "Computer", engine = { id = engine and engine.id or engineIdResolved, elo = difficulty } }
 
     local whitePlayer = (playerColor == COLOR.WHITE) and playerName or computerPlayer
@@ -161,7 +164,7 @@ function DeltaChess:StartComputerGame(playerColor, difficulty, engineId, setting
     local clockData = nil
     if useClock then
         clockData = {
-            gameStartTimestamp = DeltaChess.Util.TimeNow(),
+            gameStartTimestamp = DeltaChessFramework.Util.TimeNow(),
             initialTimeSeconds = timeMinutes * 60,
             incrementSeconds = incrementSeconds,
             handicapSeconds = handicapSeconds,

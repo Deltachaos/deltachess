@@ -1,9 +1,12 @@
 -- SavedData.lua - Save and load game data
 
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
+
 local STATUS = {
-    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
-    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
-    ENDED = DeltaChess.Constants.STATUS_ENDED,
+    ACTIVE = DeltaChessFramework.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChessFramework.Constants.STATUS_PAUSED,
+    ENDED = DeltaChessFramework.Constants.STATUS_ENDED,
 }
 
 -- Save game to history using Board serialization
@@ -47,12 +50,12 @@ function DeltaChess:BoardFromHistory(historyId)
     if not entry then
         return nil, "Game not found in history"
     end
-    return DeltaChess.Board.Deserialize(entry)
+    return DeltaChessFramework.Board.Deserialize(entry)
 end
 
 -- Deserialize a history entry to a Board object
 function DeltaChess:DeserializeHistoryEntry(entry)
-    return DeltaChess.Board.Deserialize(entry)
+    return DeltaChessFramework.Board.Deserialize(entry)
 end
 
 -- Resume interrupted game
@@ -87,7 +90,7 @@ end
 
 -- Clean up old games
 function DeltaChess:CleanupOldGames()
-    local currentTime = DeltaChess.Util.TimeNow()
+    local currentTime = DeltaChessFramework.Util.TimeNow()
     local sevenDaysAgo = currentTime - (7 * 24 * 60 * 60)
     
     for gameId, board in pairs(self.db.games) do
@@ -139,7 +142,7 @@ function DeltaChess:BackupData()
         ChessDB_Backup = {}
     end
     
-    ChessDB_Backup[tostring(DeltaChess.Util.TimeNow())] = {
+    ChessDB_Backup[tostring(DeltaChessFramework.Util.TimeNow())] = {
         games = self.db.games,
         history = self.db.history,
         settings = self.db.settings

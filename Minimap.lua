@@ -1,10 +1,13 @@
 -- Minimap.lua - Minimap button
 
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
+
 DeltaChess.Minimap = {}
 
 local minimapButton
 local STATUS = {
-    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
+    ACTIVE = DeltaChessFramework.Constants.STATUS_ACTIVE,
 }
 
 -- Detect WoW version for compatibility (with nil checks for older clients)

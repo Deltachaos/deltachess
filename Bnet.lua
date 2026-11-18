@@ -1,5 +1,8 @@
 -- Bnet.lua - BattleNet friend management and communication helpers
 
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
+
 DeltaChess.Bnet = DeltaChess.Bnet or {}
 
 --------------------------------------------------------------------------------
@@ -250,7 +253,7 @@ local function EncodeBNetMessage(prefix, message)
     local fullMessage = prefix .. ":" .. message
     -- Simple base64 encoding (WoW doesn't have built-in base64, so we use a simple encoding)
     -- For now, just use the message directly with a marker
-    local encoded = DeltaChess.Util.Base64Encode(fullMessage)
+    local encoded = DeltaChessFramework.Util.Base64Encode(fullMessage)
     -- Simple checksum (sum of byte values mod 256)
     local checksum = 0
     for i = 1, #fullMessage do
@@ -282,7 +285,7 @@ local function DecodeBNetMessage(encodedMessage)
     end
     
     -- Decode the message
-    local fullMessage = DeltaChess.Util.Base64Decode(encoded)
+    local fullMessage = DeltaChessFramework.Util.Base64Decode(encoded)
     if not fullMessage then
         return nil, nil
     end
