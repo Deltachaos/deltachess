@@ -75,6 +75,7 @@ end
 -- Send addon message with automatic BattleTag resolution (always uses WHISPER)
 function DeltaChess:SendCommMessage(prefix, message, target, noBNet)
     if not target then return false end
+    target = self:NormalizePlayerName(target)
     
     -- Use Bnet module to handle BattleTag resolution
     return DeltaChess.Bnet:SendMessage(prefix, message, target, noBNet)
@@ -190,10 +191,50 @@ end
 DeltaChess.pendingPings = {}
 DeltaChess.PING_TIMEOUT = 3
 
--- Reply to ping so others can detect we have the addon (include DND status)
-function DeltaChess:ReplyToPing(sender)
+local GROUP_CHANNELS = { PARTY = true, RAID = true, INSTANCE_CHAT = true }
+
+-- Reply to ping so others can detect we have the addon (include DND status).
+-- Group pings are answered on the group channel, whispered pings by whisper.
+function DeltaChess:ReplyToPing(sender, channel)
     local msg = (self.db.settings.dnd and "PONG:DND") or "PONG"
+    if channel and GROUP_CHANNELS[channel] then
+        self:SendAddon("ChessPing", msg, channel)
+        return
+    end
     self:SendCommMessage("ChessPing", msg, sender)
+end
+
+-- Is this sender the local player? (we receive our own group broadcasts)
+function DeltaChess:IsSenderSelf(sender)
+    local myCharName, myName = self:GetLocalPlayerInfo()
+    return self:IsSamePlayer(sender, myCharName) or self:IsSamePlayer(sender, myName)
+end
+
+-- Find the pendingPings key for a sender, tolerant of name format differences
+function DeltaChess:FindPendingPingKey(sender)
+    if self.pendingPings[sender] then return sender end
+    for key in pairs(self.pendingPings) do
+        if self:IsSamePlayer(key, sender) then return key end
+    end
+    return nil
+end
+
+-- Ping everyone in the current party/raid with one group broadcast.
+-- callback(respondedList) after timeout; fullName is the sender name as reported by the
+-- server, so it can be used directly as a whisper target for challenges.
+function DeltaChess:PingGroup(callback)
+    local channel = self:GetGroupAddonChannel()
+    if not channel then
+        if callback then callback({}) end
+        return
+    end
+    local ping = { responded = {}, seen = {} }
+    self.groupPing = ping
+    self:SendAddon("ChessPing", "PING", channel)
+    C_Timer.After(self.PING_TIMEOUT, function()
+        if self.groupPing == ping then self.groupPing = nil end
+        if callback then callback(ping.responded) end
+    end)
 end
 
 -- Ping a single player; callback(hasAddon, isDND) after reply or timeout
@@ -205,6 +246,7 @@ function DeltaChess:PingPlayer(targetName, callback, noBNet)
         if callback then callback(false, false) end
         return
     end
+    targetName = self:NormalizePlayerName(targetName)
     local myCharName, myName = self:GetLocalPlayerInfo()
     if targetName == myCharName or targetName == myName then
         if callback then callback(true, self.db.settings.dnd) end
@@ -232,6 +274,18 @@ function DeltaChess:PingPlayer(targetName, callback, noBNet)
     
     -- SendCommMessage handles BattleTag resolution and cross-project communication automatically
     local success = self:SendCommMessage("ChessPing", "PING", targetName, noBNet)
+
+    -- If the target is in our group, also ping over the group channel. Even an older
+    -- DeltaChess version answers that by whispering back to the server-provided sender
+    -- name, which works even when the name we built for the whisper does not.
+    if not targetName:find("#") and self:IsGroupMember(targetName) then
+        local channel = self:GetGroupAddonChannel()
+        if channel then
+            self:SendAddon("ChessPing", "PING", channel)
+            success = true
+        end
+    end
+
     if not success then
         -- Failed to send (friend offline)
         self.pendingPings[targetName] = nil
@@ -267,9 +321,14 @@ function DeltaChess:PingPlayers(listOfNames, callback, noBNet)
         end
     end
     for _, name in ipairs(listOfNames) do
-        self:PingPlayer(name, function(hasAddon, isDND)
+        self:PingPlayer(name, function(hasAddon, isDND, replyName)
             if hasAddon then
-                table.insert(responded, { fullName = name, dnd = isDND })
+                -- Prefer the server-reported sender name (correct whisper target), except for BattleTags
+                local fullName = name
+                if replyName and not name:find("#") and not replyName:find("#") then
+                    fullName = replyName
+                end
+                table.insert(responded, { fullName = fullName, dnd = isDND })
             end
             checkDone()
         end, noBNet)
@@ -278,12 +337,47 @@ end
 
 -- Handle received addon message
 function DeltaChess:OnCommReceived(prefix, message, channel, sender)
+    if self.debugComm and type(prefix) == "string" and prefix:find("^Chess") then
+        self:CommDebug("IN  %s %q via %s from %s", prefix, tostring(message):sub(1, 40), tostring(channel), tostring(sender))
+    end
+    sender = self:NormalizePlayerName(sender)
     if prefix == "ChessPing" then
         if message == "PING" then
-            self:ReplyToPing(sender)
+            if not self:IsSenderSelf(sender) then
+                self:ReplyToPing(sender, channel)
+            end
         elseif message == "PONG" or message == "PONG:DND" then
-            local pending = self.pendingPings[sender]
-            self.pendingPings[sender] = nil
+            if self:IsSenderSelf(sender) then return end
+            local isDNDReply = (message == "PONG:DND")
+
+            -- Active group ping: collect every responder (group channel, or whisper from older versions)
+            local gp = self.groupPing
+            if gp then
+                local key = self:NormalizeNameKey(sender)
+                if key ~= "" and not gp.seen[key] then
+                    gp.seen[key] = true
+                    table.insert(gp.responded, { fullName = sender, dnd = isDNDReply })
+                end
+            end
+
+            local pendingKey = self:FindPendingPingKey(sender)
+
+            -- Fallback: the reply's sender name did not match the name we pinged. If exactly
+            -- one character ping is waiting and this PONG came by whisper, it must be the answer.
+            if not pendingKey and not gp and channel == "WHISPER" then
+                local only, count = nil, 0
+                for key, p in pairs(self.pendingPings) do
+                    if not key:find("#") and not p.battleTag then
+                        only, count = key, count + 1
+                    end
+                end
+                if count == 1 then
+                    self:CommDebug("PONG from %s matched to pending ping %s by fallback", tostring(sender), only)
+                    pendingKey = only
+                end
+            end
+            local pending = pendingKey and self.pendingPings[pendingKey]
+            if pendingKey then self.pendingPings[pendingKey] = nil end
             
             -- If this was a response to a BattleTag ping, also clear the BattleTag entry
             if pending and pending.battleTag then
@@ -293,7 +387,7 @@ function DeltaChess:OnCommReceived(prefix, message, channel, sender)
             if pending then
                 pending.answered = true
                 local isDND = (message == "PONG:DND")
-                if pending.callback then pending.callback(true, isDND) end
+                if pending.callback then pending.callback(true, isDND, sender) end
             end
         end
         return
@@ -861,7 +955,14 @@ function DeltaChess:ResignGame(gameId)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
     
-    local playerColor = board:GetPlayerColor() or COLOR.WHITE
+    local playerColor
+    if board:OneOpponentIsEngine() then
+        -- Stored at game start; stays correct if resigned from an alt or after a name change
+        playerColor = board:GetPlayerColor()
+    else
+        playerColor = self:GetMyColor(gameId)
+    end
+    playerColor = playerColor or COLOR.WHITE
     board:Resign(playerColor)
 
     -- Send resignation to opponent (skip for computer games)
@@ -889,7 +990,7 @@ function DeltaChess:HandleResignation(gameId, opponent)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
     
-    local myColor = board:GetPlayerColor() or COLOR.WHITE
+    local myColor = self:GetMyColor(gameId) or COLOR.WHITE
     local resigningColor = (myColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
     board:Resign(resigningColor)
     
