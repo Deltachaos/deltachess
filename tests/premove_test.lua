@@ -1,31 +1,31 @@
 --[[
-  Premove tests. Run from the addon root (Framework submodule checked out):
-    lua5.4 tests/premove_test.lua
+  Premove tests. Run with LibUnitWow from the addon root, once the packager
+  (or a manual checkout) has filled Libs/:
+    lua5.1 Libs/LibUnitWow/run.lua --no-toc
 
-  Loads the real framework, EngineBridge.lua and UI.lua with a few WoW API
-  stubs, then drives the premove flow against real board positions.
+  Loads LibStub, the framework, EngineBridge.lua and UI.lua with a few WoW
+  API stubs, then drives the premove flow against real board positions.
+  --no-toc because the full TOC needs the WoW client (Core.lua).
 ]]
 
-package.path = "./Framework/tests/?.lua;" .. package.path
+local Test = require("test")
 
 -- WoW API stubs (only what loading UI.lua and the premove code touch)
-unpack = unpack or table.unpack
 C_Timer = { After = function(_, fn) fn() end }
 StaticPopupDialogs = {}
 function CreateFrame()
   return setmetatable({}, { __index = function() return function() end end })
 end
 
--- Load the framework in .toc order, then the addon files under test
-for line in io.lines("DeltaChess.toc") do
-  local path = line:match("^%s*(Framework/[^#%s]+%.lua)%s*$")
-  if path then dofile(path) end
-end
-dofile("EngineBridge.lua")
-dofile("UI.lua")
+Test.load("Libs/LibStub/LibStub.lua")
+Test.loadXml("Libs/DeltachessFramework/lib.xml")
+Test.load("DeltaChess.lua")
+Test.load("EngineBridge.lua")
+Test.load("UI.lua")
 
-local Test = require("test")
-local COLOR = DeltaChess.Constants.COLOR
+local DeltaChess = LibStub("DeltaChess-1.0")
+local Framework = LibStub("DeltachessFramework-1.0")
+local COLOR = Framework.Constants.COLOR
 
 DeltaChess.Sound = { invalid = 0 }
 function DeltaChess.Sound:PlayInvalidMove() self.invalid = self.invalid + 1 end
@@ -54,13 +54,13 @@ end
 
 -- Computer game where we play white, starting from fen
 local function setup(fen)
-  local board = DeltaChess.Board.FromFen(fen)
+  local board = Framework.Board.FromFen(fen)
   board:SetGameMeta("isVsComputer", true)
   board:SetPlayerColor(COLOR.WHITE)
   DeltaChess.StoreBoard("g1", board)
   local frame = { gameId = "g1", squares = {} }
   function frame:IsShown() return true end
-  for _, sq in ipairs(DeltaChess.Board.AllSquares()) do
+  for _, sq in ipairs(Framework.Board.AllSquares()) do
     frame.squares[sq] = newSquare()
   end
   played = nil
@@ -134,5 +134,3 @@ Test.test("only one premove: a new piece replaces the queued move", function()
   Test.assertEq(played, "b1c3")
 end)
 
-Test.summary()
-Test.exit()

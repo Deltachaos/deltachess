@@ -1,5 +1,8 @@
 -- UI.lua - DeltaChess board user interface
 
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
+
 DeltaChess.UI = {}
 
 -- Piece textures indexed by UCI piece character (uppercase = white, lowercase = black)
@@ -28,13 +31,13 @@ DeltaChess.UI.FILE_LABELS = {"a", "b", "c", "d", "e", "f", "g", "h"}
 -- Local references for convenience
 local PIECE_TEXTURES = DeltaChess.UI.PIECE_TEXTURES
 local FILE_LABELS = DeltaChess.UI.FILE_LABELS
-local Constants = DeltaChess.Constants
+local Constants = DeltaChessFramework.Constants
 local STATUS = {
     ACTIVE = Constants.STATUS_ACTIVE,
     PAUSED = Constants.STATUS_PAUSED,
     ENDED = Constants.STATUS_ENDED,
 }
-local COLOR = DeltaChess.Constants.COLOR
+local COLOR = DeltaChessFramework.Constants.COLOR
 
 --- Get a colored status text string for a board's current game state.
 -- Returns a WoW color-coded string like "|cFFFF4444Checkmate — White wins|r"
@@ -164,7 +167,7 @@ end
 -- Returns a table keyed by UCI square notation (e.g., squares.e4, squares.a1)
 function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flipBoard, interactive)
     local squares = {}
-    local Board = DeltaChess.Board
+    local Board = DeltaChessFramework.Board
     
     -- Create rank labels (1-8 on left side)
     for i = 1, 8 do
@@ -265,10 +268,10 @@ function DeltaChess.UI:RecreateBoardSquares(frame, interactive)
     frame.squares = self:CreateBoardSquares(container, SQUARE_SIZE, LABEL_SIZE, frame.flipBoard, interactive)
 end
 
--- Update piece display on squares from a board state (2D array or DeltaChess.Board object)
+-- Update piece display on squares from a board state (2D array or DeltaChessFramework.Board object)
 -- lastMove can be a BoardMove object or have fromSquare/toSquare UCI strings
 function DeltaChess.UI:RenderPieces(squares, boardState, lastMove)
-    local Board = DeltaChess.Board
+    local Board = DeltaChessFramework.Board
     
     -- Get last move squares for highlighting
     local lastMoveFrom, lastMoveTo
@@ -288,7 +291,7 @@ function DeltaChess.UI:RenderPieces(squares, boardState, lastMove)
             local square = squares[uci]
             local piece
             
-            -- Support both raw 2D arrays and DeltaChess.Board objects
+            -- Support both raw 2D arrays and DeltaChessFramework.Board objects
             if boardState.GetPiece then
                 piece = boardState:GetPiece(row, col)
             elseif boardState[row] then
@@ -394,7 +397,7 @@ function DeltaChess.UI:ApplyMovesToBoard(board, moves, upToIndex)
                 if piece then
                     if promotion then
                         -- Convert promotion char to correct case based on piece color
-                        local isWhite = DeltaChess.Board.IsPieceColor(piece, COLOR.WHITE)
+                        local isWhite = DeltaChessFramework.Board.IsPieceColor(piece, COLOR.WHITE)
                         piece = isWhite and promotion:upper() or promotion:lower()
                     end
                     board[toRow][toCol] = piece
@@ -552,7 +555,7 @@ function DeltaChess.UI:AnimateReplayMove(frame, move, onComplete)
     
     -- For promotion, use the promoted piece (with correct case for color)
     if promotion then
-        local isWhite = DeltaChess.Board.IsPieceColor(pieceChar, COLOR.WHITE)
+        local isWhite = DeltaChessFramework.Board.IsPieceColor(pieceChar, COLOR.WHITE)
         pieceChar = isWhite and promotion:upper() or promotion:lower()
     end
     local destSquare = frame.squares[toSquare]
@@ -565,7 +568,7 @@ function DeltaChess.UI:AnimateReplayMove(frame, move, onComplete)
     
     if castle then
         -- Castling animation - determine rook squares based on piece color
-        local isWhite = DeltaChess.Board.IsPieceColor(pieceChar, COLOR.WHITE)
+        local isWhite = DeltaChessFramework.Board.IsPieceColor(pieceChar, COLOR.WHITE)
         local rookFromSquare, rookToSquare
         if move:IsKingsideCastle() then
             rookFromSquare = isWhite and "h1" or "h8"
@@ -808,7 +811,7 @@ function DeltaChess.UI:FormatDisplayName(name, board, showCurrentChar)
     local computerDifficulty = board and board:GetEngineElo()
     
     if isVsComputer and name == "Computer" and computerEngine then
-        local engine = DeltaChess.Engines:Get(computerEngine)
+        local engine = DeltaChessFramework.Engines:Get(computerEngine)
         local engineName = engine and engine.name or computerEngine
         local eloStr = computerDifficulty and (" - " .. computerDifficulty .. " ELO") or ""
         return "Computer (" .. engineName .. eloStr .. ")"
@@ -1203,7 +1206,7 @@ end
 --------------------------------------------------------------------------------
 
 -- Piece values for material calculation (from framework)
-local PIECE_VALUES = DeltaChess.Board.PIECE_VALUES
+local PIECE_VALUES = DeltaChessFramework.Board.PIECE_VALUES
 
 -- Get class color for a player name (returns r, g, b)
 -- savedClass: optional class token (e.g., "WARRIOR") for when player is offline
@@ -1725,7 +1728,7 @@ function DeltaChess.UI:UpdateBoardAnimated(frame, animateLastMove)
     -- For castling, also get rook positions
     local rookFromSquare, rookToSquare, rookPiece
     if lastMove:IsCastle() then
-        local isWhite = DeltaChess.Board.IsPieceColor(piece, COLOR.WHITE)
+        local isWhite = DeltaChessFramework.Board.IsPieceColor(piece, COLOR.WHITE)
         if lastMove:IsKingsideCastle() then
             rookFromSquare = isWhite and "h1" or "h8"
             rookToSquare = isWhite and "f1" or "f8"
@@ -1806,7 +1809,7 @@ function DeltaChess.UI:UpdateBoard(frame)
     if not board then return end
 
     frame.board = board  -- keep frame in sync with current board instance
-    local Board = DeltaChess.Board
+    local Board = DeltaChessFramework.Board
 
     -- Pre-move markers / auto-play (defined further down, so guard for load order)
     if self.RefreshPremove then self:RefreshPremove(frame, board) end
@@ -2359,7 +2362,7 @@ local function IsMyPiece(frame, uci)
     if not board or board:IsEnded() then return false end
     local piece = DeltaChess.GetPieceAt(board, uci)
     local myColor = GetMyBoardColor(frame, board)
-    return piece ~= nil and myColor ~= nil and DeltaChess.Board.IsPieceColor(piece, myColor)
+    return piece ~= nil and myColor ~= nil and DeltaChessFramework.Board.IsPieceColor(piece, myColor)
 end
 
 -- ==================== PRE-MOVES ====================
@@ -2709,7 +2712,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
     
     -- If no piece selected
     if not frame.selectedSquare then
-        if piece and DeltaChess.Board.IsPieceColor(piece, currentTurn) then
+        if piece and DeltaChessFramework.Board.IsPieceColor(piece, currentTurn) then
             -- Select piece
             frame.selectedSquare = uci
             frame.validMoves = DeltaChess.GetLegalMovesAt(board, uci)
@@ -2785,7 +2788,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
                 DeltaChess:SendMoveWithConfirmation(frame.gameId, moveUci)
             end
             
-        elseif piece and DeltaChess.Board.IsPieceColor(piece, currentTurn) then
+        elseif piece and DeltaChessFramework.Board.IsPieceColor(piece, currentTurn) then
             -- Select different piece
             frame.selectedSquare = uci
             frame.validMoves = DeltaChess.GetLegalMovesAt(board, uci)
@@ -2866,7 +2869,7 @@ function DeltaChess.UI:FormatGameTitle(board)
     local blackName = self:GetPlayerDisplayName(black)
 
     if isVsComputer and computerEngine then
-        local engine = DeltaChess.Engines:Get(computerEngine)
+        local engine = DeltaChessFramework.Engines:Get(computerEngine)
         local engineName = engine and engine.name or computerEngine
         if whiteName == "Computer" then whiteName = "Computer (" .. engineName .. ")" end
         if blackName == "Computer" then blackName = "Computer (" .. engineName .. ")" end
@@ -2947,7 +2950,7 @@ function DeltaChess.UI:ShowGameEnd(gameId, frame)
     -- Save the game to history (only if still in active games) — use current board instance
     local boardToSave = DeltaChess.GetBoard(gameId)
     if boardToSave then
-        boardToSave:SetEndTime(DeltaChess.Util.TimeNow())
+        boardToSave:SetEndTime(DeltaChessFramework.Util.TimeNow())
         DeltaChess:SaveGameToHistory(boardToSave)
     end
 

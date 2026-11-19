@@ -10,26 +10,10 @@
 ## X-Wago-ID: kGryRnKy
 ## X-WoWI-ID: 27027
 
-Framework/lib/json.lua
-Framework/lib/bit.lua
-Framework/lib/fruit21.lua
+Libs/LibStub/LibStub.lua
+Libs/DeltachessFramework/lib.xml
 
-# Framework - standalone chess engine library
-Framework/src/Constants.lua
-Framework/src/Cache.lua
-Framework/src/Util.lua
-Framework/src/MoveGen.lua
-Framework/src/BoardMove.lua
-Framework/src/Board.lua
-Framework/src/EngineInterface.lua
-Framework/src/EngineRunner.lua
-Framework/src/EngineDuel.lua
-Framework/src/Engines/DumbGoblin.lua
-Framework/src/Engines/GarboChess.lua
-# Framework/src/Engines/Sunfish.lua
-Framework/src/Engines/Fruit21.lua
-Framework/src/Engines/Zugzug.lua
-
+DeltaChess.lua
 Core.lua
 Sound.lua
 

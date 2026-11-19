@@ -1,10 +1,13 @@
 -- Communication.lua - Network communication between players
 
-local COLOR = DeltaChess.Constants.COLOR
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
+
+local COLOR = DeltaChessFramework.Constants.COLOR
 local STATUS = {
-    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
-    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
-    ENDED = DeltaChess.Constants.STATUS_ENDED,
+    ACTIVE = DeltaChessFramework.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChessFramework.Constants.STATUS_PAUSED,
+    ENDED = DeltaChessFramework.Constants.STATUS_ENDED,
 }
 
 -- Pending messages waiting for acknowledgment
@@ -23,7 +26,7 @@ function DeltaChess:LockBoard(gameId, messageId, messageType, moveData)
         messageId = messageId,
         messageType = messageType,
         moveData = moveData,
-        timestamp = DeltaChess.Util.TimeNow()
+        timestamp = DeltaChessFramework.Util.TimeNow()
     }
     
     -- Update UI to show waiting state
@@ -69,7 +72,7 @@ end
 -- Generate unique message ID
 function DeltaChess:GenerateMessageId()
     self.messageIdCounter = self.messageIdCounter + 1
-    return string.format("%s_%d_%d", UnitName("player"), DeltaChess.Util.TimeNow(), self.messageIdCounter)
+    return string.format("%s_%d_%d", UnitName("player"), DeltaChessFramework.Util.TimeNow(), self.messageIdCounter)
 end
 
 -- Send addon message with automatic BattleTag resolution (always uses WHISPER)
@@ -109,7 +112,7 @@ function DeltaChess:GenerateGameId()
         local idx = math.random(1, #chars)
         uuid = uuid .. chars:sub(idx, idx)
     end
-    return string.format("%s_%d_%s", UnitName("player"), DeltaChess.Util.TimeNow(), uuid)
+    return string.format("%s_%d_%s", UnitName("player"), DeltaChessFramework.Util.TimeNow(), uuid)
 end
 
 -- Compact challenge serialization using JSON with shorthand keys (within 255-byte addon message limit)
@@ -126,13 +129,13 @@ function DeltaChess:SerializeChallenge(gs)
         hs = (gs.handicapSide == "white" or gs.handicapSide == "black") and gs.handicapSide or nil,
         ir = gs.isRandom or false
     }
-    local json, err = DeltaChess.Util.SerializeJSON(data)
+    local json, err = DeltaChessFramework.Util.SerializeJSON(data)
     return json or ""
 end
 
 function DeltaChess:DeserializeChallenge(str)
     if not str or str == "" then return nil, nil end
-    local data, err = DeltaChess.Util.DeserializeJSON(str)
+    local data, err = DeltaChessFramework.Util.DeserializeJSON(str)
     if not data then return nil, nil end
     -- Map shorthand keys back to full property names
     local result = {
@@ -156,7 +159,7 @@ function DeltaChess:SendChallenge(gameSettings)
     -- Generate game ID upfront so both sides use the same ID
     gameSettings.gameId = self:GenerateGameId()
     -- Include challenger's timestamp for clock sync
-    gameSettings.challengerTimestamp = DeltaChess.Util.TimeNow()
+    gameSettings.challengerTimestamp = DeltaChessFramework.Util.TimeNow()
     -- Include challenger's class for color display
     local _, challengerClass = UnitClass("player")
     gameSettings.challengerClass = challengerClass
@@ -632,7 +635,7 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
     
-    board:MakeMoveUci(moveData.uci, { timestamp = moveData.timestamp or DeltaChess.Util.TimeNow() })
+    board:MakeMoveUci(moveData.uci, { timestamp = moveData.timestamp or DeltaChessFramework.Util.TimeNow() })
     
     -- Update UI if board is open (with animation for the player's move)
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
@@ -675,7 +678,7 @@ function DeltaChess:SendMoveWithConfirmation(gameId, uci)
     local moveData = {
         gameId = gameId,
         uci = uci,
-        timestamp = DeltaChess.Util.TimeNow()
+        timestamp = DeltaChessFramework.Util.TimeNow()
     }
     
     -- Generate message ID and send
@@ -696,14 +699,14 @@ function DeltaChess:AcceptChallenge(challengeData)
     StaticPopup_Hide("CHESS_CHALLENGE_RECEIVED")
     
     -- Use the game ID from the challenger (shared ID)
-    local gameId = challengeData.gameId or (tostring(DeltaChess.Util.TimeNow()) .. "_" .. math.random(1000, 9999))
+    local gameId = challengeData.gameId or (tostring(DeltaChessFramework.Util.TimeNow()) .. "_" .. math.random(1000, 9999))
     
     -- Determine colors - swap: if challenger is white, we are black
     local myCharName, myName = self:GetLocalPlayerInfo()
     local myColor = challengeData.challengerColor == COLOR.WHITE and COLOR.BLACK or COLOR.WHITE
     
     -- Acceptor's timestamp and class
-    local acceptorTimestamp = DeltaChess.Util.TimeNow()
+    local acceptorTimestamp = DeltaChessFramework.Util.TimeNow()
     local _, acceptorClass = UnitClass("player")
 
     -- Determine names and classes based on colors
@@ -812,7 +815,7 @@ function DeltaChess:SendMove(gameId, uci)
     local moveData = {
         gameId = gameId,
         uci = uci,
-        timestamp = DeltaChess.Util.TimeNow()
+        timestamp = DeltaChessFramework.Util.TimeNow()
     }
     
     -- Send with ACK requirement
@@ -834,7 +837,7 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     -- Reject the move if the game is paused
     if board:IsPaused() then return end
     
-    board:MakeMoveUci(moveData.uci, { timestamp = moveData.timestamp or DeltaChess.Util.TimeNow() })
+    board:MakeMoveUci(moveData.uci, { timestamp = moveData.timestamp or DeltaChessFramework.Util.TimeNow() })
     
     -- Play sound for opponent's move
     local lastMove = board:GetLastMove()
@@ -1127,7 +1130,7 @@ function DeltaChess:HandlePauseRequest(data)
     else
         if data.accepted then
             board:PauseGame()
-            board:SetGameMeta("pauseStartTime", DeltaChess.Util.TimeNow())
+            board:SetGameMeta("pauseStartTime", DeltaChessFramework.Util.TimeNow())
             board:SetGameMeta("_lastMoveCountWhenPaused", board:GetHalfMoveCount())
             self:Print("Opponent accepted. Game paused.")
         else
@@ -1177,7 +1180,7 @@ function DeltaChess:HandleUnpauseRequest(data)
             else
                 local pauseStartTime = board:GetGameMeta("pauseStartTime")
                 if pauseStartTime then
-                    timeSpentClosed = timeSpentClosed + (DeltaChess.Util.TimeNow() - pauseStartTime)
+                    timeSpentClosed = timeSpentClosed + (DeltaChessFramework.Util.TimeNow() - pauseStartTime)
                 end
             end
             board:SetGameMeta("timeSpentClosed", timeSpentClosed)
@@ -1232,15 +1235,15 @@ function DeltaChess:GetMyColor(gameId)
     return nil
 end
 
--- JSON serialization using DeltaChess.Util
+-- JSON serialization using DeltaChessFramework.Util
 function DeltaChess:Serialize(data)
-    local json, err = DeltaChess.Util.SerializeJSON(data)
+    local json, err = DeltaChessFramework.Util.SerializeJSON(data)
     return json
 end
 
 function DeltaChess:Deserialize(str)
     if not str or str == "" then return false, nil end
-    local data, err = DeltaChess.Util.DeserializeJSON(str)
+    local data, err = DeltaChessFramework.Util.DeserializeJSON(str)
     if data then
         return true, data
     else

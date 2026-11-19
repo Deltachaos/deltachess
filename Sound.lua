@@ -1,11 +1,14 @@
 -- Sound.lua - Sound system for chess events
 
+local DeltaChess = LibStub("DeltaChess-1.0")
+local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
+
 DeltaChess.Sound = {}
 
-local COLOR = DeltaChess.Constants.COLOR
+local COLOR = DeltaChessFramework.Constants.COLOR
 local STATUS = {
-    ACTIVE = DeltaChess.Constants.STATUS_ACTIVE,
-    PAUSED = DeltaChess.Constants.STATUS_PAUSED,
+    ACTIVE = DeltaChessFramework.Constants.STATUS_ACTIVE,
+    PAUSED = DeltaChessFramework.Constants.STATUS_PAUSED,
 }
 
 local SOUND_FILES = {
@@ -236,7 +239,7 @@ function DeltaChess.Sound:PlayGameEndSound(board)
     local playerColor = GetPlayerColor(board)
     local reason = board:GetEndReason()
     
-    if reason == DeltaChess.Constants.REASON_CHECKMATE then
+    if reason == DeltaChessFramework.Constants.REASON_CHECKMATE then
         -- The player whose turn it is when checkmate is detected is the loser
         -- (they have no legal moves and are in check)
         local loserColor = board:GetCurrentTurn()
@@ -245,11 +248,11 @@ function DeltaChess.Sound:PlayGameEndSound(board)
         else
             self:PlayWin()
         end
-    elseif reason == DeltaChess.Constants.REASON_STALEMATE or reason == DeltaChess.Constants.REASON_FIFTY_MOVE
-        or reason == DeltaChess.Constants.REASON_THREEFOLD_REPETITION or reason == DeltaChess.Constants.REASON_FIVEFOLD_REPETITION
-        or reason == DeltaChess.Constants.REASON_REMIS then
+    elseif reason == DeltaChessFramework.Constants.REASON_STALEMATE or reason == DeltaChessFramework.Constants.REASON_FIFTY_MOVE
+        or reason == DeltaChessFramework.Constants.REASON_THREEFOLD_REPETITION or reason == DeltaChessFramework.Constants.REASON_FIVEFOLD_REPETITION
+        or reason == DeltaChessFramework.Constants.REASON_REMIS then
         self:PlayStalemate()
-    elseif reason == DeltaChess.Constants.REASON_RESIGNATION then
+    elseif reason == DeltaChessFramework.Constants.REASON_RESIGNATION then
         local playerCharName, playerName = DeltaChess:GetLocalPlayerInfo()
         local resignedPlayer = board:GetResignedPlayer()
         local isVsComputer = board:OneOpponentIsEngine()
@@ -259,7 +262,7 @@ function DeltaChess.Sound:PlayGameEndSound(board)
         else
             self:PlayWin()
         end
-    elseif reason == DeltaChess.Constants.REASON_TIMEOUT then
+    elseif reason == DeltaChessFramework.Constants.REASON_TIMEOUT then
         local playerCharName, playerName = DeltaChess:GetLocalPlayerInfo()
         local timeoutPlayer = board:GetGameMeta("timeoutPlayer")
         if timeoutPlayer == playerCharName or timeoutPlayer == playerName then

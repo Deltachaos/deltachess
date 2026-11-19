@@ -1,6 +1,0 @@
-# Paths to keep in the package (in addition to files listed in DeltaChess.toc)
-# One path per line; directories keep themselves and all contents.
-
-Textures
-README.md
-LICENSE
