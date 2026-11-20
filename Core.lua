@@ -2,7 +2,7 @@
 
 local DeltaChess = LibStub("DeltaChess-1.0")
 local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
-DeltaChess.version = "1.0.0"
+DeltaChess.version = "1.2.0"
 
 -- Local reference for constants (set after Constants loads)
 local COLOR
@@ -80,28 +80,10 @@ local function Initialize()
         DeltaChess:SlashCommand(msg)
     end
     
-    -- Register addon messages
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessChallenge")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessMove")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessResponse")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessResign")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessDraw")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessAck")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessPing")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessPause")
-    C_ChatInfo.RegisterAddonMessagePrefix("ChessUnpause")
-    
-    -- Register for addon messages
-    eventFrame:RegisterEvent("CHAT_MSG_ADDON")
-    eventFrame:RegisterEvent("CHAT_MSG_BN_WHISPER")
-    eventFrame:SetScript("OnEvent", function(self, event, ...)
-        if event == "CHAT_MSG_ADDON" then
-            DeltaChess:OnCommReceived(...)
-        elseif event == "CHAT_MSG_BN_WHISPER" then
-            DeltaChess:OnBNetWhisperReceived(...)
-        end
-    end)
-    
+    if DeltaChess.Chess then
+        DeltaChess:Chess()
+    end
+
     -- Restore metatables for saved games
     DeltaChess:RestoreSavedGames()
     
@@ -127,6 +109,10 @@ local function Initialize()
                     DeltaChess:SaveGameToHistory(board)
                 end
             end
+        end
+
+        if DeltaChess.WatchNetworkClocks then
+            DeltaChess:WatchNetworkClocks()
         end
 
         -- Update minimap your-turn highlight
@@ -406,16 +392,17 @@ function DeltaChess:IsMyTurnInAnyGame()
         if board:IsActive() then
             local currentTurn = board:GetCurrentTurn()
             local isPlayerTurn
-            local isVsComputer = board:OneOpponentIsEngine()
-            if isVsComputer then
-                local playerColor = board:GetPlayerColor() or COLOR.WHITE
-                isPlayerTurn = (currentTurn == playerColor)
-            else
+            local playerColor = board:GetPlayerColor()
+            if not playerColor and not board:OneOpponentIsEngine() then
                 local white = board:GetWhitePlayerName()
                 local black = board:GetBlackPlayerName()
-                isPlayerTurn = (white == playerName and currentTurn == COLOR.WHITE) or
-                              (black == playerName and currentTurn == COLOR.BLACK)
+                if white == playerCharName or white == playerName then
+                    playerColor = COLOR.WHITE
+                elseif black == playerCharName or black == playerName then
+                    playerColor = COLOR.BLACK
+                end
             end
+            isPlayerTurn = currentTurn == (playerColor or COLOR.WHITE)
             if isPlayerTurn then return true end
         end
     end
@@ -1543,18 +1530,28 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     end
 
     popup:Show()
-    
-    -- Ping players (noBNet=true skips BNet whispers, only shows same-project players)
-    -- Party/raid: broadcast one ping on the group channel and use the sender names the
-    -- server reports instead of building a whisper target per member.
-    local pingFn = function(cb, noBNet)
-        if source == "party" and DeltaChess:GetGroupAddonChannel() then
-            DeltaChess:PingGroup(cb)
-        else
-            DeltaChess:PingPlayers(candidates, cb, noBNet)
-        end
+
+    local where = "all"
+    if source == "party" then
+        where = { "group" }
+    elseif source == "guild" then
+        where = { "guild" }
+    elseif source == "friends" then
+        where = { "friends", "battlenet" }
     end
-    pingFn(function(respondedList)
+    DeltaChess:DiscoverPlayers(where, function(respondedList)
+        if source == "past" then
+            local matched = {}
+            for _, entry in ipairs(respondedList) do
+                for _, candidate in ipairs(candidates) do
+                    if entry.fullName == candidate or DeltaChess:IsSamePlayer(entry.fullName, candidate) then
+                        table.insert(matched, entry)
+                        break
+                    end
+                end
+            end
+            respondedList = matched
+        end
         statusText:SetText(string.format("%d player(s) with DeltaChess online.", #respondedList))
         
         -- If searching party/raid and no players responded, send message to chat
@@ -1797,53 +1794,33 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
                 battleTag = DeltaChess.Bnet:GetBattleTagForCharacter(target)
             end
             
-            sendBtn:SetEnabled(false)
-            sendBtn:SetText("Checking...")
-            
-            -- PingPlayer will validate and handle BattleTag resolution automatically
-            DeltaChess:PingPlayer(target, function(hasAddon)
-                sendBtn:SetEnabled(true)
-                sendBtn:SetText("Send Challenge")
-                if not hasAddon then
-                    DeltaChess:Print("|cFFFF0000Player doesn't have DeltaChess installed or is offline.|r")
-                    -- Send chat whisper (handles both BattleTag and character name)
-                    DeltaChess.Bnet:SendChatWhisper(
-                        "I want to challenge you to a game of chess but you dont have Delta Chess installed :( Download from Curseforge so that we can play together: https://www.curseforge.com/wow/addons/deltachess",
-                        target
-                    )
-                    return
-                end
-                
-                local wasRandom = frame.selectedColor == "random"
-                local finalColor = frame.selectedColor
-                if finalColor == "random" then
-                    finalColor = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
-                end
-                
-                local handicapSeconds = (frame.handicapCheck and frame.handicapCheck:GetChecked() and frame.handicapSecondsSlider) and math.floor(frame.handicapSecondsSlider:GetValue()) or 0
-                -- Resolve "challenger"/"opponent" to "white"/"black" based on the challenger's color
-                local handicapSide = nil
-                if frame.handicapSide == "challenger" then
-                    handicapSide = finalColor  -- challenger's color gets less time
-                elseif frame.handicapSide == "opponent" then
-                    handicapSide = (finalColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
-                end
-                local gameSettings = {
-                    -- challenger will be set from sender in OnCommReceived
-                    opponent = target,  -- BattleTag or character name
-                    opponentBattleTag = battleTag,  -- Store BattleTag if friend
-                    challengerColor = finalColor,
-                    isRandom = wasRandom,
-                    useClock = frame.clockCheck:GetChecked(),
-                    timeMinutes = math.floor(frame.timeSlider:GetValue()),
-                    incrementSeconds = math.floor(frame.incSlider:GetValue()),
-                    handicapSeconds = (handicapSeconds > 0) and handicapSeconds or nil,
-                    handicapSide = handicapSide,
-                }
-                
-                DeltaChess:SendChallenge(gameSettings)
-                frame:Hide()
-            end)
+            local wasRandom = frame.selectedColor == "random"
+            local finalColor = frame.selectedColor
+            if finalColor == "random" then
+                finalColor = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
+            end
+
+            local handicapSeconds = (frame.handicapCheck and frame.handicapCheck:GetChecked() and frame.handicapSecondsSlider) and math.floor(frame.handicapSecondsSlider:GetValue()) or 0
+            local handicapSide = nil
+            if frame.handicapSide == "challenger" then
+                handicapSide = finalColor
+            elseif frame.handicapSide == "opponent" then
+                handicapSide = (finalColor == COLOR.WHITE) and COLOR.BLACK or COLOR.WHITE
+            end
+            local gameSettings = {
+                opponent = target,
+                opponentBattleTag = battleTag,
+                challengerColor = finalColor,
+                isRandom = wasRandom,
+                useClock = frame.clockCheck:GetChecked(),
+                timeMinutes = math.floor(frame.timeSlider:GetValue()),
+                incrementSeconds = math.floor(frame.incSlider:GetValue()),
+                handicapSeconds = (handicapSeconds > 0) and handicapSeconds or nil,
+                handicapSide = handicapSide,
+            }
+
+            DeltaChess:SendChallenge(gameSettings)
+            frame:Hide()
         end)
         
         local cancelBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -2261,7 +2238,7 @@ StaticPopupDialogs["CHESS_CHALLENGE_RECEIVED"] = {
     OnCancel = function(self, data)
         DeltaChess:DeclineChallenge(data)
     end,
-    timeout = 60,
+    timeout = 30,
     whileDead = true,
     hideOnEscape = true,
     preferredIndex = 3,
@@ -2311,18 +2288,7 @@ StaticPopupDialogs["CHESS_PAUSE_REQUEST"] = {
         dialog:SetFrameLevel(350)
     end,
     OnAccept = function(self, popupData)
-        local board = DeltaChess.GetBoard(popupData.gameId)
-        if board then
-            board:PauseGame()
-            board:SetGameMeta("pauseStartTime", DeltaChessFramework.Util.TimeNow())
-            board:SetGameMeta("_lastMoveCountWhenPaused", board:GetHalfMoveCount())
-            DeltaChess:SendPauseResponse(popupData.gameId, true)
-            DeltaChess:Print("Game paused.")
-            if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
-                DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
-            end
-            DeltaChess:RefreshMainMenuContent()
-        end
+        DeltaChess:SendPauseResponse(popupData.gameId, true)
     end,
     OnCancel = function(self, popupData)
         DeltaChess:SendPauseResponse(popupData.gameId, false)
@@ -2343,22 +2309,7 @@ StaticPopupDialogs["CHESS_UNPAUSE_REQUEST"] = {
         dialog:SetFrameLevel(350)
     end,
     OnAccept = function(self, popupData)
-        local board = DeltaChess.GetBoard(popupData.gameId)
-        if board then
-            local pauseStartTime = board:GetGameMeta("pauseStartTime")
-            local now = DeltaChessFramework.Util.TimeNow()
-            local increment = pauseStartTime and (now - pauseStartTime) or 0
-            local timeSpentClosed = (board:GetGameMeta("timeSpentClosed") or 0) + increment
-            board:SetGameMeta("timeSpentClosed", timeSpentClosed)
-            board:ContinueGame()
-            board:SetGameMeta("pauseStartTime", nil)
-            DeltaChess:SendUnpauseResponse(popupData.gameId, true, increment)
-            DeltaChess:Print("Game resumed.")
-            if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == popupData.gameId then
-                DeltaChess.UI:UpdateBoard(DeltaChess.UI.activeFrame)
-            end
-            DeltaChess:RefreshMainMenuContent()
-        end
+        DeltaChess:SendUnpauseResponse(popupData.gameId, true)
     end,
     OnCancel = function(self, popupData)
         DeltaChess:SendUnpauseResponse(popupData.gameId, false)

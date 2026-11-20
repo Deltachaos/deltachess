@@ -15,6 +15,7 @@ Libs/LibDeflate/lib.xml
 Libs/LibSerialize/lib.xml
 Libs/LibCrypto/lib.xml
 Libs/LibMultiplayer/lib.xml
+Libs/LibChessMultiplayer/lib.xml
 Libs/DeltachessFramework/lib.xml
 
 DeltaChess.lua

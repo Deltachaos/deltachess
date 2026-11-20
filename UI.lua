@@ -744,21 +744,17 @@ function DeltaChess.UI:GetBoardParticipants(board)
     local whiteClass = board:GetWhitePlayerClass()
     local blackClass = board:GetBlackPlayerClass()
 
-    -- Determine player color by checking if white or black is the player
-    -- Check both character name and preferred name (BattleTag)
-    local playerColor
-    if isVsComputer then
-        playerColor = board:GetPlayerColor()
-    else
+    -- Stored color is set for computer games and for networked games.
+    local playerColor = board:GetPlayerColor()
+    if not playerColor and not isVsComputer then
         if white == playerCharName or white == myPreferredName then
             playerColor = COLOR.WHITE
         elseif black == playerCharName or black == myPreferredName then
             playerColor = COLOR.BLACK
         end
     end
-    
-    -- Flip board if player is black
-    local flipBoard = (playerColor == COLOR.BLACK) or (black == playerCharName) or (black == myPreferredName)
+
+    local flipBoard = playerColor == COLOR.BLACK
     
     -- Determine who is "me" and who is "opponent"
     local myName, opponentName, myChessColor, opponentChessColor, myClass, opponentClass

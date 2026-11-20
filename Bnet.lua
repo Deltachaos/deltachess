@@ -306,6 +306,12 @@ local function DecodeBNetMessage(encodedMessage)
     return prefix, message
 end
 
+-- BEGIN REMOVE: pre-1.2 direct-challenge check.
+-- SendMessage and HandleBNetWhisper exist so a direct challenge can notice a
+-- client that still answers ChessPing. Delete them with NoticeOldClient in
+-- Communication.lua. SendChatWhisper stays; it is a normal chat whisper.
+-- END REMOVE
+
 --- Send addon message with automatic BattleTag resolution
 -- If target is a BattleTag (contains #), resolves to current character
 -- If friend is on different WoW project, uses BNet whisper (unless noBNet is true)
