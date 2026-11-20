@@ -238,6 +238,32 @@ function DeltaChess.GetLegalMovesAt(board, fromSquare)
     return moves
 end
 
+--- Get premove targets for a piece: squares it could move to once the opponent
+-- has made their next move (see MoveGen.SemiLegalMoves).
+-- @param board Board object from framework
+-- @param fromSquare string UCI square, e.g. "e2"
+-- @param color COLOR.WHITE or COLOR.BLACK (the premoving side)
+-- @return array of {square = "e4", promotion = "q"|nil}
+function DeltaChess.GetPremoveMovesAt(board, fromSquare, color)
+    local fromRow, fromCol = DeltaChessFramework.Board.FromSquare(fromSquare)
+    if not fromRow then return {} end
+
+    local fromSq = (fromRow - 1) * 8 + fromCol
+    local moves, seen = {}, {}
+    for _, mv in ipairs(board:SemiLegalMoves(color == DeltaChessFramework.Constants.COLOR.WHITE and "w" or "b")) do
+        if mv.from == fromSq and not seen[mv.to] then
+            seen[mv.to] = true
+            local toRow = math.floor((mv.to - 1) / 8) + 1
+            local toCol = (mv.to - 1) % 8 + 1
+            table.insert(moves, {
+                square = DeltaChessFramework.Board.ToSquare(toRow, toCol),
+                promotion = mv.prom
+            })
+        end
+    end
+    return moves
+end
+
 --- Check if a move is legal.
 -- @param board Board object from framework
 -- @param fromRow number

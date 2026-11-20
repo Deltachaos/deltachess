@@ -8,8 +8,13 @@ externals:
   Libs/DeltachessFramework:
     url: https://github.com/Deltachaos/deltachess-framework
     branch: main
+  Libs/LibUnitWow:
+    url: https://github.com/Deltachaos/LibUnitWow
+    branch: main
 
 ignore:
+  - tests
+  - Libs/LibUnitWow
   - Libs/DeltachessFramework/bin
   - Libs/DeltachessFramework/tests
   - Libs/DeltachessFramework/README.md
