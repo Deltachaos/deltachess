@@ -8,6 +8,21 @@ externals:
   Libs/DeltachessFramework:
     url: https://github.com/Deltachaos/deltachess-framework
     branch: main
+  Libs/LibMultiplayer:
+    url: https://github.com/Deltachaos/LibMultiplayer
+    branch: main
+  Libs/LibChessMultiplayer:
+    url: https://github.com/Deltachaos/LibChessMultiplayer
+    branch: main
+  Libs/LibDeflate:
+    url: https://github.com/SafeteeWoW/LibDeflate
+    branch: main
+  Libs/LibSerialize:
+    url: https://github.com/rossnichols/LibSerialize
+    branch: main
+  Libs/LibCrypto:
+    url: https://github.com/Deltachaos/LibCrypto
+    branch: main
   Libs/LibUnitWow:
     url: https://github.com/Deltachaos/LibUnitWow
     branch: main

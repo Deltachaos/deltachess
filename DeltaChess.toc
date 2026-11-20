@@ -11,6 +11,10 @@
 ## X-WoWI-ID: 27027
 
 Libs/LibStub/LibStub.lua
+Libs/LibDeflate/lib.xml
+Libs/LibSerialize/lib.xml
+Libs/LibCrypto/lib.xml
+Libs/LibMultiplayer/lib.xml
 Libs/DeltachessFramework/lib.xml
 
 DeltaChess.lua
