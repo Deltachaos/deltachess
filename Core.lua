@@ -476,7 +476,7 @@ function DeltaChess:ShowMainMenu()
         -- History scroll frame
         local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
         scrollFrame:SetPoint("TOPLEFT", historyTitle, "BOTTOMLEFT", 0, -10)
-        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -40, 110)
+        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -40, 142)
         
         local scrollChild = CreateFrame("Frame", nil, scrollFrame)
         scrollChild:SetSize(400, 1)
@@ -485,7 +485,7 @@ function DeltaChess:ShowMainMenu()
         
         -- DND checkbox (above bottom buttons)
         local dndCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-        dndCheck:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 75)
+        dndCheck:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 107)
         dndCheck.text:SetText("Do Not Disturb (no challenge popups)")
         dndCheck:SetChecked(DeltaChess.db.settings.dnd)
         dndCheck:SetScript("OnClick", function(self)
@@ -496,6 +496,15 @@ function DeltaChess:ShowMainMenu()
         end)
         frame.dndCheck = dndCheck
         
+        local findBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        findBtn:SetSize(430, 28)
+        findBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 74)
+        findBtn:SetText("Find match")
+        findBtn:SetScript("OnClick", function()
+            DeltaChess:FindMatch()
+        end)
+        frame.findMatchBtn = findBtn
+
         -- Challenge Player button (above blingtron ad)
         local challengeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         challengeBtn:SetSize(211, 28)
@@ -534,6 +543,7 @@ function DeltaChess:ShowMainMenu()
     
     -- Refresh the content
     self:RefreshMainMenuContent()
+    self:UpdateFindMatchButton()
     
     self.frames.mainMenu:Show()
 end

@@ -356,6 +356,52 @@ function DeltaChess:BindNetworkGame(game)
     end)
 end
 
+function DeltaChess:UpdateFindMatchButton()
+    local btn = self.frames and self.frames.mainMenu and self.frames.mainMenu.findMatchBtn
+    if not btn then return end
+    if self.matchmaking and not self.matchmaking.state then
+        btn:SetText("Cancel search")
+    else
+        btn:SetText("Find match")
+    end
+end
+
+function DeltaChess:FindMatch()
+    local chess = self:Chess()
+    if not chess then return end
+    if self.matchmaking and not self.matchmaking.state then
+        local pending = self.matchmaking
+        self.matchmaking = nil
+        if pending.Cancel then pending:Cancel() end
+        self:Print("Matchmaking cancelled.")
+        self:UpdateFindMatchButton()
+        return
+    end
+    local pending = chess:Matchmake({
+        color = "random",
+        onFail = function(_, message)
+            if self.matchmaking ~= pending then return end
+            self.matchmaking = nil
+            self:Print("|cFFFF0000" .. tostring(message or "Matchmaking failed.") .. "|r")
+            self:UpdateFindMatchButton()
+        end,
+    })
+    pending:resolve(function()
+        self.matchmaking = nil
+        self:UpdateFindMatchButton()
+        if self.frames.mainMenu then self.frames.mainMenu:Hide() end
+    end, function(_, message)
+        if self.matchmaking ~= pending then return end
+        self.matchmaking = nil
+        self:Print("|cFFFF0000" .. tostring(message or "Matchmaking failed.") .. "|r")
+        self:UpdateFindMatchButton()
+    end)
+    if pending.state == "err" then return end
+    self.matchmaking = pending
+    self:Print("Looking for a match...")
+    self:UpdateFindMatchButton()
+end
+
 function DeltaChess:DiscoverPlayers(where, callback)
     local chess = self:Chess()
     if not chess then
