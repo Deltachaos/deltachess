@@ -2410,6 +2410,7 @@ local function FinishDrag(frame)
         end
     end
     -- Dropped on an illegal square: piece snaps back and stays selected
+    DeltaChess.Sound:PlayInvalidMove()
 end
 
 function DeltaChess.UI:AttachSquareHandlers(frame)
