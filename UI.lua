@@ -1085,7 +1085,123 @@ function DeltaChess.UI:BindMoveHistory(history, width, height)
         historyText = historyText,
         label = history.label,
         historyBg = history.historyBg,
+        rows = {},
     }
+end
+
+-- Move list rows: "12.  Nf3  Nc6" on the left, and on the right two stacked
+-- bars with the seconds each side spent on that move (white on top).
+local MOVE_ROW_HEIGHT = 20
+local TIME_BAR_MAX_WIDTH = 40
+local TIME_BAR_HEIGHT = 5
+local TIME_COLORS = {
+    white = { 0.9, 0.9, 0.9, 1 },
+    black = { 0.45, 0.45, 0.45, 1 },
+}
+
+--- Format seconds for the move list: one decimal, e.g. "4.2".
+function DeltaChess.UI:FormatMoveSeconds(seconds)
+    return string.format("%.1f", seconds or 0)
+end
+
+--- Bar width in pixels for a move time, relative to the longest move shown.
+function DeltaChess.UI:MoveTimeBarWidth(seconds, longest)
+    if not seconds or seconds <= 0 or not longest or longest <= 0 then return 1 end
+    return math.max(1, math.floor(seconds / longest * TIME_BAR_MAX_WIDTH + 0.5))
+end
+
+local function smallFont(fontString, size)
+    local font, _, flags = fontString:GetFont()
+    if font then fontString:SetFont(font, size, flags) end
+end
+
+local function CreateTimeLine(row, colorKey, yOffset)
+    local line = {}
+    line.bar = row:CreateTexture(nil, "ARTWORK")
+    line.bar:SetHeight(TIME_BAR_HEIGHT)
+    line.bar:SetPoint("TOPLEFT", row, "TOPLEFT", row.timeLeft, yOffset - 2)
+    line.bar:SetColorTexture(unpack(TIME_COLORS[colorKey]))
+    line.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    smallFont(line.text, 8)
+    line.text:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, yOffset)
+    line.text:SetJustifyH("RIGHT")
+    return line
+end
+
+local function CreateMoveRow(parent, width)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetSize(width, MOVE_ROW_HEIGHT)
+    row.timeLeft = width - TIME_BAR_MAX_WIDTH - 30
+    row.number = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    row.number:SetPoint("LEFT", row, "LEFT", 0, 0)
+    row.number:SetWidth(22)
+    row.number:SetJustifyH("LEFT")
+    row.number:SetTextColor(0.67, 0.67, 0.67)
+    row.white = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    row.white:SetPoint("LEFT", row, "LEFT", 22, 0)
+    row.white:SetJustifyH("LEFT")
+    row.black = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    row.black:SetPoint("LEFT", row, "LEFT", 22 + (row.timeLeft - 22) / 2, 0)
+    row.black:SetJustifyH("LEFT")
+    row.whiteTime = CreateTimeLine(row, "white", -1)
+    row.blackTime = CreateTimeLine(row, "black", -10)
+    return row
+end
+
+local function SetTimeLine(line, seconds, longest)
+    if seconds == nil then
+        line.bar:Hide()
+        line.text:Hide()
+        return
+    end
+    line.bar:SetWidth(DeltaChess.UI:MoveTimeBarWidth(seconds, longest))
+    line.bar:Show()
+    line.text:SetText(DeltaChess.UI:FormatMoveSeconds(seconds))
+    line.text:Show()
+end
+
+--- Fill the move list with one row per full move.
+-- @param info table returned by BindMoveHistory
+-- @param moves array of BoardMove objects
+-- @param durations array of seconds per move (same order), or nil to hide times
+-- @param highlightIndex optional move index to highlight (replay)
+function DeltaChess.UI:RenderMoveList(info, moves, durations, highlightIndex)
+    if not info or not info.scrollChild then return end
+    if info.historyText then info.historyText:SetText("") end
+    local width = info.scrollChild:GetWidth()
+    local longest = 0
+    for i = 1, #moves do
+        local d = durations and durations[i]
+        if d and d > longest then longest = d end
+    end
+    local rowCount = math.ceil(#moves / 2)
+    for r = 1, rowCount do
+        local row = info.rows[r]
+        if not row then
+            row = CreateMoveRow(info.scrollChild, width)
+            row:SetPoint("TOPLEFT", info.scrollChild, "TOPLEFT", 0, -(r - 1) * MOVE_ROW_HEIGHT)
+            info.rows[r] = row
+        end
+        local wi, bi = r * 2 - 1, r * 2
+        local function san(i)
+            if not moves[i] then return "" end
+            local text = self:FormatMoveAlgebraic(moves[i])
+            if highlightIndex and i == highlightIndex then
+                text = "|cFFFFFF00[" .. text .. "]|r"
+            end
+            return text
+        end
+        row.number:SetText(r .. ".")
+        row.white:SetText(san(wi))
+        row.black:SetText(san(bi))
+        SetTimeLine(row.whiteTime, durations and moves[wi] and durations[wi], longest)
+        SetTimeLine(row.blackTime, durations and moves[bi] and durations[bi], longest)
+        row:Show()
+    end
+    for r = rowCount + 1, #info.rows do
+        info.rows[r]:Hide()
+    end
+    info.scrollChild:SetHeight(math.max(100, rowCount * MOVE_ROW_HEIGHT))
 end
 
 -- Format move history text from moves array
@@ -1337,6 +1453,7 @@ function DeltaChess.UI:WireBoardFrame(frame)
 
     local historyHeight = PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT - 70
     local historyInfo = self:BindMoveHistory(frame.rightPanel.history, RIGHT_PANEL_WIDTH, historyHeight)
+    frame.historyInfo = historyInfo
     frame.historyText = historyInfo.historyText
     frame.historyScrollChild = historyInfo.scrollChild
     frame.historyScroll = historyInfo.scrollFrame
@@ -1816,13 +1933,9 @@ function DeltaChess.UI:UpdateBoard(frame)
     -- Update move history in algebraic notation
     local historyStr = DeltaChess.UI:FormatMoveHistoryText(board:GetMoveHistory())
     
-    if frame.historyText then
-        frame.historyText:SetText(historyStr)
-        -- Size scroll child to text so scroll range is correct
-        local textHeight = frame.historyText:GetStringHeight()
-        if frame.historyScrollChild then
-            frame.historyScrollChild:SetHeight(math.max(100, textHeight))
-        end
+    if frame.historyInfo then
+        -- One row per move with the time each side spent (also sizes the scroll child)
+        DeltaChess.UI:RenderMoveList(frame.historyInfo, board:GetMoveHistory(), board:GetMoveDurations())
         -- Auto-scroll to bottom only when the move history text changed (new move added), not on every clock tick
         if frame.historyScroll then
             local lastStr = frame._lastHistoryStr
