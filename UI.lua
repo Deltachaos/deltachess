@@ -2539,7 +2539,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
 
                 DeltaChess.UI:UpdateBoardAnimated(frame, true)
                 
-                -- Update minimap (now computer's turn, icon should be normal)
+                -- Update minimap (now computer's turn, icon should be yellow/waiting)
                 if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
                     DeltaChess.Minimap:UpdateYourTurnHighlight()
                 end

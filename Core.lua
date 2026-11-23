@@ -422,25 +422,39 @@ function DeltaChess:GetLocalPlayerInfo()
     return characterName, preferredName
 end
 
+-- True if it is this player's turn on the given board (active games only).
+local function isPlayerTurnOnBoard(board, playerName)
+    if not board or not board:IsActive() then return false end
+    local currentTurn = board:GetCurrentTurn()
+    if board:OneOpponentIsEngine() then
+        local playerColor = board:GetPlayerColor() or COLOR.WHITE
+        return currentTurn == playerColor
+    end
+    local white = board:GetWhitePlayerName()
+    local black = board:GetBlackPlayerName()
+    return (white == playerName and currentTurn == COLOR.WHITE) or
+           (black == playerName and currentTurn == COLOR.BLACK)
+end
+
 -- Check if it's the player's turn in any active game
 function DeltaChess:IsMyTurnInAnyGame()
     if not self.db or not self.db.games then return false end
-    local playerCharName, playerName = self:GetLocalPlayerInfo()
+    local _, playerName = self:GetLocalPlayerInfo()
     for _, board in pairs(self.db.games) do
-        if board:IsActive() then
-            local currentTurn = board:GetCurrentTurn()
-            local isPlayerTurn
-            local isVsComputer = board:OneOpponentIsEngine()
-            if isVsComputer then
-                local playerColor = board:GetPlayerColor() or COLOR.WHITE
-                isPlayerTurn = (currentTurn == playerColor)
-            else
-                local white = board:GetWhitePlayerName()
-                local black = board:GetBlackPlayerName()
-                isPlayerTurn = (white == playerName and currentTurn == COLOR.WHITE) or
-                              (black == playerName and currentTurn == COLOR.BLACK)
-            end
-            if isPlayerTurn then return true end
+        if isPlayerTurnOnBoard(board, playerName) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Check if any active game is waiting on the opponent or computer to move
+function DeltaChess:IsWaitingInAnyGame()
+    if not self.db or not self.db.games then return false end
+    local _, playerName = self:GetLocalPlayerInfo()
+    for _, board in pairs(self.db.games) do
+        if board:IsActive() and not isPlayerTurnOnBoard(board, playerName) then
+            return true
         end
     end
     return false

@@ -42,19 +42,28 @@ function DeltaChess.Minimap:Initialize()
         if button == "LeftButton" then
             DeltaChess:ShowMainMenu()
         elseif button == "RightButton" then
-            -- Resume most recent active game
-            local mostRecentId, mostRecentTime = nil, 0
+            -- Prefer a running game; otherwise resume the most recent paused one
+            local activeId, activeTime = nil, 0
+            local pausedId, pausedTime = nil, 0
             if DeltaChess.db and DeltaChess.db.games then
                 for gameId, board in pairs(DeltaChess.db.games) do
                     local startTime = board:GetStartTime() or 0
-                    if board:IsActive() and startTime > mostRecentTime then
-                        mostRecentId = gameId
-                        mostRecentTime = startTime
+                    if board:IsActive() and startTime > activeTime then
+                        activeId = gameId
+                        activeTime = startTime
+                    elseif board:IsPaused() and startTime > pausedTime then
+                        pausedId = gameId
+                        pausedTime = startTime
                     end
                 end
             end
-            if mostRecentId then
-                DeltaChess:ShowChessBoard(mostRecentId)
+            local gameId = activeId or pausedId
+            if gameId then
+                local board = DeltaChess.GetBoard(gameId)
+                if board and board:IsPaused() and not board:OneOpponentIsEngine() then
+                    DeltaChess:RequestUnpause(gameId)
+                end
+                DeltaChess:ShowChessBoard(gameId)
             else
                 DeltaChess:ShowMainMenu()
             end
@@ -83,6 +92,8 @@ function DeltaChess.Minimap:Initialize()
         end
         if DeltaChess:IsMyTurnInAnyGame() then
             GameTooltip:AddLine("|cFF00FF00Your turn!|r", 1, 1, 1)
+        elseif DeltaChess:IsWaitingInAnyGame() then
+            GameTooltip:AddLine("|cFFFFFF00Waiting for opponent...|r", 1, 1, 1)
         end
         if DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.dnd then
             GameTooltip:AddLine("|cFFFF0000Do Not Disturb|r", 1, 1, 1)
@@ -132,17 +143,22 @@ end
 -- Use .tga extension explicitly for Classic compatibility
 local ICON_NORMAL = "Interface\\AddOns\\DeltaChess\\Textures\\logo_small.tga"
 local ICON_GREEN  = "Interface\\AddOns\\DeltaChess\\Textures\\logo_green.tga"
+local ICON_YELLOW = "Interface\\AddOns\\DeltaChess\\Textures\\logo_yellow.tga"
 local ICON_RED    = "Interface\\AddOns\\DeltaChess\\Textures\\logo_red.tga"
 
--- Update minimap icon texture (green = your turn has priority over red = DND)
+-- Update minimap icon texture:
+-- green (your turn) > yellow (waiting) > red (DND) > normal
 function DeltaChess.Minimap:UpdateYourTurnHighlight()
     if not minimapButton or not minimapButton.icon then return end
     if not minimapButton:IsShown() then return end
     local myTurn = DeltaChess:IsMyTurnInAnyGame()
+    local waiting = DeltaChess:IsWaitingInAnyGame()
     local dnd = DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.dnd
     local tex
     if myTurn then
         tex = ICON_GREEN
+    elseif waiting then
+        tex = ICON_YELLOW
     elseif dnd then
         tex = ICON_RED
     else
@@ -151,7 +167,7 @@ function DeltaChess.Minimap:UpdateYourTurnHighlight()
     minimapButton.icon:SetTexture(tex)
 end
 
--- Update minimap highlight (DND); green (your turn) always has priority
+-- Update minimap highlight (DND); your-turn / waiting still take priority
 function DeltaChess.Minimap:UpdateDNDHighlight()
     self:UpdateYourTurnHighlight()
 end
