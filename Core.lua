@@ -120,6 +120,10 @@ local function Initialize()
     
     -- Restore metatables for saved games
     DeltaChess:RestoreSavedGames()
+
+    -- Engine searches live in memory only. A reload during the computer's move
+    -- leaves the game running on the computer's turn with no session; start it again.
+    DeltaChess.AI:ResumeInterruptedComputerMoves()
     
     DeltaChess:Print("DeltaChess addon loaded! Use /chess to challenge a player or /chess menu to open settings.")
     
@@ -451,12 +455,7 @@ function DeltaChess:NotifyItIsYourTurn(gameId, opponentDisplayName)
     else
         self:Print(opponentDisplayName .. " made their move - it's your turn!")
     end
-    
-    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId then
-        -- Animate the opponent's move
-        DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, true)
-    end
-    
+
     if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
         DeltaChess.Minimap:UpdateYourTurnHighlight()
     end

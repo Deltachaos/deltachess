@@ -844,9 +844,9 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
     local wasCapture = lastMove and lastMove:IsCapture()
     DeltaChess.Sound:PlayMoveSound(board, false, wasCapture, board)
     
-    -- Update UI if board is open
+    -- Update UI if this game's board frame exists. Animation is skipped while it is hidden.
     if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == moveData.gameId then
-        DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, false)
+        DeltaChess.UI:UpdateBoardAnimated(DeltaChess.UI.activeFrame, true)
     end
     
     -- Check for game end (show dialog even if board window is closed)

@@ -1293,11 +1293,16 @@ function DeltaChess.UI:WireBoardFrame(frame)
             end
         end
     end)
+    -- Closing pauses a computer game only on the player's turn. On the computer's
+    -- turn the search keeps running; the game pauses after that move is played,
+    -- unless a queued premove continues it. A premove already waiting to fire
+    -- (the short delay after the computer moved) is left to play out.
     frame:SetScript("OnHide", function(self)
         local brd = DeltaChess.GetBoard(self.gameId)
-        if brd and brd:OneOpponentIsEngine() and brd:IsActive() then
-            brd:PauseGame()
-        end
+        if not brd or not brd:OneOpponentIsEngine() or not brd:IsActive() then return end
+        if DeltaChess.AI:IsComputersTurn(brd) then return end
+        if brd:GetPremove() then return end
+        brd:PauseGame()
     end)
     if frame.CloseButton then
         frame.CloseButton:SetScript("OnClick", function()
@@ -1359,7 +1364,9 @@ function DeltaChess:ShowChessBoard(gameId)
         board:ContinueGame()
     end
 
-    -- Start AI when it's the computer's turn (new game or resume)
+    -- Start AI when it's the computer's turn (new game or resume).
+    -- MakeMove ignores a game that is already searching, so reopening the
+    -- board during a move does not start a second one.
     if isVsComputer and board:IsActive() then
         local aiColor = board:GetEnginePlayerColor()
         local currentTurn = board:IsWhiteToMove() and COLOR.WHITE or COLOR.BLACK
@@ -1411,9 +1418,6 @@ function DeltaChess:ShowChessBoard(gameId)
     frame.board = board
     frame.selectedSquare = nil
     frame.validMoves = {}
-    frame.premove = nil
-    frame.premoveFrom = nil
-    frame._premoveGameId = nil
     frame._drag = nil
     if frame._dragGhost then
         frame._dragGhost:Hide()
@@ -1494,9 +1498,16 @@ function DeltaChess:ShowChessBoard(gameId)
     end
 end
 
--- Update board with optional animation for the last move
--- If animateLastMove is true and there's a last move, animate the piece movement
+-- Update board with optional animation for the last move.
+-- If animateLastMove is true and there's a last move, animate the piece movement.
+-- A hidden window still refreshes (clocks, premoves) but does not spawn the
+-- floating piece, which would show above a closed board. Same for both
+-- computer and player games.
 function DeltaChess.UI:UpdateBoardAnimated(frame, animateLastMove)
+    if not frame then return end
+    if animateLastMove and frame.IsShown and not frame:IsShown() then
+        animateLastMove = false
+    end
     if not animateLastMove then
         self:UpdateBoard(frame)
         return
@@ -1901,11 +1912,8 @@ function DeltaChess.UI:UpdateBoard(frame)
             frame.closeButton:Enable()
             if isVsComputer then
                 frame.closeButton:SetText("Pause")
+                -- OnHide decides whether to pause now or after the computer moves.
                 frame.closeButton:SetScript("OnClick", function()
-                    local board = DeltaChess.GetBoard(frame.gameId)
-                    if board then
-                        board:PauseGame()
-                    end
                     frame:Hide()
                 end)
             else
@@ -2145,18 +2153,43 @@ end
 -- ==================== PRE-MOVES ====================
 -- While the opponent is thinking, the player can queue ONE move (click or drag).
 -- Only semi-legal targets are allowed (moves that could be legal after the
--- opponent's reply). It is kept client-side only and played as soon as it's our
--- turn if it is legal then; otherwise it is dropped. Right-click cancels.
+-- opponent's reply). The queue is stored on the game, not the board window, so
+-- switching to another game keeps it. It is played as soon as it is our turn
+-- if it is legal then; otherwise it is dropped. Right-click cancels.
 
 local PREMOVE_COLOR = { 0.25, 0.55, 1, 0.5 }
+local premoveTimers = {}
+
+local function BoardOf(frame)
+    return frame and DeltaChess.GetBoard(frame.gameId)
+end
+
+local function PremoveFrom(frame)
+    local board = BoardOf(frame)
+    return board and board:GetPremoveFrom()
+end
+
+local function HasPremove(frame)
+    local board = BoardOf(frame)
+    return board and (board:GetPremove() or board:GetPremoveFrom()) and true or false
+end
 
 local function RenderPremove(frame)
     if not frame.squares then return end
-    local pm = frame.premove
+    local board = BoardOf(frame)
+    local pm = board and board:GetPremove()
+    local from = board and board:GetPremoveFrom()
     local targets = {}
-    for _, move in ipairs(frame.premoveTargets or {}) do targets[move.square] = true end
+    if board and from then
+        local myColor = GetMyBoardColor(frame, board)
+        if myColor then
+            for _, move in ipairs(DeltaChess.GetPremoveMovesAt(board, from, myColor)) do
+                targets[move.square] = true
+            end
+        end
+    end
     for sq, sqFrame in pairs(frame.squares) do
-        local show = sq == frame.premoveFrom or (pm and (sq == pm.from or sq == pm.to))
+        local show = sq == from or (pm and (sq == pm.from or sq == pm.to))
         if show and not sqFrame.premoveMark then
             sqFrame.premoveMark = sqFrame:CreateTexture(nil, "OVERLAY")
             sqFrame.premoveMark:SetAllPoints()
@@ -2165,7 +2198,7 @@ local function RenderPremove(frame)
         if sqFrame.premoveMark then
             if show then sqFrame.premoveMark:Show() else sqFrame.premoveMark:Hide() end
         end
-        local dot = targets[sq] and frame.premoveFrom ~= nil
+        local dot = targets[sq] and from ~= nil
         if dot and not sqFrame.premoveDot then
             sqFrame.premoveDot = sqFrame:CreateTexture(nil, "OVERLAY")
             sqFrame.premoveDot:SetSize(15, 15)
@@ -2179,23 +2212,25 @@ local function RenderPremove(frame)
 end
 
 local function ClearPremove(frame)
-    frame.premove = nil
-    frame.premoveFrom = nil
-    frame.premoveTargets = nil
+    local board = BoardOf(frame)
+    if board then board:ClearPremove() end
     RenderPremove(frame)
 end
 
 local function IsPremoveTarget(frame, uci)
-    if not frame.premoveFrom then return false end
-    for _, move in ipairs(frame.premoveTargets or {}) do
+    local board = BoardOf(frame)
+    local from = board and board:GetPremoveFrom()
+    if not board or not from then return false end
+    local myColor = GetMyBoardColor(frame, board)
+    if not myColor then return false end
+    for _, move in ipairs(DeltaChess.GetPremoveMovesAt(board, from, myColor)) do
         if move.square == uci then return true end
     end
     return false
 end
 
-local function PickPremovePiece(frame, board, myColor, uci)
-    frame.premoveFrom = uci
-    frame.premoveTargets = DeltaChess.GetPremoveMovesAt(board, uci, myColor)
+local function PickPremovePiece(frame, board, uci)
+    board:SetPremoveFrom(uci)
 end
 
 -- Handle a square click while it's the opponent's turn. Returns true if handled.
@@ -2206,23 +2241,21 @@ function DeltaChess.UI:HandlePremoveClick(frame, uci)
     if not myColor or board:GetCurrentTurn() == myColor then return false end
     if (DeltaChess._actionBlocked or 0) > 0 then return true end
 
-    frame._premoveGameId = frame.gameId
     local mine = IsMyPiece(frame, uci)
-    if frame.premove then
+    local from = board:GetPremoveFrom()
+    if board:GetPremove() then
         -- Only one pre-move: any click cancels it, and clicking a piece picks it up
         ClearPremove(frame)
-        if mine then PickPremovePiece(frame, board, myColor, uci) end
-    elseif frame.premoveFrom and uci == frame.premoveFrom then
+        if mine then PickPremovePiece(frame, board, uci) end
+    elseif from and uci == from then
         ClearPremove(frame)
     elseif IsPremoveTarget(frame, uci) then
         -- Also covers our own pieces' squares (recapture after the opponent takes)
-        frame.premove = { from = frame.premoveFrom, to = uci }
-        frame.premoveFrom = nil
-        frame.premoveTargets = nil
+        board:SetPremove(from, uci)
     elseif mine then
-        PickPremovePiece(frame, board, myColor, uci)
+        PickPremovePiece(frame, board, uci)
     else
-        if frame.premoveFrom and DeltaChess.GetPieceAt(board, uci) then
+        if from and DeltaChess.GetPieceAt(board, uci) then
             DeltaChess.Sound:PlayInvalidMove()
         end
         ClearPremove(frame)
@@ -2231,54 +2264,143 @@ function DeltaChess.UI:HandlePremoveClick(frame, uci)
     return true
 end
 
-local function TryPremove(frame)
-    frame._premoveTimer = nil
-    local pm = frame.premove
-    if not pm then return end
-    local board = DeltaChess.GetBoard(frame.gameId)
-    if not board or board:IsEnded() or board:IsPaused() or not frame:IsShown()
-        or frame._premoveGameId ~= frame.gameId then
-        ClearPremove(frame)
-        return
+local function PauseClosedComputerGame(gameId)
+    if DeltaChess.AI and DeltaChess.AI.PauseIfBoardClosed then
+        DeltaChess.AI:PauseIfBoardClosed(gameId)
     end
-    if board:GetCurrentTurn() ~= GetMyBoardColor(frame, board) then return end  -- still waiting
-    if (DeltaChess._actionBlocked or 0) > 0
-        or (not board:OneOpponentIsEngine() and DeltaChess:IsBoardLocked(frame.gameId)) then
-        return  -- retried on the next board update
-    end
+end
 
-    ClearPremove(frame)
-    local moves = DeltaChess.GetLegalMovesAt(board, pm.from)
-    for _, move in ipairs(moves) do
+local function MyPremoveColor(board, gameId)
+    if board:OneOpponentIsEngine() then
+        return board:GetPlayerColor()
+    end
+    if DeltaChess.GetMyColor then
+        return DeltaChess:GetMyColor(gameId)
+    end
+    return nil
+end
+
+local function FrameShowing(gameId, frame)
+    if frame and frame.gameId == gameId then return frame end
+    local active = DeltaChess.UI.activeFrame
+    if active and active.gameId == gameId then return active end
+    return nil
+end
+
+-- Play a queued premove without the board window (it is showing another game,
+-- or it is closed). Promotion defaults to queen.
+local function PlayPremoveOffFrame(board, gameId, pm)
+    local match
+    for _, move in ipairs(DeltaChess.GetLegalMovesAt(board, pm.from)) do
         if move.square == pm.to then
-            frame.selectedSquare = pm.from
-            frame.validMoves = moves
-            DeltaChess.UI:OnSquareClick(frame, pm.to)
-            return
+            match = move
+            break
         end
     end
-    -- No longer legal: drop it
+    if not match then return false end
+    local uci = pm.from .. pm.to .. (match.promotion and "q" or "")
+    if board:OneOpponentIsEngine() then
+        DeltaChess.MakeMove(board, uci)
+        local lastMove = board:GetLastMove()
+        local wasCapture = lastMove and lastMove:IsCapture()
+        if DeltaChess.Sound and DeltaChess.Sound.PlayMoveSound then
+            DeltaChess.Sound:PlayMoveSound(board, true, wasCapture, board)
+        end
+        if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+            DeltaChess.Minimap:UpdateYourTurnHighlight()
+        end
+        if board:IsEnded() then
+            DeltaChess.UI:ShowGameEnd(gameId, nil)
+            return true
+        end
+        if DeltaChess.AI and DeltaChess.AI.MakeMove then
+            DeltaChess.AI:MakeMove(gameId, 500)
+        end
+        return true
+    end
+    if DeltaChess.SendMoveWithConfirmation then
+        return DeltaChess:SendMoveWithConfirmation(gameId, uci) ~= false
+    end
+    return false
+end
+
+local function TryPremove(gameId, frame)
+    premoveTimers[gameId] = nil
+    local board = DeltaChess.GetBoard(gameId)
+    local pm = board and board:GetPremove()
+    if not board or not pm then
+        PauseClosedComputerGame(gameId)
+        return
+    end
+    if board:IsEnded() or board:IsPaused() then
+        board:ClearPremove()
+        local shown = FrameShowing(gameId, frame)
+        if shown then RenderPremove(shown) end
+        return
+    end
+    local shown = FrameShowing(gameId, frame)
+    if board:GetCurrentTurn() ~= MyPremoveColor(board, gameId) then return end
+    if (DeltaChess._actionBlocked or 0) > 0
+        or (not board:OneOpponentIsEngine() and DeltaChess:IsBoardLocked(gameId)) then
+        premoveTimers[gameId] = true
+        C_Timer.After(0.1, function() TryPremove(gameId, frame) end)
+        return
+    end
+
+    board:ClearPremove()
+    if shown then RenderPremove(shown) end
+    if shown then
+        local moves = DeltaChess.GetLegalMovesAt(board, pm.from)
+        for _, move in ipairs(moves) do
+            if move.square == pm.to then
+                shown.selectedSquare = pm.from
+                shown.validMoves = moves
+                DeltaChess.UI:OnSquareClick(shown, pm.to)
+                break
+            end
+        end
+    else
+        PlayPremoveOffFrame(board, gameId, pm)
+    end
+    PauseClosedComputerGame(gameId)
+end
+
+--- True while a queued premove for this game is about to be played.
+function DeltaChess.UI:PremovePending(gameId)
+    return premoveTimers[gameId] == true
+end
+
+--- Play this game's queued premove once it is that side's turn.
+-- frame is the board window when it is currently showing this game.
+function DeltaChess.UI:SchedulePremove(gameId, frame)
+    local board = DeltaChess.GetBoard(gameId)
+    if not board or not board:GetPremove() then return end
+    if board:IsEnded() or board:IsPaused() then return end
+    if board:GetCurrentTurn() ~= MyPremoveColor(board, gameId) then return end
+    if premoveTimers[gameId] then return end
+    premoveTimers[gameId] = true
+    C_Timer.After(0.1, function() TryPremove(gameId, frame) end)
 end
 
 -- Called from UpdateBoard: keep markers in sync and fire the pre-move once it's our turn
 function DeltaChess.UI:RefreshPremove(frame, board)
-    if not (frame.premove or frame.premoveFrom) then return end
-    if board:IsEnded() or frame._premoveGameId ~= frame.gameId then
-        ClearPremove(frame)
+    if board:IsEnded() then
+        if board.ClearPremove then board:ClearPremove() end
+        RenderPremove(frame)
         return
     end
     RenderPremove(frame)
+    local pm = board.GetPremove and board:GetPremove()
+    local from = board.GetPremoveFrom and board:GetPremoveFrom()
+    if not pm and not from then return end
     if board:GetCurrentTurn() ~= GetMyBoardColor(frame, board) then return end
-    if frame.premove then
-        if not frame._premoveTimer then
-            frame._premoveTimer = true
-            C_Timer.After(0.1, function() TryPremove(frame) end)
-        end
+    if pm then
+        self:SchedulePremove(frame.gameId, frame)
     else
         -- Only a piece was picked: turn it into a normal selection
-        local from = frame.premoveFrom
-        ClearPremove(frame)
-        if IsMyPiece(frame, from) then
+        board:ClearPremove()
+        RenderPremove(frame)
+        if from and IsMyPiece(frame, from) then
             frame.selectedSquare = from
             frame.validMoves = DeltaChess.GetLegalMovesAt(board, from)
         end
@@ -2325,7 +2447,7 @@ local function FinishDrag(frame)
         frame._dragSuppressClick = nil
     end
     if not target or target == drag.from then return end
-    if frame.premoveFrom == drag.from then
+    if PremoveFrom(frame) == drag.from then
         -- Opponent's turn: queue the drop as a pre-move
         if IsPremoveTarget(frame, target) then
             DeltaChess.UI:OnSquareClick(frame, target)
@@ -2359,16 +2481,16 @@ function DeltaChess.UI:AttachSquareHandlers(frame)
             frame._dragSuppressClick = nil
             StopDrag(frame)
             if button == "RightButton" then
-                if frame.premove or frame.premoveFrom then ClearPremove(frame) end
+                if HasPremove(frame) then ClearPremove(frame) end
                 return
             end
             if button ~= "LeftButton" or not IsMyPiece(frame, uci) then return end
             -- Own piece on a pre-move target: the click queues a recapture, don't pick it up
             if IsPremoveTarget(frame, uci) then return end
-            if frame.selectedSquare ~= uci and frame.premoveFrom ~= uci then
+            if frame.selectedSquare ~= uci and PremoveFrom(frame) ~= uci then
                 DeltaChess.UI:OnSquareClick(frame, uci)  -- selects, or picks a pre-move piece
             end
-            if frame.selectedSquare ~= uci and frame.premoveFrom ~= uci then
+            if frame.selectedSquare ~= uci and PremoveFrom(frame) ~= uci then
                 return  -- selection refused (paused, locked, ...)
             end
             frame._dragSuppressClick = uci
@@ -2516,11 +2638,16 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
             local toSquare = uci  -- uci parameter is the clicked target square
             local moveUci = fromSquare .. toSquare  -- Build UCI string
 
-            -- Promotion move: show piece selection first
+            -- Promotion move: show piece selection first. A closed board (premove
+            -- played after the window was hidden) promotes to queen, same as
+            -- dismissing the dialog.
             if clickedMove.promotion then
-                frame.promotionPending = true
-                DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComputer)
-                return
+                if frame:IsShown() then
+                    frame.promotionPending = true
+                    DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComputer)
+                    return
+                end
+                moveUci = moveUci .. "q"
             end
             
             -- Handle based on game type
@@ -2536,8 +2663,7 @@ function DeltaChess.UI:OnSquareClick(frame, uci)
                 -- Clear selection
                 frame.selectedSquare = nil
                 frame.validMoves = {}
-                
-                -- Update display with animation
+
                 DeltaChess.UI:UpdateBoardAnimated(frame, true)
                 
                 -- Update minimap (now computer's turn, icon should be normal)
