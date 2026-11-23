@@ -24,37 +24,18 @@ function DeltaChess.Minimap:Initialize()
         }
     end
     
-    -- Create minimap button
-    minimapButton = CreateFrame("Button", "DeltaChessMinimapButton", Minimap)
-    minimapButton:SetSize(31, 31)
+    -- Button layout is DeltaChessMinimapButton in Frames/Windows.xml.
+    minimapButton = DeltaChessMinimapButton
     minimapButton:SetFrameStrata("MEDIUM")
     minimapButton:SetFrameLevel(8)
-    
-    -- RegisterForClicks: Use explicit button types for Classic compatibility
+    minimapButton:SetMovable(true)
+
     if isRetail then
         minimapButton:RegisterForClicks("AnyUp")
     else
         minimapButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     end
     minimapButton:RegisterForDrag("LeftButton")
-    minimapButton:SetMovable(true)
-    
-    -- Icon (use .tga extension explicitly for Classic compatibility)
-    local icon = minimapButton:CreateTexture(nil, "BACKGROUND")
-    icon:SetSize(20, 20)
-    icon:SetPoint("CENTER", 0, 1)
-    icon:SetTexture("Interface\\AddOns\\DeltaChess\\Textures\\logo_small.tga")
-    minimapButton.icon = icon
-    
-    -- Border
-    local overlay = minimapButton:CreateTexture(nil, "OVERLAY")
-    overlay:SetSize(53, 53)
-    overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-    overlay:SetPoint("TOPLEFT")
-    minimapButton.overlay = overlay
-    
-    -- Highlight
-    minimapButton:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
     -- Click handler
     minimapButton:SetScript("OnClick", function(self, button)

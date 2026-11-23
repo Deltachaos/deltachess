@@ -30,8 +30,24 @@ end
 -- Frame for events
 local eventFrame = CreateFrame("Frame")
 
--- UI Frames storage
+-- UI Frames storage. Widget trees are declared in Frames/Templates.xml and Frames/Windows.xml.
 DeltaChess.frames = {}
+
+local function SetCheckLabel(check, text)
+    local label = check.text or check.Text
+    if label then
+        label:SetText(text)
+    end
+end
+
+-- Dragging is Widget API: SetMovable, EnableMouse, RegisterForDrag, StartMoving.
+function DeltaChess:MakeDraggable(frame, onDragStop)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", onDragStop or frame.StopMovingOrSizing)
+end
 
 -- Initialize the addon
 local function Initialize()
@@ -458,48 +474,26 @@ function DeltaChess:ShowMainMenu()
         return
     end
     
-    -- Create main menu frame if it doesn't exist
+    -- Main menu layout is ChessMainMenu in Frames/Windows.xml.
     if not self.frames.mainMenu then
-        local frame = CreateFrame("Frame", "ChessMainMenu", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(460, 560)
-        frame:SetPoint("CENTER")
-        frame:SetMovable(true)
-        frame:EnableMouse(true)
-        frame:RegisterForDrag("LeftButton")
-        frame:SetScript("OnDragStart", frame.StartMoving)
-        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        local frame = ChessMainMenu
         frame:SetFrameStrata("DIALOG")
         frame:SetFrameLevel(100)
+        self:MakeDraggable(frame)
         frame.TitleText:SetText("DeltaChess (by Deltachaos)")
-        
-        -- Game History title
-        local historyTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        historyTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -35)
-        historyTitle:SetText("Game History")
-        
-        -- Support & License button (aligned right)
-        local supportBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        supportBtn:SetSize(120, 22)
-        supportBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -15, -32)
-        supportBtn:SetText("Support & License")
-        supportBtn:SetScript("OnClick", function()
+
+        frame.supportBtn:SetScript("OnClick", function()
             DeltaChess:ShowSupportDialog()
         end)
-        
-        -- History scroll frame
-        local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-        scrollFrame:SetPoint("TOPLEFT", historyTitle, "BOTTOMLEFT", 0, -10)
-        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -40, 110)
-        
-        local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-        scrollChild:SetSize(400, 1)
-        scrollFrame:SetScrollChild(scrollChild)
+
+        local scrollChild = frame.historyScroll.scrollChild or ChessMainMenuScrollChild
+        if frame.historyScroll:GetScrollChild() ~= scrollChild then
+            frame.historyScroll:SetScrollChild(scrollChild)
+        end
         frame.scrollChild = scrollChild
-        
-        -- DND checkbox (above bottom buttons)
-        local dndCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-        dndCheck:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 75)
-        dndCheck.text:SetText("Do Not Disturb (no challenge popups)")
+
+        local dndCheck = frame.dndCheck
+        SetCheckLabel(dndCheck, "Do Not Disturb (no challenge popups)")
         dndCheck:SetChecked(DeltaChess.db.settings.dnd)
         dndCheck:SetScript("OnClick", function(self)
             DeltaChess.db.settings.dnd = self:GetChecked()
@@ -507,41 +501,19 @@ function DeltaChess:ShowMainMenu()
                 DeltaChess.Minimap:UpdateDNDHighlight()
             end
         end)
-        frame.dndCheck = dndCheck
-        
-        -- Challenge Player button (above blingtron ad)
-        local challengeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        challengeBtn:SetSize(211, 28)
-        challengeBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 42)
-        challengeBtn:SetText("Challenge Player")
-        challengeBtn:SetScript("OnClick", function()
+
+        frame.challengeBtn:SetScript("OnClick", function()
             frame:Hide()
             DeltaChess:ShowChallengeWindow()
         end)
-        
-        -- Play vs Computer button
-        local computerBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        computerBtn:SetSize(211, 28)
-        computerBtn:SetPoint("LEFT", challengeBtn, "RIGHT", 8, 0)
-        computerBtn:SetText("Play vs Computer")
-        computerBtn:SetScript("OnClick", function()
+        frame.computerBtn:SetScript("OnClick", function()
             frame:Hide()
             DeltaChess:ShowComputerGameWindow()
         end)
-        
-        -- Blingtron.app advertisement (very bottom, below buttons)
-        local blingtronBg = frame:CreateTexture(nil, "BACKGROUND")
-        blingtronBg:SetColorTexture(0.1, 0.15, 0.2, 0.8)
-        blingtronBg:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 20, 10)
-        blingtronBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 10)
-        blingtronBg:SetHeight(36)
-        
-        local blingtronText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        blingtronText:SetPoint("CENTER", blingtronBg, "CENTER", 0, 0)
-        blingtronText:SetText("|cFF00BFFFSponsored by: |r|cFFFFFFFFhttps://blingtron.app|r - Discord bot for weekly vault & raid reminders")
-        blingtronText:SetJustifyH("CENTER")
-        blingtronText:SetWidth(430)
-        
+
+        frame.blingtronBg:SetColorTexture(0.1, 0.15, 0.2, 0.8)
+        frame.blingtronText:SetWidth(430)
+
         self.frames.mainMenu = frame
     end
     
@@ -556,75 +528,34 @@ function DeltaChess:ShowSupportDialog()
     if not self.frames.supportDialog then
         local PATREON_URL = "https://patreon.com/c/blingtronapp"
         local GITHUB_URL = "https://github.com/Deltachaos/deltachess"
-        
-        local frame = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(440, 500)
-        frame:SetPoint("CENTER")
-        frame:SetMovable(true)
-        frame:EnableMouse(true)
-        frame:RegisterForDrag("LeftButton")
-        frame:SetScript("OnDragStart", frame.StartMoving)
-        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+
+        local frame = ChessSupportDialog
         frame:SetFrameStrata("DIALOG")
         frame:SetFrameLevel(200)
+        self:MakeDraggable(frame)
         frame.TitleText:SetText("DeltaChess - Support & License")
-        
-        local thankYou = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        thankYou:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -40)
-        thankYou:SetText("Thank you for playing DeltaChess! Your support is greatly appreciated.")
-        thankYou:SetWidth(400)
-        
-        local desc = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        desc:SetPoint("TOPLEFT", thankYou, "BOTTOMLEFT", 0, -10)
-        desc:SetText("Support me on Patreon or check out my other wow project:")
-        desc:SetWidth(400)
+        frame.thankYou:SetWidth(400)
+        frame.desc:SetWidth(400)
+        frame.blingtron:SetWidth(400)
 
-        local blingtron = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        blingtron:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -10)
-        blingtron:SetText("|r|cFF00BFFFhttps://blingtron.app|r - Discord bot for weekly vault & raid reminders")
-        blingtron:SetWidth(400)
-        
-        -- Patreon label
-        local patreonLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        patreonLabel:SetPoint("TOPLEFT", blingtron, "BOTTOMLEFT", 0, -10)
-        patreonLabel:SetText("|cFF00BFFFPatreon:|r")
-        
-        -- Patreon EditBox (read-only, selectable for copy)
-        local patreonEdit = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-        patreonEdit:SetSize(360, 22)
-        patreonEdit:SetPoint("TOPLEFT", patreonLabel, "BOTTOMLEFT", 0, -4)
+        local patreonEdit = frame.patreonEdit
         patreonEdit:SetAutoFocus(false)
         patreonEdit:SetText(PATREON_URL)
         patreonEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         patreonEdit:SetScript("OnEditFocusLost", function(self) self:SetText(PATREON_URL) end)
         patreonEdit:SetScript("OnChar", function(self) self:SetText(PATREON_URL) end)
-        
-        -- GitHub label
-        local githubLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        githubLabel:SetPoint("TOPLEFT", patreonEdit, "BOTTOMLEFT", 0, -15)
-        githubLabel:SetText("|cFF00BFFFGitHub:|r")
-        
-        -- GitHub EditBox
-        local githubEdit = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-        githubEdit:SetSize(360, 22)
-        githubEdit:SetPoint("TOPLEFT", githubLabel, "BOTTOMLEFT", 0, -4)
+
+        local githubEdit = frame.githubEdit
         githubEdit:SetAutoFocus(false)
         githubEdit:SetText(GITHUB_URL)
         githubEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         githubEdit:SetScript("OnEditFocusLost", function(self) self:SetText(GITHUB_URL) end)
         githubEdit:SetScript("OnChar", function(self) self:SetText(GITHUB_URL) end)
-        
-        -- Chess Engines credits
-        local enginesTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        enginesTitle:SetPoint("TOPLEFT", githubEdit, "BOTTOMLEFT", 0, -15)
-        enginesTitle:SetText("|cFF00BFFFChess Engines:|r")
-        
-        local enginesCredits = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        enginesCredits:SetPoint("TOPLEFT", enginesTitle, "BOTTOMLEFT", 0, -5)
+
+        local enginesCredits = frame.enginesCredits
         enginesCredits:SetWidth(400)
         enginesCredits:SetJustifyH("LEFT")
-        
-        -- Build engine credits from registered engines
+
         local creditLines = {}
         for _, engine in pairs(DeltaChessFramework.Engines.Registry or {}) do
             local line = engine.name or engine.id
@@ -644,28 +575,11 @@ function DeltaChess:ShowSupportDialog()
         end
         table.sort(creditLines)
         enginesCredits:SetText(table.concat(creditLines, "\n"))
-        
-        -- Chess piece artwork (below engines list)
-        local artworkLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        artworkLabel:SetPoint("TOPLEFT", enginesCredits, "BOTTOMLEFT", 0, -15)
-        artworkLabel:SetText("|cFF00BFFFChess piece artwork:|r By Cburnett (Wikimedia Commons), CC BY-SA 3.0.")
-        artworkLabel:SetJustifyH("LEFT")
 
-        -- License (below artwork)
-        local licenseLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        licenseLabel:SetPoint("TOPLEFT", artworkLabel, "BOTTOMLEFT", 0, -5)
-        licenseLabel:SetText("|cFF00BFFFLicense:|r GNU GPL v3.0.")
-        licenseLabel:SetJustifyH("LEFT")
-
-        -- OK button
-        local okBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        okBtn:SetSize(100, 28)
-        okBtn:SetPoint("BOTTOM", frame, "BOTTOM", 0, 15)
-        okBtn:SetText("OK")
-        okBtn:SetScript("OnClick", function()
+        frame.okBtn:SetScript("OnClick", function()
             frame:Hide()
         end)
-        
+
         frame:SetScript("OnHide", function()
             patreonEdit:ClearFocus()
             githubEdit:ClearFocus()
@@ -676,7 +590,7 @@ function DeltaChess:ShowSupportDialog()
             end
         end)
         frame:EnableKeyboard(true)
-        
+
         self.frames.supportDialog = frame
     end
     
@@ -778,13 +692,11 @@ function DeltaChess:RefreshMainMenuContent()
             local playerColor, isPlayerTurn, _ = getPlayerInfo(board)
             local windowShown = DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId and DeltaChess.UI.activeFrame:IsShown()
             
-            local entry = CreateFrame("Button", nil, scrollChild)
-            entry:SetSize(400, 72)
+            DeltaChess._historyEntrySeq = (DeltaChess._historyEntrySeq or 0) + 1
+            local entry = CreateFrame("Button", "DeltaChessHistoryEntry" .. DeltaChess._historyEntrySeq, scrollChild, "DeltaChessHistoryEntryTemplate")
             entry:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -yOffset)
-            
-            -- Background
-            local bg = entry:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints()
+
+            local bg = entry.bg
             if isActive or isPaused then
                 if isPaused then
                     bg:SetColorTexture(0.2, 0.2, 0.0, 0.7) -- Yellow tint - paused
@@ -798,20 +710,11 @@ function DeltaChess:RefreshMainMenuContent()
             else
                 bg:SetColorTexture(0.15, 0.15, 0.15, 0.5)
             end
-            
-            -- Game info (opponents with class colors)
-            local info = entry:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            info:SetPoint("TOPLEFT", entry, "TOPLEFT", 5, -4)
-            info:SetText(DeltaChess.UI:FormatGameTitle(board))
-            
-            -- Date line
-            local dateText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            dateText:SetPoint("TOPLEFT", info, "BOTTOMLEFT", 0, -1)
-            dateText:SetText("|cFFAAAAAADate: " .. (gameDate or "Unknown") .. "|r")
-            
-            -- Settings line (color, clock, difficulty)
-            local settingsText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            settingsText:SetPoint("TOPLEFT", dateText, "BOTTOMLEFT", 0, -1)
+
+            entry.info:SetText(DeltaChess.UI:FormatGameTitle(board))
+            entry.dateText:SetText("|cFFAAAAAADate: " .. (gameDate or "Unknown") .. "|r")
+
+            local settingsText = entry.settingsText
             
             local settingsParts = {}
             if playerColor then
@@ -832,14 +735,15 @@ function DeltaChess:RefreshMainMenuContent()
                 end
             end
             settingsText:SetText("|cFFAAAAAA" .. table.concat(settingsParts, " | ") .. "|r")
-            
-            -- Status/Result line
-            local statusText = entry:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            statusText:SetPoint("TOPLEFT", settingsText, "BOTTOMLEFT", 0, -1)
+
             local resultStr = DeltaChess.UI:GetGameStatusText(board, playerColor)
-            statusText:SetText(string.format("%s - %d moves", resultStr, moveCount))
-            
-            -- Buttons
+            entry.statusText:SetText(string.format("%s - %d moves", resultStr, moveCount))
+
+            local pgnBtn = entry.pgnBtn
+            pgnBtn:SetScript("OnClick", function()
+                DeltaChess:ShowPGNWindow(board)
+            end)
+
             if isActive or isPaused then
                 local isHumanWindowHidden = not isVsComputer and not windowShown
                 local btnText, btnAction
@@ -863,59 +767,36 @@ function DeltaChess:RefreshMainMenuContent()
                         DeltaChess:ShowChessBoard(gameId)
                     end
                 end
-                local resumeBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
-                resumeBtn:SetSize(60, 22)
-                resumeBtn:SetPoint("RIGHT", entry, "RIGHT", -5, 0)
-                resumeBtn:SetText(btnText)
-                resumeBtn:SetScript("OnClick", btnAction)
-                
-                local resignBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
-                resignBtn:SetSize(55, 22)
-                resignBtn:SetPoint("RIGHT", resumeBtn, "LEFT", -3, 0)
-                resignBtn:SetText("Resign")
-                resignBtn:SetScript("OnClick", function()
+                entry.deleteBtn:Hide()
+                entry.replayBtn:Hide()
+                entry.resumeBtn:Show()
+                entry.resignBtn:Show()
+                pgnBtn:Show()
+                entry.resumeBtn:SetText(btnText)
+                entry.resumeBtn:SetScript("OnClick", btnAction)
+                entry.resignBtn:SetScript("OnClick", function()
                     DeltaChess._resignConfirmGameId = gameId
                     DeltaChess.UI:ShowGamePopup(gameId, "CHESS_RESIGN_CONFIRM", nil, gameId)
                     DeltaChess:RefreshMainMenuContent()
                 end)
-                
-                -- PGN button for active/paused games
-                local pgnBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
-                pgnBtn:SetSize(40, 22)
-                pgnBtn:SetPoint("RIGHT", resignBtn, "LEFT", -3, 0)
-                pgnBtn:SetText("PGN")
-                pgnBtn:SetScript("OnClick", function()
-                    DeltaChess:ShowPGNWindow(board)
-                end)
+                pgnBtn:ClearAllPoints()
+                pgnBtn:SetPoint("RIGHT", entry.resignBtn, "LEFT", -3, 0)
             else
-                -- Delete button for completed games
-                local deleteBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
-                deleteBtn:SetSize(22, 22)
-                deleteBtn:SetPoint("RIGHT", entry, "RIGHT", -5, 0)
-                deleteBtn:SetText("X")
-                deleteBtn:SetScript("OnClick", function()
+                entry.resumeBtn:Hide()
+                entry.resignBtn:Hide()
+                entry.deleteBtn:Show()
+                entry.replayBtn:Show()
+                pgnBtn:Show()
+                entry.deleteBtn:SetScript("OnClick", function()
                     DeltaChess:DeleteFromHistory(gameId)
-                    DeltaChess:RefreshMainMenuContent() -- Refresh without closing
+                    DeltaChess:RefreshMainMenuContent()
                 end)
-                
-                -- Replay button for completed games
-                local replayBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
-                replayBtn:SetSize(55, 22)
-                replayBtn:SetPoint("RIGHT", deleteBtn, "LEFT", -3, 0)
-                replayBtn:SetText("Replay")
-                replayBtn:SetScript("OnClick", function()
+                entry.replayBtn:SetScript("OnClick", function()
                     self.frames.mainMenu:Hide()
                     DeltaChess:ShowReplayWindow(board)
                 end)
-                
-                -- PGN button for completed games
-                local pgnBtn = CreateFrame("Button", nil, entry, "UIPanelButtonTemplate")
-                pgnBtn:SetSize(40, 22)
-                pgnBtn:SetPoint("RIGHT", replayBtn, "LEFT", -3, 0)
-                pgnBtn:SetText("PGN")
-                pgnBtn:SetScript("OnClick", function()
-                    DeltaChess:ShowPGNWindow(board)
-                end)
+                pgnBtn:ClearAllPoints()
+                pgnBtn:SetPoint("RIGHT", entry.replayBtn, "LEFT", -3, 0)
             end
             
             yOffset = yOffset + 74
@@ -939,7 +820,6 @@ function DeltaChess:ShowReplayWindow(board)
     local LABEL_SIZE = 20
     local PLAYER_BAR_HEIGHT = 45
     local RIGHT_PANEL_WIDTH = 220
-    local CAPTURED_PIECE_SIZE = 18
     
     -- Get participant info using shared helper
     local participants = DeltaChess.UI:GetBoardParticipants(board)
@@ -952,38 +832,31 @@ function DeltaChess:ShowReplayWindow(board)
     local flipBoard = participants.flipBoard
     -- Replay always shows time per side: clock if that side has one, else thinking time
     
-    -- Create replay frame
-    local totalWidth = LABEL_SIZE + BOARD_SIZE + 15 + RIGHT_PANEL_WIDTH + 15
-    local totalHeight = 30 + PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT + 10
-    
-    local frame = CreateFrame("Frame", "ChessReplayFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(totalWidth, totalHeight)
-    frame:SetPoint("CENTER")
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    frame:SetFrameLevel(250)
+    -- Replay layout is ChessReplayFrame in Frames/Windows.xml.
+    local frame = ChessReplayFrame
+    if not frame._wired then
+        frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        frame:SetFrameLevel(250)
+        self:MakeDraggable(frame)
+        frame.flipButton:SetScript("OnClick", function()
+            frame.flipBoard = not frame.flipBoard
+            DeltaChess.UI:RecreateBoardSquares(frame, false)
+            DeltaChess.UI:UpdatePlayerBarLabels(frame)
+            if frame.RefreshReplayDisplay then
+                frame.RefreshReplayDisplay()
+            end
+        end)
+        local historyHeight = PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT - 100
+        local historyInfo = DeltaChess.UI:BindMoveHistory(frame.rightPanel.history, RIGHT_PANEL_WIDTH, historyHeight)
+        frame.historyText = historyInfo.historyText
+        frame.rightPanel.closeBtn:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+        frame._wired = true
+    end
     frame.TitleText:SetText("Replay")
-    
-    -- Flip board button in title bar (to the left of close button)
-    local titleFlipBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    titleFlipBtn:SetSize(35, 22)
-    titleFlipBtn:SetPoint("TOPRIGHT", frame.CloseButton, "TOPLEFT", 0, 0)
-    titleFlipBtn:SetText("Flip")
-    titleFlipBtn:SetScript("OnClick", function()
-        frame.flipBoard = not frame.flipBoard
-        DeltaChess.UI:RecreateBoardSquares(frame, false)
-        DeltaChess.UI:UpdatePlayerBarLabels(frame)
-        if frame.RefreshReplayDisplay then
-            frame.RefreshReplayDisplay()
-        end
-    end)
-    
     self.frames.replayWindow = frame
-    
+
     -- Store replay state: full board (for GetBoardAtIndex) and move list for history/animation
     frame.replayBoard = board
     frame.moves = {}
@@ -993,25 +866,17 @@ function DeltaChess:ShowReplayWindow(board)
     frame.currentMoveIndex = 0
     frame.myChessColor = myChessColor
     frame.opponentChessColor = opponentChessColor
-    
-    local leftMargin = 10
-    local topOffset = -30
-    
+    frame.flipBoard = flipBoard
+
     -- ==================== OPPONENT BAR (TOP) ====================
     local opponentBarInfo = DeltaChess.UI:CreatePlayerBar({
-        parent = frame,
-        anchorFrame = frame,
-        anchorPoint = "TOPLEFT",
-        anchorRelPoint = "TOPLEFT",
-        offsetX = leftMargin,
-        offsetY = topOffset,
+        bar = frame.topBar,
         playerName = opponentName,
         playerClass = opponentClass,
         board = board,
         showClock = true,
         chessColor = opponentChessColor,
     })
-    local opponentBar = opponentBarInfo.bar
     frame.topBarNameText = opponentBarInfo.nameText
     frame.topBarClock = opponentBarInfo.timeDisplay
     frame.topBarCapturedContainer = opponentBarInfo.capturedContainer
@@ -1019,32 +884,19 @@ function DeltaChess:ShowReplayWindow(board)
     frame.opponentCapturedColor = myChessColor
     frame.opponentClock = opponentBarInfo.timeDisplay
     frame.opponentClockColor = opponentChessColor
-    
+
     -- ==================== BOARD ====================
-    local boardContainer = CreateFrame("Frame", nil, frame)
-    boardContainer:SetSize(BOARD_SIZE + LABEL_SIZE, BOARD_SIZE + LABEL_SIZE)
-    boardContainer:SetPoint("TOPLEFT", opponentBar, "BOTTOMLEFT", 0, 0)
-    frame.boardContainer = boardContainer
-    frame.flipBoard = flipBoard
-    
-    -- Create squares using shared function (non-interactive)
-    frame.squares = DeltaChess.UI:CreateBoardSquares(boardContainer, SQUARE_SIZE, LABEL_SIZE, flipBoard, false)
-    
+    DeltaChess.UI:RecreateBoardSquares(frame, false)
+
     -- ==================== PLAYER BAR (BOTTOM) ====================
     local playerBarInfo = DeltaChess.UI:CreatePlayerBar({
-        parent = frame,
-        anchorFrame = boardContainer,
-        anchorPoint = "TOPLEFT",
-        anchorRelPoint = "BOTTOMLEFT",
-        offsetX = 0,
-        offsetY = 0,
+        bar = frame.bottomBar,
         playerName = myName,
         playerClass = myClass,
         board = board,
         showClock = true,
         chessColor = myChessColor,
     })
-    local playerBar = playerBarInfo.bar
     frame.bottomBarNameText = playerBarInfo.nameText
     frame.bottomBarClock = playerBarInfo.timeDisplay
     frame.bottomBarCapturedContainer = playerBarInfo.capturedContainer
@@ -1052,60 +904,16 @@ function DeltaChess:ShowReplayWindow(board)
     frame.playerCapturedColor = opponentChessColor
     frame.playerClock = playerBarInfo.timeDisplay
     frame.playerClockColor = myChessColor
-    
+
     -- ==================== RIGHT PANEL ====================
-    local rightPanel = CreateFrame("Frame", nil, frame)
-    rightPanel:SetSize(RIGHT_PANEL_WIDTH, PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT)
-    rightPanel:SetPoint("TOPLEFT", opponentBar, "TOPRIGHT", 10, 0)
-    
-    -- Move history scroll frame
-    local historyHeight = rightPanel:GetHeight() - 100
-    local historyInfo = DeltaChess.UI:CreateMoveHistoryScroller({
-        parent = rightPanel,
-        width = RIGHT_PANEL_WIDTH,
-        height = historyHeight,
-        includeLabel = true,
-    })
-    frame.historyText = historyInfo.historyText
-    
-    -- Move counter / position label
-    local moveLabel = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    moveLabel:SetPoint("BOTTOMLEFT", rightPanel, "BOTTOMLEFT", 0, 60)
-    moveLabel:SetText("Move: 0 / " .. #frame.moves)
-    frame.moveLabel = moveLabel
-    
-    -- Navigation buttons row
-    local buttonWidth = 50
-    local buttonSpacing = 3
-    
-    local firstBtn = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    firstBtn:SetSize(buttonWidth, 25)
-    firstBtn:SetPoint("BOTTOMLEFT", rightPanel, "BOTTOMLEFT", 0, 30)
-    firstBtn:SetText("|<<")
-    
-    local prevBtn = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    prevBtn:SetSize(buttonWidth, 25)
-    prevBtn:SetPoint("LEFT", firstBtn, "RIGHT", buttonSpacing, 0)
-    prevBtn:SetText("<")
-    
-    local nextBtn = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    nextBtn:SetSize(buttonWidth, 25)
-    nextBtn:SetPoint("LEFT", prevBtn, "RIGHT", buttonSpacing, 0)
-    nextBtn:SetText(">")
-    
-    local lastBtn = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    lastBtn:SetSize(buttonWidth, 25)
-    lastBtn:SetPoint("LEFT", nextBtn, "RIGHT", buttonSpacing, 0)
-    lastBtn:SetText(">>|")
-    
-    -- Close button
-    local closeBtn = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    closeBtn:SetSize(RIGHT_PANEL_WIDTH, 25)
-    closeBtn:SetPoint("BOTTOMLEFT", rightPanel, "BOTTOMLEFT", 0, 0)
-    closeBtn:SetText("Close")
-    closeBtn:SetScript("OnClick", function()
-        frame:Hide()
-    end)
+    local rightPanel = frame.rightPanel
+    frame.moveLabel = rightPanel.moveLabel
+    frame.moveLabel:SetText("Move: 0 / " .. #frame.moves)
+
+    local firstBtn = rightPanel.firstBtn
+    local prevBtn = rightPanel.prevBtn
+    local nextBtn = rightPanel.nextBtn
+    local lastBtn = rightPanel.lastBtn
     
     -- Update display function (animateMove: optional move to animate after rendering)
     local function UpdateReplayBoard(animateMove)
@@ -1213,33 +1021,20 @@ function DeltaChess:ShowPGNWindow(board)
     local pgn = board:GetPGN()
     if not pgn or pgn == "" then pgn = "(no PGN)" end
 
-    -- Create PGN window once and reuse
+    -- PGN layout is ChessPGNFrame in Frames/Windows.xml. The edit box is the scroll child.
     if not self.frames.pgnWindow then
-        local frame = CreateFrame("Frame", "ChessPGNFrame", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(450, 380)
-        frame:SetPoint("CENTER")
-        frame:SetMovable(true)
-        frame:EnableMouse(true)
-        frame:RegisterForDrag("LeftButton")
-        frame:SetScript("OnDragStart", frame.StartMoving)
-        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        local frame = ChessPGNFrame
         frame:SetFrameStrata("FULLSCREEN_DIALOG")
         frame:SetFrameLevel(300)  -- Above board (250) so PGN window stays on top
+        self:MakeDraggable(frame)
         frame.TitleText:SetText("PGN")
+        frame.editBg:SetColorTexture(0.1, 0.1, 0.15, 0.95)
 
-        -- Background behind the scroll area (ARTWORK layer so it draws above the frame's own background)
-        local editBg = frame:CreateTexture(nil, "ARTWORK", nil, -1)
-        editBg:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -32)
-        editBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -35, 10)
-        editBg:SetColorTexture(0.1, 0.1, 0.15, 0.95)
-
-        -- ScrollFrame = viewport; the EditBox IS the scroll child (standard WoW pattern)
-        local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-        scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -32)
-        scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -35, 10)
-
-        local editBox = CreateFrame("EditBox", nil, scrollFrame)
-        editBox:SetMultiLine(true)
+        local scrollFrame = frame.pgnScrollFrame
+        local editBox = ChessPGNFrameEditBox or scrollFrame:GetScrollChild()
+        if scrollFrame:GetScrollChild() ~= editBox then
+            scrollFrame:SetScrollChild(editBox)
+        end
         editBox:SetAutoFocus(false)
         editBox:SetFontObject(GameFontHighlightSmall)
         editBox:SetTextInsets(6, 6, 6, 6)
@@ -1248,17 +1043,14 @@ function DeltaChess:ShowPGNWindow(board)
         editBox:SetScript("OnEscapePressed", function()
             frame:Hide()
         end)
-        -- Update scroll range when text changes so scrollbar knows content height
         editBox:SetScript("OnTextChanged", function(self)
             local sf = self:GetParent()
             sf:UpdateScrollChildRect()
         end)
-        -- Mouse wheel on EditBox forwards to ScrollFrame
         editBox:SetScript("OnCursorChanged", function(self, x, y, w, h)
             local sf = self:GetParent()
             local vs = sf:GetVerticalScroll()
             local sfHeight = sf:GetHeight()
-            -- y is negative offset from top of editbox
             local cursorTop = -y
             local cursorBottom = cursorTop + h
             if cursorTop < vs then
@@ -1267,8 +1059,6 @@ function DeltaChess:ShowPGNWindow(board)
                 sf:SetVerticalScroll(cursorBottom - sfHeight)
             end
         end)
-
-        scrollFrame:SetScrollChild(editBox)
 
         frame.pgnScrollFrame = scrollFrame
         frame.pgnEditBox = editBox
@@ -1510,30 +1300,39 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
     end
     candidates = filtered
 
-    local popup = CreateFrame("Frame", nil, parentFrame, "BasicFrameTemplateWithInset")
-    popup:SetSize(320, 380)
+    DeltaChess._playerListSeq = (DeltaChess._playerListSeq or 0) + 1
+    local popup = CreateFrame("Frame", "DeltaChessPlayerList" .. DeltaChess._playerListSeq, parentFrame, "DeltaChessPlayerListTemplate")
     popup:SetPoint("CENTER", parentFrame, "CENTER", 0, 0)
-    popup:SetFrameStrata("DIALOG")
-    popup:SetFrameLevel(parentFrame:GetFrameLevel() + 50)
-    popup:SetMovable(true)
-    popup:EnableMouse(true)
-    popup:RegisterForDrag("LeftButton")
-    popup:SetScript("OnDragStart", popup.StartMoving)
-    popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
+    -- The template close button is kept well above the window's other children.
+    -- A flat parent+50 still leaves that button drawn on top of this popup.
+    local function RaiseAboveParentChrome()
+        local level = parentFrame:GetFrameLevel() + 20
+        local closeButton = parentFrame.CloseButton
+        if closeButton then
+            level = math.max(level, closeButton:GetFrameLevel() + 5)
+        end
+        if level > 10000 then
+            popup:SetFrameStrata("FULLSCREEN_DIALOG")
+            popup:SetFrameLevel(100)
+        else
+            popup:SetFrameStrata(parentFrame:GetFrameStrata() or "DIALOG")
+            popup:SetFrameLevel(level)
+        end
+    end
+    popup:HookScript("OnShow", RaiseAboveParentChrome)
+    RaiseAboveParentChrome()
+    self:MakeDraggable(popup)
     local titleMap = { past = "Recent", guild = "Guild", friends = "Friends", party = "Party" }
     popup.TitleText:SetText(titleMap[source] or "Select Player")
 
-    local statusText = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    statusText:SetPoint("TOPLEFT", popup, "TOPLEFT", 15, -35)
+    local statusText = popup.statusText
     statusText:SetText("Checking who has DeltaChess...")
-    popup.statusText = statusText
 
-    local scrollFrame = CreateFrame("ScrollFrame", nil, popup, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", statusText, "BOTTOMLEFT", 0, -8)
-    scrollFrame:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -32, 10)
-    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetSize(280, 1)
-    scrollFrame:SetScrollChild(scrollChild)
+    local scrollFrame = popup.scrollFrame
+    local scrollChild = scrollFrame:GetScrollChild() or scrollFrame.scrollChild or _G[popup:GetName() .. "ScrollScrollChild"]
+    if scrollFrame:GetScrollChild() ~= scrollChild then
+        scrollFrame:SetScrollChild(scrollChild)
+    end
     popup.scrollChild = scrollChild
 
     if #candidates == 0 then
@@ -1588,13 +1387,9 @@ function DeltaChess:ShowPlayerListPopup(source, parentFrame, onSelect)
                 displayName = displayName .. " |cFFFF6666(DND)|r"
             end
             
-            local btn = CreateFrame("Button", nil, scrollChild)
-            btn:SetSize(260, 24)
+            local btn = CreateFrame("Button", nil, scrollChild, "DeltaChessPlayerRowTemplate")
             btn:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, -y)
-            btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-            local label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            label:SetPoint("LEFT", btn, "LEFT", 6, 0)
-            label:SetText(displayName)
+            btn.label:SetText(displayName)
             btn:SetScript("OnClick", function()
                 if onSelect then onSelect(selectValue) end
                 popup:Hide()
@@ -1618,156 +1413,70 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
         self.frames.challengeWindow:Hide()
     end
     
-    -- Create challenge window if it doesn't exist
+    -- Challenge layout is ChessChallengeWindow in Frames/Windows.xml.
     if not self.frames.challengeWindow then
-        local frame = CreateFrame("Frame", "ChessChallengeWindow", UIParent, "BasicFrameTemplateWithInset")
+        local frame = ChessChallengeWindow
         local BASE_CHALLENGE_HEIGHT = 320
-        frame:SetSize(350, BASE_CHALLENGE_HEIGHT)
-        frame:SetPoint("CENTER")
-        frame:SetMovable(true)
-        frame:EnableMouse(true)
-        frame:RegisterForDrag("LeftButton")
-        frame:SetScript("OnDragStart", frame.StartMoving)
-        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
         frame:SetFrameStrata("DIALOG")
         frame:SetFrameLevel(150)
+        self:MakeDraggable(frame)
         frame.TitleText:SetText("Challenge Player")
-        
-        local yPos = -35
-        
-        -- Opponent selection buttons
-        local selectLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        selectLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        selectLabel:SetText("Select opponent:")
-        
-        yPos = yPos - 24
-        
-        local pastBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        pastBtn:SetSize(76, 24)
-        pastBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        pastBtn:SetText("Recent")
-        pastBtn:SetScript("OnClick", function()
+        frame.nameInput:SetAutoFocus(false)
+
+        frame.pastBtn:SetScript("OnClick", function()
             DeltaChess:ShowPlayerListPopup("past", frame, function(fullName)
                 frame.nameInput:SetText(fullName)
             end)
         end)
-        
-        local guildBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        guildBtn:SetSize(76, 24)
-        guildBtn:SetPoint("LEFT", pastBtn, "RIGHT", 5, 0)
-        guildBtn:SetText("Guild")
-        guildBtn:SetScript("OnClick", function()
+        frame.guildBtn:SetScript("OnClick", function()
             DeltaChess:ShowPlayerListPopup("guild", frame, function(fullName)
                 frame.nameInput:SetText(fullName)
             end)
         end)
-        
-        local friendsBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        friendsBtn:SetSize(76, 24)
-        friendsBtn:SetPoint("LEFT", guildBtn, "RIGHT", 5, 0)
-        friendsBtn:SetText("Friends")
-        friendsBtn:SetScript("OnClick", function()
+        frame.friendsBtn:SetScript("OnClick", function()
             DeltaChess:ShowPlayerListPopup("friends", frame, function(selectValue)
-                -- selectValue can be BattleTag or CharName-Realm
                 frame.nameInput:SetText(selectValue)
             end)
         end)
-        
-        local partyBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        partyBtn:SetSize(76, 24)
-        partyBtn:SetPoint("LEFT", friendsBtn, "RIGHT", 5, 0)
-        partyBtn:SetText("Party")
-        partyBtn:SetScript("OnClick", function()
+        frame.partyBtn:SetScript("OnClick", function()
             DeltaChess:ShowPlayerListPopup("party", frame, function(fullName)
                 frame.nameInput:SetText(fullName)
             end)
         end)
-        
-        yPos = yPos - 38
-        
-        -- Player name input
-        local nameLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        nameLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        nameLabel:SetText("Or enter name (Name-Realm):")
-        
-        yPos = yPos - 25
-        
-        local nameInput = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-        nameInput:SetSize(310, 25)
-        nameInput:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        nameInput:SetAutoFocus(false)
-        frame.nameInput = nameInput
-        
-        yPos = yPos - 45
-        
-        -- Color selection
-        local colorLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        colorLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        colorLabel:SetText("Your Color:")
-        
-        yPos = yPos - 30
-        
-        -- Color buttons
+
         frame.selectedColor = "random"
-        
-        local whiteBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        whiteBtn:SetSize(102, 25)
-        whiteBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        whiteBtn:SetText("White")
-        
-        local blackBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        blackBtn:SetSize(102, 25)
-        blackBtn:SetPoint("LEFT", whiteBtn, "RIGHT", 5, 0)
-        blackBtn:SetText("Black")
-        
-        local randomBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        randomBtn:SetSize(102, 25)
-        randomBtn:SetPoint("LEFT", blackBtn, "RIGHT", 5, 0)
-        randomBtn:SetText("Random")
-        
+        local whiteBtn = frame.whiteBtn
+        local blackBtn = frame.blackBtn
+        local randomBtn = frame.randomBtn
+
         local function updateColorButtons()
             whiteBtn:SetEnabled(frame.selectedColor ~= COLOR.WHITE)
             blackBtn:SetEnabled(frame.selectedColor ~= COLOR.BLACK)
             randomBtn:SetEnabled(frame.selectedColor ~= "random")
         end
-        
+
         whiteBtn:SetScript("OnClick", function()
             frame.selectedColor = COLOR.WHITE
             updateColorButtons()
         end)
-        
         blackBtn:SetScript("OnClick", function()
             frame.selectedColor = COLOR.BLACK
             updateColorButtons()
         end)
-        
         randomBtn:SetScript("OnClick", function()
             frame.selectedColor = "random"
             updateColorButtons()
         end)
-        
         updateColorButtons()
-        
-        yPos = yPos - 45
-        
-        -- Clock config (shared panel with handicap)
-        yPos = DeltaChess.UI:CreateClockConfigPanel(frame, {
-            anchorFrame = frame,
-            anchorPoint = "TOPLEFT",
-            anchorRelPoint = "TOPLEFT",
-            offsetX = 12,
-            startY = yPos,
+
+        DeltaChess.UI:CreateClockConfigPanel(frame, {
             showHandicap = true,
             onResize = function(extraHeight)
                 frame:SetHeight(BASE_CHALLENGE_HEIGHT + extraHeight)
             end,
         })
-        
-        -- Buttons at bottom
-        local sendBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        sendBtn:SetSize(140, 30)
-        sendBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 10)
-        sendBtn:SetText("Send Challenge")
+
+        local sendBtn = frame.sendBtn
         sendBtn:SetScript("OnClick", function()
             local input = frame.nameInput:GetText()
             if not input or input == "" then
@@ -1846,14 +1555,10 @@ function DeltaChess:ShowChallengeWindow(targetPlayer)
             end)
         end)
         
-        local cancelBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        cancelBtn:SetSize(140, 30)
-        cancelBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -15, 10)
-        cancelBtn:SetText("Cancel")
-        cancelBtn:SetScript("OnClick", function()
+        frame.cancelBtn:SetScript("OnClick", function()
             frame:Hide()
         end)
-        
+
         self.frames.challengeWindow = frame
     end
     
@@ -1921,93 +1626,47 @@ function DeltaChess:ShowComputerGameWindow()
         self.frames.computerWindow:Hide()
     end
     
-    -- Create window if it doesn't exist
+    -- Computer-game layout is ChessComputerWindow in Frames/Windows.xml.
     if not self.frames.computerWindow then
-        local frame = CreateFrame("Frame", "ChessComputerWindow", UIParent, "BasicFrameTemplateWithInset")
-        frame:SetSize(320, 350)
-        frame:SetPoint("CENTER")
-        frame:SetMovable(true)
-        frame:EnableMouse(true)
-        frame:RegisterForDrag("LeftButton")
-        frame:SetScript("OnDragStart", frame.StartMoving)
-        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        local frame = ChessComputerWindow
         frame:SetFrameStrata("DIALOG")
         frame:SetFrameLevel(150)
+        self:MakeDraggable(frame)
         frame.TitleText:SetText("Play vs Computer")
-        
-        local yPos = -35
-        
-        -- Color selection
-        local colorLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        colorLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        colorLabel:SetText("Your Color:")
-        
-        yPos = yPos - 20
-        
-        -- Color buttons
+
         frame.selectedColor = COLOR.WHITE
-        
-        local whiteBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        whiteBtn:SetSize(92, 25)
-        whiteBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        whiteBtn:SetText("White")
+        local whiteBtn = frame.whiteBtn
+        local blackBtn = frame.blackBtn
+        local randomBtn = frame.randomBtn
         whiteBtn:SetEnabled(false)
-        
-        local blackBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        blackBtn:SetSize(92, 25)
-        blackBtn:SetPoint("LEFT", whiteBtn, "RIGHT", 5, 0)
-        blackBtn:SetText("Black")
-        
-        local randomBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        randomBtn:SetSize(92, 25)
-        randomBtn:SetPoint("LEFT", blackBtn, "RIGHT", 5, 0)
-        randomBtn:SetText("Random")
-        
+
         local function updateColorButtons()
             whiteBtn:SetEnabled(frame.selectedColor ~= COLOR.WHITE)
             blackBtn:SetEnabled(frame.selectedColor ~= COLOR.BLACK)
             randomBtn:SetEnabled(frame.selectedColor ~= "random")
         end
-        
+
         whiteBtn:SetScript("OnClick", function()
             frame.selectedColor = COLOR.WHITE
             updateColorButtons()
         end)
-        
         blackBtn:SetScript("OnClick", function()
             frame.selectedColor = COLOR.BLACK
             updateColorButtons()
         end)
-        
         randomBtn:SetScript("OnClick", function()
             frame.selectedColor = "random"
             updateColorButtons()
         end)
-        
-        yPos = yPos - 40
 
-        -- AI Strength slider (ELO) - moved above engine selection
-        -- Uses global ELO range across all engines
         local globalRange = DeltaChessFramework.Engines:GetGlobalEloRange()
         local hasEloEngines = (globalRange ~= nil)
-        
-        local diffLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        diffLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        diffLabel:SetText("AI Strength (ELO):")
-        frame.diffLabel = diffLabel
-        
+
         frame.selectedDifficulty = 1200
-        
-        local diffValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        diffValue:SetPoint("LEFT", diffLabel, "RIGHT", 10, 0)
+        local diffValue = frame.diffValueText
         diffValue:SetText("1200")
-        frame.diffValueText = diffValue
-        
-        yPos = yPos - 25
-        
-        local diffSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-        diffSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yPos)
-        diffSlider:SetSize(275, 17)
+
+        local diffSlider = frame.diffSlider
         if hasEloEngines then
             diffSlider:SetMinMaxValues(globalRange[1], globalRange[2])
             diffSlider:SetValue(math.max(globalRange[1], math.min(globalRange[2], 1200)))
@@ -2022,43 +1681,21 @@ function DeltaChess:ShowComputerGameWindow()
         end
         diffSlider:SetValueStep(100)
         diffSlider:SetObeyStepOnDrag(true)
-        frame.diffSlider = diffSlider
-        
-        yPos = yPos - 35
-        
-        -- Difficulty description
-        local diffDesc = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        diffDesc:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
+
+        local diffDesc = frame.diffDesc
         diffDesc:SetWidth(260)
         diffDesc:SetJustifyH("LEFT")
-        diffDesc:SetText("|cFF888888100-400: Beginner | 400-1000: Club | 1000-1600: Advanced | 1600+: Expert|r")
-        frame.diffDesc = diffDesc
-
-        yPos = yPos - 30
-
-        -- Engine selection (below AI strength)
-        local engineLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        engineLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, yPos)
-        engineLabel:SetText("Engine:")
-        frame.engineLabel = engineLabel
-
-        yPos = yPos - 25
+        diffDesc:SetWordWrap(true)
 
         frame.selectedEngine = DeltaChessFramework.Engines:GetEffectiveDefaultId()
-
-        local engineDropdown = CreateFrame("Frame", "ChessEngineDropdown", frame, "UIDropDownMenuTemplate")
-        engineDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, yPos)
+        local engineDropdown = frame.engineDropdown
         UIDropDownMenu_SetWidth(engineDropdown, 265)
-        frame.engineDropdown = engineDropdown
-        
-        -- Engine description label (below dropdown)
-        local engineDescLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        engineDescLabel:SetPoint("TOPLEFT", engineDropdown, "BOTTOMLEFT", 20, 0)
+
+        local engineDescLabel = frame.engineDescLabel
         engineDescLabel:SetWidth(250)
         engineDescLabel:SetJustifyH("LEFT")
         engineDescLabel:SetWordWrap(true)
         engineDescLabel:SetTextColor(0.7, 0.7, 0.7)
-        frame.engineDescLabel = engineDescLabel
         
         -- Function to update engine description
         local function updateEngineDescription(engineId)
@@ -2173,12 +1810,7 @@ function DeltaChess:ShowComputerGameWindow()
             end
         end)
         
-        -- Start button
-        local startBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        startBtn:SetSize(120, 30)
-        startBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 15, 10)
-        startBtn:SetText("Start Game")
-        startBtn:SetScript("OnClick", function()
+        frame.startButton:SetScript("OnClick", function()
             local color = frame.selectedColor
             if color == "random" then
                 color = math.random(2) == 1 and COLOR.WHITE or COLOR.BLACK
@@ -2187,13 +1819,7 @@ function DeltaChess:ShowComputerGameWindow()
             frame:Hide()
             DeltaChess:StartComputerGame(color, frame.selectedDifficulty, frame.selectedEngine, settings)
         end)
-        frame.startButton = startBtn
-        
-        local cancelBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        cancelBtn:SetSize(120, 30)
-        cancelBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -15, 10)
-        cancelBtn:SetText("Cancel")
-        cancelBtn:SetScript("OnClick", function()
+        frame.cancelBtn:SetScript("OnClick", function()
             frame:Hide()
         end)
         

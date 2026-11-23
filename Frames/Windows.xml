@@ -1,0 +1,574 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+    <!--
+        Static DeltaChess windows. Behavior (OnClick, OnDrag, values) is wired
+        from Lua through the Widget API. Frames start hidden.
+    -->
+
+    <Frame name="ChessMainMenu" parent="UIParent" inherits="BasicFrameTemplateWithInset" frameStrata="DIALOG" frameLevel="100" hidden="true" movable="true" enableMouse="true">
+        <Size x="460" y="560"/>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture name="$parentBlingtronBg" parentKey="blingtronBg">
+                    <Anchors>
+                        <Anchor point="BOTTOMLEFT" x="20" y="10"/>
+                        <Anchor point="BOTTOMRIGHT" x="-20" y="10"/>
+                    </Anchors>
+                    <Size y="36"/>
+                </Texture>
+            </Layer>
+            <Layer level="OVERLAY">
+                <FontString name="$parentHistoryTitle" parentKey="historyTitle" inherits="GameFontNormalLarge" text="Game History">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-35"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="blingtronText" inherits="GameFontNormalSmall" justifyH="CENTER" text="|cFF00BFFFSponsored by: |r|cFFFFFFFFhttps://blingtron.app|r - Discord bot for weekly vault &amp; raid reminders">
+                    <Anchors>
+                        <Anchor point="CENTER" relativeTo="$parentBlingtronBg" relativePoint="CENTER"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <Button name="$parentSupportButton" parentKey="supportBtn" inherits="UIPanelButtonTemplate" text="Support &amp; License">
+                <Size x="120" y="22"/>
+                <Anchors>
+                    <Anchor point="TOPRIGHT" x="-15" y="-32"/>
+                </Anchors>
+            </Button>
+            <ScrollFrame name="$parentScroll" parentKey="historyScroll" inherits="UIPanelScrollFrameTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentHistoryTitle" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
+                    <Anchor point="BOTTOMRIGHT" x="-40" y="110"/>
+                </Anchors>
+                <ScrollChild>
+                    <Frame name="ChessMainMenuScrollChild" parentKey="scrollChild">
+                        <Size x="400" y="1"/>
+                    </Frame>
+                </ScrollChild>
+            </ScrollFrame>
+            <CheckButton name="$parentDndCheck" parentKey="dndCheck" inherits="UICheckButtonTemplate">
+                <Anchors>
+                    <Anchor point="BOTTOMLEFT" x="12" y="75"/>
+                </Anchors>
+            </CheckButton>
+            <Button name="$parentChallengeButton" parentKey="challengeBtn" inherits="UIPanelButtonTemplate" text="Challenge Player">
+                <Size x="211" y="28"/>
+                <Anchors>
+                    <Anchor point="BOTTOMLEFT" x="15" y="42"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentComputerButton" parentKey="computerBtn" inherits="UIPanelButtonTemplate" text="Play vs Computer">
+                <Size x="211" y="28"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentChallengeButton" relativePoint="RIGHT" x="8" y="0"/>
+                </Anchors>
+            </Button>
+        </Frames>
+    </Frame>
+
+    <Frame name="ChessSupportDialog" parent="UIParent" inherits="BasicFrameTemplateWithInset" frameStrata="DIALOG" frameLevel="200" hidden="true" movable="true" enableMouse="true">
+        <Size x="440" y="500"/>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Layers>
+            <Layer level="OVERLAY">
+                <FontString name="$parentThankYou" parentKey="thankYou" inherits="GameFontNormal" text="Thank you for playing DeltaChess! Your support is greatly appreciated.">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-40"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentDesc" parentKey="desc" inherits="GameFontNormal" text="Support me on Patreon or check out my other wow project:">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentThankYou" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentBlingtron" parentKey="blingtron" inherits="GameFontNormal" text="|r|cFF00BFFFhttps://blingtron.app|r - Discord bot for weekly vault &amp; raid reminders">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentDesc" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentPatreonLabel" parentKey="patreonLabel" inherits="GameFontNormal" text="|cFF00BFFFPatreon:|r">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentBlingtron" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentGithubLabel" parentKey="githubLabel" inherits="GameFontNormal" text="|cFF00BFFFGitHub:|r">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentPatreonLabel" relativePoint="BOTTOMLEFT" x="0" y="-41"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentEnginesTitle" parentKey="enginesTitle" inherits="GameFontNormal" text="|cFF00BFFFChess Engines:|r">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentGithubLabel" relativePoint="BOTTOMLEFT" x="0" y="-41"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentEnginesCredits" parentKey="enginesCredits" inherits="GameFontNormalSmall" justifyH="LEFT">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentEnginesTitle" relativePoint="BOTTOMLEFT" x="0" y="-5"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentArtwork" parentKey="artworkLabel" inherits="GameFontNormalSmall" justifyH="LEFT" text="|cFF00BFFFChess piece artwork:|r By Cburnett (Wikimedia Commons), CC BY-SA 3.0.">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentEnginesCredits" relativePoint="BOTTOMLEFT" x="0" y="-15"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="licenseLabel" inherits="GameFontNormalSmall" justifyH="LEFT" text="|cFF00BFFFLicense:|r GNU GPL v3.0.">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentArtwork" relativePoint="BOTTOMLEFT" x="0" y="-5"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <EditBox name="ChessSupportPatreonEdit" parentKey="patreonEdit" inherits="InputBoxTemplate" autoFocus="false">
+                <Size x="360" y="22"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentPatreonLabel" relativePoint="BOTTOMLEFT" x="0" y="-4"/>
+                </Anchors>
+            </EditBox>
+            <EditBox name="ChessSupportGithubEdit" parentKey="githubEdit" inherits="InputBoxTemplate" autoFocus="false">
+                <Size x="360" y="22"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentGithubLabel" relativePoint="BOTTOMLEFT" x="0" y="-4"/>
+                </Anchors>
+            </EditBox>
+            <Button name="$parentOkButton" parentKey="okBtn" inherits="UIPanelButtonTemplate" text="OK">
+                <Size x="100" y="28"/>
+                <Anchors>
+                    <Anchor point="BOTTOM" x="0" y="15"/>
+                </Anchors>
+            </Button>
+        </Frames>
+    </Frame>
+
+    <Frame name="ChessPGNFrame" parent="UIParent" inherits="BasicFrameTemplateWithInset" frameStrata="FULLSCREEN_DIALOG" frameLevel="300" hidden="true" movable="true" enableMouse="true">
+        <Size x="450" y="380"/>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Layers>
+            <Layer level="ARTWORK">
+                <Texture parentKey="editBg">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="12" y="-32"/>
+                        <Anchor point="BOTTOMRIGHT" x="-35" y="10"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+        </Layers>
+        <Frames>
+            <ScrollFrame name="$parentScroll" parentKey="pgnScrollFrame" inherits="UIPanelScrollFrameTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="12" y="-32"/>
+                    <Anchor point="BOTTOMRIGHT" x="-35" y="10"/>
+                </Anchors>
+                <ScrollChild>
+                    <EditBox name="ChessPGNFrameEditBox" parentKey="pgnEditBox" multiLine="true" autoFocus="false" letters="99999">
+                        <Size x="400" y="10"/>
+                        <FontString inherits="GameFontHighlightSmall"/>
+                        <TextInsets left="6" right="6" top="6" bottom="6"/>
+                    </EditBox>
+                </ScrollChild>
+            </ScrollFrame>
+        </Frames>
+    </Frame>
+
+    <Frame name="ChessChallengeWindow" parent="UIParent" inherits="BasicFrameTemplateWithInset" frameStrata="DIALOG" frameLevel="150" hidden="true" movable="true" enableMouse="true">
+        <Size x="350" y="320"/>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Layers>
+            <Layer level="OVERLAY">
+                <FontString parentKey="selectLabel" inherits="GameFontNormal" text="Select opponent:">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-35"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="nameLabel" inherits="GameFontNormal" text="Or enter name (Name-Realm):">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-97"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="colorLabel" inherits="GameFontNormal" text="Your Color:">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-167"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <Button name="$parentPastButton" parentKey="pastBtn" inherits="UIPanelButtonTemplate" text="Recent">
+                <Size x="76" y="24"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="15" y="-59"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentGuildButton" parentKey="guildBtn" inherits="UIPanelButtonTemplate" text="Guild">
+                <Size x="76" y="24"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentPastButton" relativePoint="RIGHT" x="5" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentFriendsButton" parentKey="friendsBtn" inherits="UIPanelButtonTemplate" text="Friends">
+                <Size x="76" y="24"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentGuildButton" relativePoint="RIGHT" x="5" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentPartyButton" parentKey="partyBtn" inherits="UIPanelButtonTemplate" text="Party">
+                <Size x="76" y="24"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentFriendsButton" relativePoint="RIGHT" x="5" y="0"/>
+                </Anchors>
+            </Button>
+            <EditBox name="$parentNameInput" parentKey="nameInput" inherits="InputBoxTemplate" autoFocus="false">
+                <Size x="310" y="25"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="20" y="-122"/>
+                </Anchors>
+            </EditBox>
+            <Button name="$parentWhiteButton" parentKey="whiteBtn" inherits="UIPanelButtonTemplate" text="White">
+                <Size x="102" y="25"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="15" y="-197"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentBlackButton" parentKey="blackBtn" inherits="UIPanelButtonTemplate" text="Black">
+                <Size x="102" y="25"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentWhiteButton" relativePoint="RIGHT" x="5" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentRandomButton" parentKey="randomBtn" inherits="UIPanelButtonTemplate" text="Random">
+                <Size x="102" y="25"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentBlackButton" relativePoint="RIGHT" x="5" y="0"/>
+                </Anchors>
+            </Button>
+            <Frame name="$parentClock" parentKey="clockPanel" inherits="DeltaChessClockConfigTemplate">
+                <Size x="330" y="360"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="12" y="-242"/>
+                </Anchors>
+            </Frame>
+            <Button name="$parentSendButton" parentKey="sendBtn" inherits="UIPanelButtonTemplate" text="Send Challenge">
+                <Size x="140" y="30"/>
+                <Anchors>
+                    <Anchor point="BOTTOMLEFT" x="15" y="10"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentCancelButton" parentKey="cancelBtn" inherits="UIPanelButtonTemplate" text="Cancel">
+                <Size x="140" y="30"/>
+                <Anchors>
+                    <Anchor point="BOTTOMRIGHT" x="-15" y="10"/>
+                </Anchors>
+            </Button>
+        </Frames>
+    </Frame>
+
+    <Frame name="ChessComputerWindow" parent="UIParent" inherits="BasicFrameTemplateWithInset" frameStrata="DIALOG" frameLevel="150" hidden="true" movable="true" enableMouse="true">
+        <Size x="320" y="350"/>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Layers>
+            <Layer level="OVERLAY">
+                <FontString parentKey="colorLabel" inherits="GameFontNormal" text="Your Color:">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-35"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentDiffLabel" parentKey="diffLabel" inherits="GameFontNormal" text="AI Strength (ELO):">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-95"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="diffValueText" inherits="GameFontHighlight" text="1200">
+                    <Anchors>
+                        <Anchor point="LEFT" relativeTo="$parentDiffLabel" relativePoint="RIGHT" x="10" y="0"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="diffDesc" inherits="GameFontNormalSmall" justifyH="LEFT" text="|cFF888888100-400: Beginner | 400-1000: Club | 1000-1600: Advanced | 1600+: Expert|r">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-155"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="engineLabel" inherits="GameFontNormal" text="Engine:">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-185"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="engineDescLabel" inherits="GameFontNormalSmall" justifyH="LEFT">
+                    <Color r="0.7" g="0.7" b="0.7"/>
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="20" y="-242"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <Button name="$parentWhiteButton" parentKey="whiteBtn" inherits="UIPanelButtonTemplate" text="White">
+                <Size x="92" y="25"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="15" y="-55"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentBlackButton" parentKey="blackBtn" inherits="UIPanelButtonTemplate" text="Black">
+                <Size x="92" y="25"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentWhiteButton" relativePoint="RIGHT" x="5" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentRandomButton" parentKey="randomBtn" inherits="UIPanelButtonTemplate" text="Random">
+                <Size x="92" y="25"/>
+                <Anchors>
+                    <Anchor point="LEFT" relativeTo="$parentBlackButton" relativePoint="RIGHT" x="5" y="0"/>
+                </Anchors>
+            </Button>
+            <Slider name="$parentDiffSlider" parentKey="diffSlider" inherits="OptionsSliderTemplate">
+                <Size x="275" y="17"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="20" y="-120"/>
+                </Anchors>
+            </Slider>
+            <Frame name="ChessEngineDropdown" parentKey="engineDropdown" inherits="UIDropDownMenuTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="0" y="-210"/>
+                </Anchors>
+            </Frame>
+            <Button name="$parentStartButton" parentKey="startButton" inherits="UIPanelButtonTemplate" text="Start Game">
+                <Size x="120" y="30"/>
+                <Anchors>
+                    <Anchor point="BOTTOMLEFT" x="15" y="10"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentCancelButton" parentKey="cancelBtn" inherits="UIPanelButtonTemplate" text="Cancel">
+                <Size x="120" y="30"/>
+                <Anchors>
+                    <Anchor point="BOTTOMRIGHT" x="-15" y="10"/>
+                </Anchors>
+            </Button>
+        </Frames>
+    </Frame>
+
+    <Frame name="ChessBoardFrame" parent="UIParent" inherits="DeltaChessBoardShellTemplate">
+        <Frames>
+            <Button name="$parentMinimizeButton" parentKey="minimizeBtn" inherits="UIPanelButtonTemplate" text="−">
+                <Size x="28" y="22"/>
+                <Anchors>
+                    <Anchor point="TOPRIGHT" relativeKey="$parent.CloseButton" relativePoint="TOPLEFT"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentFlipButton" parentKey="flipButton" inherits="UIPanelButtonTemplate" text="Flip">
+                <Size x="35" y="22"/>
+                <Anchors>
+                    <Anchor point="TOPRIGHT" relativeTo="$parentMinimizeButton" relativePoint="TOPLEFT"/>
+                </Anchors>
+            </Button>
+            <Frame name="$parentRightPanel" parentKey="rightPanel">
+                <Size x="220" y="510"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentTopBar" relativePoint="TOPRIGHT" x="10" y="0"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="ARTWORK">
+                        <FontString parentKey="turnLabel" inherits="GameFontNormal">
+                            <Anchors>
+                                <Anchor point="BOTTOMLEFT" x="0" y="35"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+                <Frames>
+                    <Frame name="$parentHistory" parentKey="history" inherits="DeltaChessMoveHistoryTemplate">
+                        <Size x="220" y="470"/>
+                        <Anchors>
+                            <Anchor point="TOPLEFT"/>
+                        </Anchors>
+                    </Frame>
+                    <Button name="$parentResignButton" parentKey="resignButton" inherits="UIPanelButtonTemplate" text="Resign">
+                        <Size x="65" y="25"/>
+                        <Anchors>
+                            <Anchor point="BOTTOMLEFT" x="0" y="5"/>
+                        </Anchors>
+                    </Button>
+                    <Button name="$parentDrawButton" parentKey="drawButton" inherits="UIPanelButtonTemplate" text="Remis">
+                        <Size x="65" y="25"/>
+                        <Anchors>
+                            <Anchor point="LEFT" relativeTo="$parentResignButton" relativePoint="RIGHT" x="5" y="0"/>
+                        </Anchors>
+                    </Button>
+                    <Button name="$parentCloseButton" parentKey="closeButton" inherits="UIPanelButtonTemplate" text="Pause">
+                        <Size x="65" y="25"/>
+                        <Anchors>
+                            <Anchor point="LEFT" relativeTo="$parentDrawButton" relativePoint="RIGHT" x="5" y="0"/>
+                        </Anchors>
+                    </Button>
+                </Frames>
+            </Frame>
+            <Frame name="$parentWaitingOverlay" parentKey="waitingOverlay" hidden="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentBoard"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parentBoard"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="bg" setAllPoints="true"/>
+                    </Layer>
+                    <Layer level="OVERLAY">
+                        <FontString name="$parentWaitingText" parentKey="text" inherits="GameFontNormalLarge" text="|cFFFFFF00Waiting for confirmation...|r">
+                            <Anchors>
+                                <Anchor point="CENTER"/>
+                            </Anchors>
+                        </FontString>
+                        <FontString parentKey="spinner" inherits="GameFontNormalHuge" text="|cFFFFFF00...|r">
+                            <Anchors>
+                                <Anchor point="CENTER" relativeTo="$parentWaitingText" relativePoint="TOP" x="0" y="20"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+        </Frames>
+    </Frame>
+
+    <Frame name="ChessReplayFrame" parent="UIParent" inherits="DeltaChessBoardShellTemplate">
+        <Frames>
+            <Button name="$parentFlipButton" parentKey="flipButton" inherits="UIPanelButtonTemplate" text="Flip">
+                <Size x="35" y="22"/>
+                <Anchors>
+                    <Anchor point="TOPRIGHT" relativeKey="$parent.CloseButton" relativePoint="TOPLEFT"/>
+                </Anchors>
+            </Button>
+            <Frame name="$parentRightPanel" parentKey="rightPanel">
+                <Size x="220" y="510"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentTopBar" relativePoint="TOPRIGHT" x="10" y="0"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="ARTWORK">
+                        <FontString parentKey="moveLabel" inherits="GameFontNormal" text="Move: 0 / 0">
+                            <Anchors>
+                                <Anchor point="BOTTOMLEFT" x="0" y="60"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+                <Frames>
+                    <Frame name="$parentHistory" parentKey="history" inherits="DeltaChessMoveHistoryTemplate">
+                        <Size x="220" y="440"/>
+                        <Anchors>
+                            <Anchor point="TOPLEFT"/>
+                        </Anchors>
+                    </Frame>
+                    <Button name="$parentFirstButton" parentKey="firstBtn" inherits="UIPanelButtonTemplate" text="|&lt;&lt;">
+                        <Size x="50" y="25"/>
+                        <Anchors>
+                            <Anchor point="BOTTOMLEFT" x="0" y="30"/>
+                        </Anchors>
+                    </Button>
+                    <Button name="$parentPrevButton" parentKey="prevBtn" inherits="UIPanelButtonTemplate" text="&lt;">
+                        <Size x="50" y="25"/>
+                        <Anchors>
+                            <Anchor point="LEFT" relativeTo="$parentFirstButton" relativePoint="RIGHT" x="3" y="0"/>
+                        </Anchors>
+                    </Button>
+                    <Button name="$parentNextButton" parentKey="nextBtn" inherits="UIPanelButtonTemplate" text="&gt;">
+                        <Size x="50" y="25"/>
+                        <Anchors>
+                            <Anchor point="LEFT" relativeTo="$parentPrevButton" relativePoint="RIGHT" x="3" y="0"/>
+                        </Anchors>
+                    </Button>
+                    <Button name="$parentLastButton" parentKey="lastBtn" inherits="UIPanelButtonTemplate" text="&gt;&gt;|">
+                        <Size x="50" y="25"/>
+                        <Anchors>
+                            <Anchor point="LEFT" relativeTo="$parentNextButton" relativePoint="RIGHT" x="3" y="0"/>
+                        </Anchors>
+                    </Button>
+                    <Button name="$parentCloseButton" parentKey="closeBtn" inherits="UIPanelButtonTemplate" text="Close">
+                        <Size x="220" y="25"/>
+                        <Anchors>
+                            <Anchor point="BOTTOMLEFT"/>
+                        </Anchors>
+                    </Button>
+                </Frames>
+            </Frame>
+        </Frames>
+    </Frame>
+
+    <Frame name="ChessPromotionDialog" parent="UIParent" inherits="BasicFrameTemplateWithInset" frameStrata="FULLSCREEN_DIALOG" frameLevel="350" hidden="true">
+        <Size x="256" y="122"/>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Frames>
+            <Button name="$parentPromoteQueen" parentKey="pieceBtn_q" inherits="DeltaChessPromotionButtonTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="15" y="-50"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentPromoteRook" parentKey="pieceBtn_r" inherits="DeltaChessPromotionButtonTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="73" y="-50"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentPromoteBishop" parentKey="pieceBtn_b" inherits="DeltaChessPromotionButtonTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="131" y="-50"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentPromoteKnight" parentKey="pieceBtn_n" inherits="DeltaChessPromotionButtonTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="189" y="-50"/>
+                </Anchors>
+            </Button>
+        </Frames>
+    </Frame>
+
+    <Frame name="DeltaChessAnimatingPiece" parent="UIParent" frameStrata="TOOLTIP" hidden="true">
+        <Size x="46" y="46"/>
+        <Layers>
+            <Layer level="ARTWORK">
+                <Texture parentKey="texture" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+    </Frame>
+
+    <Frame name="DeltaChessAnimatingPiece2" parent="UIParent" frameStrata="TOOLTIP" hidden="true">
+        <Size x="46" y="46"/>
+        <Layers>
+            <Layer level="ARTWORK">
+                <Texture parentKey="texture" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+    </Frame>
+
+    <Button name="DeltaChessMinimapButton" parent="Minimap" frameStrata="MEDIUM" frameLevel="8" hidden="true" movable="true">
+        <Size x="31" y="31"/>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="icon" file="Interface\AddOns\DeltaChess\Textures\logo_small.tga">
+                    <Size x="20" y="20"/>
+                    <Anchors>
+                        <Anchor point="CENTER" x="0" y="1"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+            <Layer level="OVERLAY">
+                <Texture parentKey="overlay" file="Interface\Minimap\MiniMap-TrackingBorder">
+                    <Size x="53" y="53"/>
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+        </Layers>
+        <HighlightTexture file="Interface\Minimap\UI-Minimap-ZoomButton-Highlight" alphaMode="ADD"/>
+    </Button>
+</Ui>

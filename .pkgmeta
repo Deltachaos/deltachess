@@ -5,6 +5,9 @@ externals:
     url: https://github.com/WoWUIDev/Ace3
     branch: master
     path: LibStub
+  Libs/LibChessOpeningBook:
+    url: https://github.com/Deltachaos/LibChessOpeningBook
+    branch: main
   Libs/DeltachessFramework:
     url: https://github.com/Deltachaos/deltachess-framework
     branch: main

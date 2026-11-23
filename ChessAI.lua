@@ -108,11 +108,10 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
             end)
         end
 
-        -- Use EngineRunner for async calculation
-        DeltaChessFramework.EngineRunner.Create(engineId)
+        -- Use EngineRunner Start/Compute; the addon driver ticks sessions each frame.
+        local session = DeltaChessFramework.EngineRunner.Create(engineId)
             :Fen(board:GetFen())
             :Elo(difficulty)
-            :LoopFn(DeltaChess.WowLoop)
             :HandleError(function(err)
                 DeltaChess:Print("|cFFFF0000Engine error: " .. tostring(err.message or err) .. "|r")
                 return true  -- Return random legal move on error
@@ -139,7 +138,8 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
                     DeltaChess:Print("|cFFFF0000ERROR: Engine '" .. engineName .. "' returned no move.|r")
                 end
             end)
-            :Run()
+            :Start()
+        DeltaChess.AddEngineSession(session)
     end)
 end
 

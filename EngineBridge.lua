@@ -1,5 +1,5 @@
 -- EngineBridge.lua - WoW-specific bridge for EngineFramework
--- Provides WoW timer-based yielding and coordinate conversion helpers
+-- Provides per-frame engine session scheduling and coordinate conversion helpers
 
 local DeltaChess = LibStub("DeltaChess-1.0")
 local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
@@ -11,69 +11,88 @@ local STATUS = {
 }
 
 --------------------------------------------------------------------------------
--- WoW-specific yield function for async engine calculations
+-- Per-frame engine session scheduler
+-- Independent of the board window so thinking continues while it is closed.
 --------------------------------------------------------------------------------
 
---- Loop driver that uses WoW's C_Timer.NewTicker for async iteration.
--- Pass this to EngineRunner:LoopFn() for non-blocking engine calculations.
--- Matches the loopFn(stepFn, doneFn) contract:
---   stepFn() - does one unit of work; returns false when done, truthy to continue.
---   doneFn() - called once after stepFn returns false.
--- Each step runs in a fresh frame so the call stack stays flat.
-local YIELD_MS = 10
 local TARGET_FPS = 40
 local TARGET_FPS_DOUBLE = TARGET_FPS * 2
-local TARGET_FPS_CAP = TARGET_FPS * 1.2
+local TARGET_FPS_HALF = TARGET_FPS / 2
 
-function DeltaChess.GetYieldDelay()
+local sessions = {}
+local roundRobin = 1
+local driver = CreateFrame("Frame", "DeltaChessEngineDriver", UIParent)
+driver:Show()
+
+local function GetComputeBudget()
     local fps = GetFramerate() or TARGET_FPS
-
     if fps >= TARGET_FPS_DOUBLE then
-        return 3
+        return 64
     end
-
     if fps >= TARGET_FPS then
-        return 6
+        return 32
     end
-
-    if fps >= TARGET_FPS_CAP then
-        return 8
+    if fps >= TARGET_FPS_HALF then
+        return 16
     end
-
-    -- avoid division by zero / extreme nonsense
-    fps = math.max(fps, 1)
-
-    -- ratio: 1.0 at target FPS
-    local ratio = TARGET_FPS / fps
-
-    -- logarithmic growth (0 at ratio = 1)
-    local delay = (math.log(ratio * 2))^2 * 1000
-
-
-    return math.min(20000, delay)
+    return 8
 end
 
-function DeltaChess.WowDelay(callback)
-    local delay = DeltaChess.GetYieldDelay() / 1000
-    -- print(delay)
-    C_Timer.After(delay, callback)
+local function StopDriver()
+    driver:SetScript("OnUpdate", nil)
+    roundRobin = 1
 end
 
-function DeltaChess.WowLoop(stepFn, doneFn)
-    local i = 0
-    local lastRun = 0
-    local ticker = nil
-    ticker = C_Timer.NewTicker(0, function()
-        if i ~= lastRun then return end
-        i = i + 1
-        DeltaChess.WowDelay(function()
-            if stepFn() == false then
-                if ticker then ticker:Cancel() end
-                if doneFn then doneFn() end
+local function OnUpdate()
+    if InCombatLockdown() then
+        return
+    end
+
+    local n = #sessions
+    if n == 0 then
+        StopDriver()
+        return
+    end
+
+    local budget = GetComputeBudget()
+    local slice = math.floor(budget / n)
+    -- print("compute frame " .. slice)
+
+    if slice >= 1 then
+        for i = n, 1, -1 do
+            if not sessions[i]:Compute(slice) then
+                table.remove(sessions, i)
             end
-            lastRun = lastRun + 1
-        end)
-    end)
+        end
+    else
+        if roundRobin > n then
+            roundRobin = 1
+        end
+        if not sessions[roundRobin]:Compute(budget) then
+            table.remove(sessions, roundRobin)
+        else
+            roundRobin = roundRobin + 1
+        end
+        if roundRobin > #sessions then
+            roundRobin = 1
+        end
+    end
+
+    if #sessions == 0 then
+        StopDriver()
+    end
+end
+
+--- Queue a framework engine session. Call session:Compute from OnUpdate until it finishes.
+-- @param session table from EngineRunner:Start()
+function DeltaChess.AddEngineSession(session)
+    if not session then
+        return
+    end
+    sessions[#sessions + 1] = session
+    if not driver:GetScript("OnUpdate") then
+        driver:SetScript("OnUpdate", OnUpdate)
+    end
 end
 
 

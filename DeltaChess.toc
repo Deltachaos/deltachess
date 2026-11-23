@@ -11,9 +11,14 @@
 ## X-WoWI-ID: 27027
 
 Libs/LibStub/LibStub.lua
+Libs/LibChessOpeningBook/lib.xml
 Libs/DeltachessFramework/lib.xml
 
 DeltaChess.lua
+
+Frames/Templates.xml
+Frames/Windows.xml
+
 Core.lua
 Sound.lua
 

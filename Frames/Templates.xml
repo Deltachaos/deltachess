@@ -1,0 +1,359 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+    <!--
+        Virtual widgets. Concrete windows live in Windows.xml.
+        Scripts, colors, and dynamic text are applied from Lua with the Widget API.
+    -->
+
+    <Frame name="DeltaChessPlayerBarTemplate" virtual="true">
+        <Size x="420" y="45"/>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true"/>
+            </Layer>
+            <Layer level="ARTWORK">
+                <FontString parentKey="nameText" inherits="GameFontNormal">
+                    <Anchors>
+                        <Anchor point="LEFT" x="5" y="8"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="timeDisplay" inherits="GameFontNormalLarge">
+                    <Anchors>
+                        <Anchor point="RIGHT" x="-10" y="0"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <Frame parentKey="capturedContainer">
+                <Size x="200" y="18"/>
+                <Anchors>
+                    <Anchor point="LEFT" x="5" y="-10"/>
+                </Anchors>
+            </Frame>
+        </Frames>
+    </Frame>
+
+    <Frame name="DeltaChessMoveHistoryTemplate" virtual="true">
+        <Layers>
+            <Layer level="ARTWORK">
+                <FontString name="$parentLabel" parentKey="label" inherits="GameFontNormal" text="Moves">
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+            <Layer level="BACKGROUND">
+                <Texture name="$parentBg" parentKey="historyBg">
+                    <Size x="220" y="440"/>
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentLabel" relativePoint="BOTTOMLEFT" x="0" y="-5"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+        </Layers>
+        <Frames>
+            <ScrollFrame name="$parentScroll" parentKey="scrollFrame" inherits="UIPanelScrollFrameTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentBg" relativePoint="TOPLEFT" x="5" y="-5"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parentBg" relativePoint="BOTTOMRIGHT" x="-25" y="5"/>
+                </Anchors>
+                <ScrollChild>
+                    <Frame name="$parentChild" parentKey="scrollChild">
+                        <Size x="185" y="500"/>
+                        <Layers>
+                            <Layer level="ARTWORK">
+                                <FontString name="$parentText" parentKey="historyText" inherits="GameFontNormalSmall" justifyH="LEFT" spacing="2">
+                                    <Anchors>
+                                        <Anchor point="TOPLEFT"/>
+                                    </Anchors>
+                                </FontString>
+                            </Layer>
+                        </Layers>
+                    </Frame>
+                </ScrollChild>
+            </ScrollFrame>
+        </Frames>
+    </Frame>
+
+    <!-- Interactive board square. Colors are applied with SetColorTexture. -->
+    <Button name="DeltaChessSquareButtonTemplate" virtual="true">
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true"/>
+            </Layer>
+            <Layer level="BORDER">
+                <Texture parentKey="checkIndicator" setAllPoints="true" hidden="true"/>
+            </Layer>
+            <Layer level="ARTWORK">
+                <Texture parentKey="pieceTexture" hidden="true">
+                    <Anchors>
+                        <Anchor point="CENTER"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+            <Layer level="OVERLAY">
+                <Texture parentKey="highlight" setAllPoints="true" hidden="true"/>
+                <Texture parentKey="validMove" hidden="true">
+                    <Size x="15" y="15"/>
+                    <Anchors>
+                        <Anchor point="CENTER"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+        </Layers>
+    </Button>
+
+    <Frame name="DeltaChessSquareFrameTemplate" virtual="true">
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true"/>
+            </Layer>
+            <Layer level="BORDER">
+                <Texture parentKey="checkIndicator" setAllPoints="true" hidden="true"/>
+            </Layer>
+            <Layer level="ARTWORK">
+                <Texture parentKey="pieceTexture" hidden="true">
+                    <Anchors>
+                        <Anchor point="CENTER"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+        </Layers>
+    </Frame>
+
+    <Frame name="DeltaChessDragGhostTemplate" virtual="true" frameStrata="TOOLTIP" enableMouse="false" hidden="true">
+        <Layers>
+            <Layer level="OVERLAY">
+                <Texture parentKey="tex" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+    </Frame>
+
+    <!-- Shared chrome for the live board and the replay window. -->
+    <Frame name="DeltaChessBoardShellTemplate" virtual="true" inherits="BasicFrameTemplateWithInset" frameStrata="FULLSCREEN_DIALOG" frameLevel="250" hidden="true" movable="true" enableMouse="true">
+        <Size x="670" y="550"/>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Frames>
+            <Frame name="$parentTopBar" parentKey="topBar" inherits="DeltaChessPlayerBarTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="10" y="-30"/>
+                </Anchors>
+            </Frame>
+            <Frame name="$parentBoard" parentKey="boardContainer">
+                <Size x="420" y="420"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentTopBar" relativePoint="BOTTOMLEFT"/>
+                </Anchors>
+            </Frame>
+            <Frame name="$parentBottomBar" parentKey="bottomBar" inherits="DeltaChessPlayerBarTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentBoard" relativePoint="BOTTOMLEFT"/>
+                </Anchors>
+            </Frame>
+        </Frames>
+    </Frame>
+
+    <!-- Clock controls. Anchored inside the challenge window; visibility is driven from Lua. -->
+    <Frame name="DeltaChessClockConfigTemplate" virtual="true">
+        <Frames>
+            <CheckButton name="$parentClockCheck" parentKey="clockCheck" inherits="UICheckButtonTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT"/>
+                </Anchors>
+            </CheckButton>
+            <Slider name="$parentTimeSlider" parentKey="timeSlider" inherits="OptionsSliderTemplate" hidden="true">
+                <Size x="305" y="17"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="8" y="-60"/>
+                </Anchors>
+            </Slider>
+            <Slider name="$parentIncSlider" parentKey="incSlider" inherits="OptionsSliderTemplate" hidden="true">
+                <Size x="305" y="17"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="8" y="-125"/>
+                </Anchors>
+            </Slider>
+            <CheckButton name="$parentHandicapCheck" parentKey="handicapCheck" inherits="UICheckButtonTemplate" hidden="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="0" y="-170"/>
+                </Anchors>
+            </CheckButton>
+            <Frame name="$parentHandicapDropdown" parentKey="handicapDropdown" inherits="UIDropDownMenuTemplate" hidden="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="-15" y="-230"/>
+                </Anchors>
+            </Frame>
+            <Slider name="$parentHandicapSlider" parentKey="handicapSecondsSlider" inherits="OptionsSliderTemplate" hidden="true">
+                <Size x="305" y="17"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="8" y="-290"/>
+                </Anchors>
+            </Slider>
+        </Frames>
+        <Layers>
+            <Layer level="OVERLAY">
+                <FontString name="$parentTimeLabel" parentKey="timeLabel" inherits="GameFontNormal" text="Time per player (minutes):" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="3" y="-40"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentTimeValue" parentKey="timeValue" inherits="GameFontHighlight" text="10" hidden="true">
+                    <Anchors>
+                        <Anchor point="LEFT" relativeTo="$parentTimeLabel" relativePoint="RIGHT" x="10" y="0"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentIncLabel" parentKey="incLabel" inherits="GameFontNormal" text="Increment per move (seconds):" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="3" y="-105"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentIncValue" parentKey="incValue" inherits="GameFontHighlight" text="0" hidden="true">
+                    <Anchors>
+                        <Anchor point="LEFT" relativeTo="$parentIncLabel" relativePoint="RIGHT" x="10" y="0"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentHandicapSideLabel" parentKey="handicapSideLabel" inherits="GameFontNormal" text="Player with less time:" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="3" y="-210"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentHandicapSecLabel" parentKey="handicapSecLabel" inherits="GameFontNormal" text="Seconds less:" hidden="true">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="3" y="-270"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentHandicapSecValue" parentKey="handicapSecondsValue" inherits="GameFontHighlight" text="0" hidden="true">
+                    <Anchors>
+                        <Anchor point="LEFT" relativeTo="$parentHandicapSecLabel" relativePoint="RIGHT" x="10" y="0"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+    </Frame>
+
+    <Button name="DeltaChessHistoryEntryTemplate" virtual="true">
+        <Size x="400" y="72"/>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true"/>
+            </Layer>
+            <Layer level="OVERLAY">
+                <FontString name="$parentInfo" parentKey="info" inherits="GameFontNormal">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="5" y="-4"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentDate" parentKey="dateText" inherits="GameFontNormalSmall">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentInfo" relativePoint="BOTTOMLEFT" x="0" y="-1"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentSettings" parentKey="settingsText" inherits="GameFontNormalSmall">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentDate" relativePoint="BOTTOMLEFT" x="0" y="-1"/>
+                    </Anchors>
+                </FontString>
+                <FontString name="$parentStatus" parentKey="statusText" inherits="GameFontNormalSmall">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parentSettings" relativePoint="BOTTOMLEFT" x="0" y="-1"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <Button name="$parentResume" parentKey="resumeBtn" inherits="UIPanelButtonTemplate" text="Resume">
+                <Size x="60" y="22"/>
+                <Anchors>
+                    <Anchor point="RIGHT" x="-5" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentResign" parentKey="resignBtn" inherits="UIPanelButtonTemplate" text="Resign">
+                <Size x="55" y="22"/>
+                <Anchors>
+                    <Anchor point="RIGHT" relativeTo="$parentResume" relativePoint="LEFT" x="-3" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentPgn" parentKey="pgnBtn" inherits="UIPanelButtonTemplate" text="PGN">
+                <Size x="40" y="22"/>
+                <Anchors>
+                    <Anchor point="RIGHT" relativeTo="$parentResign" relativePoint="LEFT" x="-3" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentDelete" parentKey="deleteBtn" inherits="UIPanelButtonTemplate" text="X" hidden="true">
+                <Size x="22" y="22"/>
+                <Anchors>
+                    <Anchor point="RIGHT" x="-5" y="0"/>
+                </Anchors>
+            </Button>
+            <Button name="$parentReplay" parentKey="replayBtn" inherits="UIPanelButtonTemplate" text="Replay" hidden="true">
+                <Size x="55" y="22"/>
+                <Anchors>
+                    <Anchor point="RIGHT" relativeTo="$parentDelete" relativePoint="LEFT" x="-3" y="0"/>
+                </Anchors>
+            </Button>
+        </Frames>
+    </Button>
+
+    <Button name="DeltaChessPlayerRowTemplate" virtual="true">
+        <Size x="260" y="24"/>
+        <Layers>
+            <Layer level="OVERLAY">
+                <FontString parentKey="label" inherits="GameFontNormal">
+                    <Anchors>
+                        <Anchor point="LEFT" x="6" y="0"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <HighlightTexture file="Interface\Buttons\UI-Common-MouseHilight" alphaMode="ADD"/>
+    </Button>
+
+    <Frame name="DeltaChessPlayerListTemplate" virtual="true" inherits="BasicFrameTemplateWithInset" frameStrata="DIALOG" hidden="true" movable="true" enableMouse="true">
+        <Size x="320" y="380"/>
+        <Layers>
+            <Layer level="OVERLAY">
+                <FontString name="$parentStatus" parentKey="statusText" inherits="GameFontNormal" text="Checking who has DeltaChess...">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="15" y="-35"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <ScrollFrame name="$parentScroll" parentKey="scrollFrame" inherits="UIPanelScrollFrameTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parentStatus" relativePoint="BOTTOMLEFT" x="0" y="-8"/>
+                    <Anchor point="BOTTOMRIGHT" x="-32" y="10"/>
+                </Anchors>
+                <ScrollChild>
+                    <Frame name="$parentScrollChild" parentKey="scrollChild">
+                        <Size x="280" y="1"/>
+                    </Frame>
+                </ScrollChild>
+            </ScrollFrame>
+        </Frames>
+    </Frame>
+
+    <Button name="DeltaChessPromotionButtonTemplate" virtual="true">
+        <Size x="52" y="52"/>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="bg" setAllPoints="true"/>
+            </Layer>
+            <Layer level="ARTWORK">
+                <Texture parentKey="texture">
+                    <Size x="36" y="36"/>
+                    <Anchors>
+                        <Anchor point="CENTER"/>
+                    </Anchors>
+                    <TexCoords left="0.08" right="0.92" top="0.08" bottom="0.92"/>
+                </Texture>
+            </Layer>
+            <Layer level="HIGHLIGHT">
+                <Texture parentKey="highlight" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+    </Button>
+</Ui>

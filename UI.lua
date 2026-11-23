@@ -1,4 +1,6 @@
 -- UI.lua - DeltaChess board user interface
+-- Window and widget layout is declared in Frames/Templates.xml and Frames/Windows.xml.
+-- This file drives those widgets through the Widget API (SetScript, SetText, SetPoint, Show/Hide).
 
 local DeltaChess = LibStub("DeltaChess-1.0")
 local DeltaChessFramework = LibStub("DeltachessFramework-1.0")
@@ -189,21 +191,17 @@ function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flip
     for row = 1, 8 do
         for col = 1, 8 do
             local uci = Board.ToSquare(row, col)
-            local frameType = interactive and "Button" or "Frame"
-            local square = CreateFrame(frameType, nil, container)
+            local template = interactive and "DeltaChessSquareButtonTemplate" or "DeltaChessSquareFrameTemplate"
+            local square = CreateFrame(interactive and "Button" or "Frame", nil, container, template)
             square:SetSize(squareSize, squareSize)
-            
+
             -- Position based on board orientation
             local displayRow = flipBoard and row or (9 - row)
             local displayCol = flipBoard and (9 - col) or col
-            
-            square:SetPoint("TOPLEFT", container, "TOPLEFT", 
+
+            square:SetPoint("TOPLEFT", container, "TOPLEFT",
                 labelSize + (displayCol - 1) * squareSize, -(displayRow - 1) * squareSize)
-            
-            -- Background
-            square.bg = square:CreateTexture(nil, "BACKGROUND")
-            square.bg:SetAllPoints()
-            
+
             local isLightSquare = (row + col) % 2 ~= 0
             square.isLightSquare = isLightSquare
             if isLightSquare then
@@ -211,34 +209,18 @@ function DeltaChess.UI:CreateBoardSquares(container, squareSize, labelSize, flip
             else
                 square.bg:SetColorTexture(0.6, 0.4, 0.2, 1)
             end
-            
-            -- Check indicator (for king in check) - game and replay boards
-            square.checkIndicator = square:CreateTexture(nil, "BORDER")
-            square.checkIndicator:SetAllPoints()
+
             square.checkIndicator:SetColorTexture(1, 0, 0, 0.5)
             square.checkIndicator:Hide()
-            
-            -- Highlight texture (for selection) - only for interactive boards
+
             if interactive then
-                square.highlight = square:CreateTexture(nil, "OVERLAY")
-                square.highlight:SetAllPoints()
                 square.highlight:SetColorTexture(0, 1, 0, 0.3)
                 square.highlight:Hide()
-            end
-            
-            -- Valid move indicator - only for interactive boards
-            if interactive then
-                square.validMove = square:CreateTexture(nil, "OVERLAY")
-                square.validMove:SetSize(15, 15)
-                square.validMove:SetPoint("CENTER")
                 square.validMove:SetColorTexture(0, 1, 0, 0.6)
                 square.validMove:Hide()
             end
-            
-            -- Piece texture
-            square.pieceTexture = square:CreateTexture(nil, "ARTWORK")
+
             square.pieceTexture:SetSize(squareSize - 4, squareSize - 4)
-            square.pieceTexture:SetPoint("CENTER")
             square.pieceTexture:Hide()
             
             square.uci = uci
@@ -445,14 +427,9 @@ function DeltaChess.UI:AnimatePieceMove(frame, fromUci, toUci, piece, onComplete
     
     -- Create or reuse the floating animation frame
     if not self.animatingPiece then
-        local animFrame = CreateFrame("Frame", "DeltaChessAnimatingPiece", UIParent)
-        animFrame:SetFrameStrata("TOOLTIP") -- Above everything
+        local animFrame = DeltaChessAnimatingPiece
+        animFrame:SetFrameStrata("TOOLTIP")
         animFrame:SetSize(SQUARE_SIZE - 4, SQUARE_SIZE - 4)
-        
-        local tex = animFrame:CreateTexture(nil, "ARTWORK")
-        tex:SetAllPoints()
-        animFrame.texture = tex
-        
         self.animatingPiece = animFrame
     end
     
@@ -631,14 +608,9 @@ function DeltaChess.UI:AnimateCastling(frame, kingFromSquare, kingToSquare, rook
     
     -- Create a second animation frame for the rook
     if not self.animatingPiece2 then
-        local animFrame = CreateFrame("Frame", "DeltaChessAnimatingPiece2", UIParent)
+        local animFrame = DeltaChessAnimatingPiece2
         animFrame:SetFrameStrata("TOOLTIP")
         animFrame:SetSize(SQUARE_SIZE - 4, SQUARE_SIZE - 4)
-        
-        local tex = animFrame:CreateTexture(nil, "ARTWORK")
-        tex:SetAllPoints()
-        animFrame.texture = tex
-        
         self.animatingPiece2 = animFrame
     end
     
@@ -824,38 +796,34 @@ end
 -- config: { parent, anchorFrame, anchorPoint, playerName, playerClass, chessColor, board, showClock, isTop }
 -- Returns: { bar, nameText, capturedContainer, clock/thinkTime (if applicable) }
 function DeltaChess.UI:CreatePlayerBar(config)
-    local bar = CreateFrame("Frame", nil, config.parent)
-    bar:SetSize(LABEL_SIZE + BOARD_SIZE, PLAYER_BAR_HEIGHT)
-    bar:SetPoint(config.anchorPoint or "TOPLEFT", config.anchorFrame, config.anchorRelPoint or "TOPLEFT", config.offsetX or 0, config.offsetY or 0)
-    
-    local bg = bar:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
-    
-    -- Name with class color - show current character for BNet friends
+    local bar = config.bar
+    if not bar then
+        bar = CreateFrame("Frame", nil, config.parent, "DeltaChessPlayerBarTemplate")
+        bar:SetSize(LABEL_SIZE + BOARD_SIZE, PLAYER_BAR_HEIGHT)
+        bar:SetPoint(config.anchorPoint or "TOPLEFT", config.anchorFrame, config.anchorRelPoint or "TOPLEFT", config.offsetX or 0, config.offsetY or 0)
+    end
+    if bar.bg and not bar._colored then
+        bar.bg:SetColorTexture(0.15, 0.15, 0.15, 0.8)
+        bar._colored = true
+    end
+
     local displayName = DeltaChess.UI:FormatDisplayName(config.playerName, config.board, true)
     local r, g, b = DeltaChess.UI:GetPlayerColor(config.playerName, config.playerClass)
-    local nameText = bar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    nameText:SetPoint("LEFT", bar, "LEFT", 5, 8)
-    nameText:SetTextColor(r, g, b)
-    nameText:SetText(displayName)
-    
-    -- Clock or thinking time (if requested). Same font/size for both so label and sizing are consistent.
-    local timeDisplay = nil
+    bar.nameText:SetTextColor(r, g, b)
+    bar.nameText:SetText(displayName)
+
+    local timeDisplay = bar.timeDisplay
     if config.showClock then
-        timeDisplay = bar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        timeDisplay:SetPoint("RIGHT", bar, "RIGHT", -10, 0)
+        if timeDisplay then timeDisplay:Show() end
+    elseif timeDisplay then
+        timeDisplay:Hide()
+        timeDisplay = nil
     end
-    
-    -- Captured pieces container
-    local capturedContainer = CreateFrame("Frame", nil, bar)
-    capturedContainer:SetSize(200, CAPTURED_PIECE_SIZE)
-    capturedContainer:SetPoint("LEFT", bar, "LEFT", 5, -10)
-    
+
     return {
         bar = bar,
-        nameText = nameText,
-        capturedContainer = capturedContainer,
+        nameText = bar.nameText,
+        capturedContainer = bar.capturedContainer,
         timeDisplay = timeDisplay,
     }
 end
@@ -901,50 +869,38 @@ function DeltaChess.UI:UpdatePlayerBarLabels(frame)
     end
 end
 
--- Create clock configuration panel (use clock checkbox, time slider, increment, optional handicap).
--- config: { parent, anchorFrame (optional), anchorPoint, anchorRelPoint, offsetX, startY, showHandicap }
+-- Wire the clock panel declared by DeltaChessClockConfigTemplate.
 -- Sets on parent: clockCheck, timeSlider, timeValue, incSlider, incValue, and if showHandicap: handicapCheck, handicapSide, handicapSecondsSlider, handicapSecondsValue.
 -- handicapSide is "challenger" or "opponent" (the side that gets less time).
--- Returns: endY (for placing content below).
 function DeltaChess.UI:CreateClockConfigPanel(parent, config)
-    local anchorFrame = config.anchorFrame or parent
-    local anchorPoint = config.anchorPoint or "TOPLEFT"
-    local anchorRelPoint = config.anchorRelPoint or "TOPLEFT"
-    local offsetX = config.offsetX or 0
-    local yPos = config.startY or -35
+    local panel = parent.clockPanel or parent
     local showHandicap = config.showHandicap and true or false
 
-    local function addY(delta)
-        yPos = yPos + (delta or 0)
-        return yPos
+    local function setCheckLabel(check, text)
+        local label = check.text or check.Text
+        if label then label:SetText(text) end
     end
 
-    -- Use clock checkbox
-    local clockCheck = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    clockCheck:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX, addY(0))
-    clockCheck.text:SetText("Use Chess Clock")
+    parent.clockCheck = panel.clockCheck
+    parent.timeValue = panel.timeValue
+    parent.timeSlider = panel.timeSlider
+    parent.incValue = panel.incValue
+    parent.incSlider = panel.incSlider
+
+    local clockCheck = parent.clockCheck
+    setCheckLabel(clockCheck, "Use Chess Clock")
     clockCheck:SetChecked(false)
-    parent.clockCheck = clockCheck
-    addY(-40)
 
     -- Clock settings container (hidden until checkbox is checked)
     local clockElements = {}
 
-    -- Time per player
-    local timeLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    timeLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(0))
-    timeLabel:SetText("Time per player (minutes):")
-    local timeValue = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    timeValue:SetPoint("LEFT", timeLabel, "RIGHT", 10, 0)
+    local timeLabel = panel.timeLabel
+    local timeValue = parent.timeValue
     timeValue:SetText("10")
-    parent.timeValue = timeValue
     table.insert(clockElements, timeLabel)
     table.insert(clockElements, timeValue)
-    addY(-25)
 
-    local timeSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-    timeSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
-    timeSlider:SetSize(305, 17)
+    local timeSlider = parent.timeSlider
     timeSlider:SetMinMaxValues(1, 60)
     timeSlider:SetValue(10)
     timeSlider:SetValueStep(1)
@@ -964,25 +920,15 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
             end
         end
     end)
-    parent.timeSlider = timeSlider
     table.insert(clockElements, timeSlider)
-    addY(-45)
 
-    -- Increment per move
-    local incLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    incLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(0))
-    incLabel:SetText("Increment per move (seconds):")
-    local incValue = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    incValue:SetPoint("LEFT", incLabel, "RIGHT", 10, 0)
+    local incLabel = panel.incLabel
+    local incValue = parent.incValue
     incValue:SetText("0")
-    parent.incValue = incValue
     table.insert(clockElements, incLabel)
     table.insert(clockElements, incValue)
-    addY(-25)
 
-    local incSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-    incSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
-    incSlider:SetSize(305, 17)
+    local incSlider = parent.incSlider
     incSlider:SetMinMaxValues(0, 30)
     incSlider:SetValue(0)
     incSlider:SetValueStep(1)
@@ -992,34 +938,27 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
     incSlider:SetScript("OnValueChanged", function(self, value)
         incValue:SetText(tostring(math.floor(value)))
     end)
-    parent.incSlider = incSlider
     table.insert(clockElements, incSlider)
-    addY(-45)
 
-    -- Handicap elements (only when clock is enabled AND handicap is checked)
     local handicapElements = {}
     local handicapCheck
 
     if showHandicap then
-        -- Handicap: one side gets less time
-        handicapCheck = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-        handicapCheck:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX, addY(0))
-        handicapCheck.text:SetText("Handicap (one side gets less time)")
-        handicapCheck:SetChecked(false)
-        parent.handicapCheck = handicapCheck
-        -- Handicap checkbox is part of clockElements (only visible when clock is enabled)
-        table.insert(clockElements, handicapCheck)
-        addY(-30)
+        parent.handicapCheck = panel.handicapCheck
+        parent.handicapSecondsValue = panel.handicapSecondsValue
+        parent.handicapSecondsSlider = panel.handicapSecondsSlider
+        parent.handicapSideDropdown = panel.handicapDropdown
 
-        local handicapSideLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        handicapSideLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(-10))
-        handicapSideLabel:SetText("Player with less time:")
+        handicapCheck = parent.handicapCheck
+        setCheckLabel(handicapCheck, "Handicap (one side gets less time)")
+        handicapCheck:SetChecked(false)
+        table.insert(clockElements, handicapCheck)
+
+        local handicapSideLabel = panel.handicapSideLabel
         table.insert(handicapElements, handicapSideLabel)
-        addY(-25)
 
         parent.handicapSide = "challenger"
-        local handicapDropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-        handicapDropdown:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX - 15, addY(5))
+        local handicapDropdown = parent.handicapSideDropdown
         UIDropDownMenu_SetWidth(handicapDropdown, 300)
         UIDropDownMenu_Initialize(handicapDropdown, function(self, level)
             local info = UIDropDownMenu_CreateInfo()
@@ -1035,25 +974,16 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
             end
         end)
         UIDropDownMenu_SetText(handicapDropdown, "Challenger")
-        parent.handicapSideDropdown = handicapDropdown
         table.insert(handicapElements, handicapDropdown)
-        addY(-30)
 
-        local handicapSecLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        handicapSecLabel:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 3, addY(-10))
-        handicapSecLabel:SetText("Seconds less:")
-        local handicapSecondsValue = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        handicapSecondsValue:SetPoint("LEFT", handicapSecLabel, "RIGHT", 10, 0)
+        local handicapSecLabel = panel.handicapSecLabel
+        local handicapSecondsValue = parent.handicapSecondsValue
         handicapSecondsValue:SetText("0")
-        parent.handicapSecondsValue = handicapSecondsValue
         table.insert(handicapElements, handicapSecLabel)
         table.insert(handicapElements, handicapSecondsValue)
-        addY(-25)
 
         local initialMaxSec = math.floor(timeSlider:GetValue()) * 60
-        local handicapSecondsSlider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-        handicapSecondsSlider:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, offsetX + 8, addY(5))
-        handicapSecondsSlider:SetSize(305, 17)
+        local handicapSecondsSlider = parent.handicapSecondsSlider
         handicapSecondsSlider:SetMinMaxValues(0, initialMaxSec)
         handicapSecondsSlider:SetValue(0)
         handicapSecondsSlider:SetValueStep(1)
@@ -1063,9 +993,7 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
         handicapSecondsSlider:SetScript("OnValueChanged", function(self, value)
             handicapSecondsValue:SetText(tostring(math.floor(value)))
         end)
-        parent.handicapSecondsSlider = handicapSecondsSlider
         table.insert(handicapElements, handicapSecondsSlider)
-        addY(-45)
     end
 
     -- Helper to show/hide a list of elements
@@ -1123,57 +1051,40 @@ function DeltaChess.UI:CreateClockConfigPanel(parent, config)
 
     -- Start with everything hidden (checkboxes default to unchecked)
     parent.UpdateClockLayout()
-
-    return yPos
 end
 
--- Create move history scroll frame within a parent panel
--- config: { parent, anchorFrame (optional), width, height, includeLabel }
--- Returns: { scrollFrame, scrollChild, historyText, label (if includeLabel), historyBg }
-function DeltaChess.UI:CreateMoveHistoryScroller(config)
-    local parent = config.parent
-    local width = config.width or RIGHT_PANEL_WIDTH
-    local height = config.height
-    local anchorFrame = config.anchorFrame or parent
-    local anchorPoint = config.anchorPoint or "TOPLEFT"
-    local yOffset = config.yOffset or 0
-    
-    local label = nil
-    if config.includeLabel then
-        label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        label:SetPoint(anchorPoint, anchorFrame, anchorPoint, 0, yOffset)
-        label:SetText("Moves")
-        -- Anchor bg to bottom of label
-        anchorFrame = label
-        anchorPoint = "BOTTOMLEFT"
-        yOffset = -5
+-- Bind a DeltaChessMoveHistoryTemplate. Returns the scroll widgets the board and replay use.
+function DeltaChess.UI:BindMoveHistory(history, width, height)
+    history.historyBg:SetSize(width, height)
+    history.historyBg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
+
+    local scroll = history.scrollFrame
+    local child = scroll:GetScrollChild() or scroll.scrollChild
+    if child and scroll:GetScrollChild() ~= child then
+        scroll:SetScrollChild(child)
     end
-    
-    local historyBg = parent:CreateTexture(nil, "BACKGROUND")
-    historyBg:SetPoint("TOPLEFT", anchorFrame, anchorPoint, 0, yOffset)
-    historyBg:SetSize(width, height)
-    historyBg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
-    
-    local scrollFrame = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", historyBg, "TOPLEFT", 5, -5)
-    scrollFrame:SetSize(width - 30, height - 10)
-    
-    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetSize(width - 35, 500)
-    scrollFrame:SetScrollChild(scrollChild)
-    
-    local historyText = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    historyText:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+    child:SetSize(width - 35, 500)
+
+    local historyText = child.historyText
+    if not historyText then
+        for _, region in ipairs({ child:GetRegions() }) do
+            if region.GetObjectType and region:GetObjectType() == "FontString" then
+                historyText = region
+                child.historyText = region
+                break
+            end
+        end
+    end
     historyText:SetWidth(width - 40)
     historyText:SetJustifyH("LEFT")
     historyText:SetSpacing(2)
-    
+
     return {
-        scrollFrame = scrollFrame,
-        scrollChild = scrollChild,
+        scrollFrame = scroll,
+        scrollChild = child,
         historyText = historyText,
-        label = label,
-        historyBg = historyBg,
+        label = history.label,
+        historyBg = history.historyBg,
     }
 end
 
@@ -1366,6 +1277,75 @@ function DeltaChess.UI:FormatMoveAlgebraic(move)
 end
 
 -- Show chess board for a game
+function DeltaChess.UI:WireBoardFrame(frame)
+    local totalWidth = LABEL_SIZE + BOARD_SIZE + 15 + RIGHT_PANEL_WIDTH + 15
+    local totalHeight = 30 + PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT + 10
+    local compactWidth = LABEL_SIZE + BOARD_SIZE + 15
+
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetFrameLevel(250)
+    DeltaChess:MakeDraggable(frame, function(self)
+        self:StopMovingOrSizing()
+        if DeltaChess.db and DeltaChess.db.settings then
+            local point, _, relativePoint, xOfs, yOfs = self:GetPoint(1)
+            if point then
+                DeltaChess.db.settings.boardPosition = { point = point, relativePoint = relativePoint, x = xOfs, y = yOfs }
+            end
+        end
+    end)
+    frame:SetScript("OnHide", function(self)
+        local brd = DeltaChess.GetBoard(self.gameId)
+        if brd and brd:OneOpponentIsEngine() and brd:IsActive() then
+            brd:PauseGame()
+        end
+    end)
+    if frame.CloseButton then
+        frame.CloseButton:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+    end
+
+    frame.minimizeBtn:SetScript("OnClick", function()
+        frame.isMinimized = not frame.isMinimized
+        if DeltaChess.db and DeltaChess.db.settings then
+            DeltaChess.db.settings.boardMinimized = frame.isMinimized
+        end
+        if frame.isMinimized then
+            frame.rightPanel:Hide()
+            frame:SetSize(compactWidth, totalHeight)
+            frame:SetScale(0.75)
+            frame.minimizeBtn:SetText("+")
+        else
+            frame.rightPanel:Show()
+            frame:SetSize(totalWidth, totalHeight)
+            frame:SetScale(1)
+            frame.minimizeBtn:SetText("−")
+        end
+    end)
+    frame.flipButton:SetScript("OnClick", function()
+        frame.flipBoard = not frame.flipBoard
+        DeltaChess.UI:RecreateBoardSquares(frame, true)
+        DeltaChess.UI:AttachSquareHandlers(frame)
+        DeltaChess.UI:UpdatePlayerBarLabels(frame)
+        DeltaChess.UI:UpdateBoard(frame)
+    end)
+
+    local historyHeight = PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT - 70
+    local historyInfo = self:BindMoveHistory(frame.rightPanel.history, RIGHT_PANEL_WIDTH, historyHeight)
+    frame.historyText = historyInfo.historyText
+    frame.historyScrollChild = historyInfo.scrollChild
+    frame.historyScroll = historyInfo.scrollFrame
+    frame.turnLabel = frame.rightPanel.turnLabel
+    frame.resignButton = frame.rightPanel.resignButton
+    frame.drawButton = frame.rightPanel.drawButton
+    frame.closeButton = frame.rightPanel.closeButton
+
+    if frame.waitingOverlay and frame.waitingOverlay.bg then
+        frame.waitingOverlay.bg:SetColorTexture(0, 0, 0, 0.5)
+    end
+    frame._wired = true
+end
+
 function DeltaChess:ShowChessBoard(gameId)
     local board = DeltaChess.GetBoard(gameId)
     if not board then
@@ -1388,9 +1368,17 @@ function DeltaChess:ShowChessBoard(gameId)
         end
     end
 
-    -- Close existing board if open
-    if DeltaChess.UI.activeFrame then
+    local frame = ChessBoardFrame
+    if not frame._wired then
+        self.UI:WireBoardFrame(frame)
+    end
+    -- Hide a different board, or this one only when switching games, so reopening
+    -- the same computer game does not pause the clock we just resumed.
+    if DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame ~= frame and DeltaChess.UI.activeFrame:IsShown() then
         DeltaChess.UI.activeFrame:Hide()
+    end
+    if frame:IsShown() and frame.gameId and frame.gameId ~= gameId then
+        frame:Hide()
     end
     
     -- Get participant info using shared helper
@@ -1406,246 +1394,77 @@ function DeltaChess:ShowChessBoard(gameId)
     local white = board:GetWhitePlayerName()
     local black = board:GetBlackPlayerName()
     
-    -- Create main frame
     local totalWidth = LABEL_SIZE + BOARD_SIZE + 15 + RIGHT_PANEL_WIDTH + 15
     local totalHeight = 30 + PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT + 10
-    
-    local frame = CreateFrame("Frame", "ChessBoardFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(totalWidth, totalHeight)
-    -- Restore saved position or center
+    local compactWidth = LABEL_SIZE + BOARD_SIZE + 15
+
     local pos = DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.boardPosition
+    frame:ClearAllPoints()
     if pos and pos.point and pos.relativePoint and pos.x and pos.y then
-        frame:ClearAllPoints()
         frame:SetPoint(pos.point, UIParent, pos.relativePoint, pos.x, pos.y)
     else
         frame:SetPoint("CENTER")
     end
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        if DeltaChess.db and DeltaChess.db.settings then
-            local point, _, relativePoint, xOfs, yOfs = self:GetPoint(1)
-            if point then
-                DeltaChess.db.settings.boardPosition = { point = point, relativePoint = relativePoint, x = xOfs, y = yOfs }
-            end
-        end
-    end)
-    -- Pause timer when closing via X (vs computer only)
-    frame:SetScript("OnHide", function(self)
-        local brd = DeltaChess.GetBoard(self.gameId)
-        if brd and brd:OneOpponentIsEngine() and brd:IsActive() then
-            brd:PauseGame()
-        end
-    end)
-    frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    frame:SetFrameLevel(250)
     frame.TitleText:SetText("DeltaChess")
-    
-    -- Override the template's close button to avoid taint issues
-    if frame.CloseButton then
-        frame.CloseButton:SetScript("OnClick", function()
-            frame:Hide()
-        end)
-    end
-    
-    -- Compact width when minimized (board + margins, no right panel)
-    local compactWidth = LABEL_SIZE + BOARD_SIZE + 15
-    frame.isMinimized = false
-    
-    -- Minimize button in title bar (to the left of the close button)
-    local minimizeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    minimizeBtn:SetSize(28, 22)
-    minimizeBtn:SetPoint("TOPRIGHT", frame.CloseButton, "TOPLEFT", 0, 0)
-    minimizeBtn:SetText("−")
-    minimizeBtn:SetScript("OnClick", function()
-        frame.isMinimized = not frame.isMinimized
-        if DeltaChess.db and DeltaChess.db.settings then
-            DeltaChess.db.settings.boardMinimized = frame.isMinimized
-        end
-        if frame.isMinimized then
-            frame.rightPanel:Hide()
-            frame:SetSize(compactWidth, totalHeight)
-            frame:SetScale(0.75)
-            minimizeBtn:SetText("+")
-        else
-            frame.rightPanel:Show()
-            frame:SetSize(totalWidth, totalHeight)
-            frame:SetScale(1)
-            minimizeBtn:SetText("−")
-        end
-    end)
-    frame.minimizeBtn = minimizeBtn
-    
-    -- Flip board button in title bar (to the left of minimize)
-    local flipBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    flipBtn:SetSize(35, 22)
-    flipBtn:SetPoint("TOPRIGHT", minimizeBtn, "TOPLEFT", 0, 0)
-    flipBtn:SetText("Flip")
-    flipBtn:SetScript("OnClick", function()
-        frame.flipBoard = not frame.flipBoard
-        DeltaChess.UI:RecreateBoardSquares(frame, true)
-        DeltaChess.UI:AttachSquareHandlers(frame)
-        DeltaChess.UI:UpdatePlayerBarLabels(frame)
-        DeltaChess.UI:UpdateBoard(frame)
-    end)
-    frame.flipButton = flipBtn
-    
-    -- Store references
+
     frame.gameId = gameId
     frame.board = board
     frame.selectedSquare = nil
     frame.validMoves = {}
+    frame.premove = nil
+    frame.premoveFrom = nil
+    frame._premoveGameId = nil
+    frame._drag = nil
+    if frame._dragGhost then
+        frame._dragGhost:Hide()
+    end
+    if frame.waitingOverlay then
+        frame.waitingOverlay:Hide()
+    end
     frame.flipBoard = flipBoard
     frame.playerColor = playerColor
     frame.myChessColor = myChessColor
     frame.opponentChessColor = opponentChessColor
-    frame.gameEndShown = false  -- Reset so game-end popup can fire for this game
-    
-    -- Store game data for potential restoration after game end
+    frame.gameEndShown = false
+    frame._lastHistoryStr = nil
     frame.isVsComputer = isVsComputer
     frame.white = white
     frame.black = black
-    
-    local leftMargin = 10
-    local topOffset = -30
-    local settings = board:GetGameMeta("settings") or {}
-    
-    -- ==================== OPPONENT BAR (TOP) ====================
+
     local opponentBarInfo = DeltaChess.UI:CreatePlayerBar({
-        parent = frame,
-        anchorFrame = frame,
-        anchorPoint = "TOPLEFT",
-        anchorRelPoint = "TOPLEFT",
-        offsetX = leftMargin,
-        offsetY = topOffset,
+        bar = frame.topBar,
         playerName = opponentName,
         playerClass = opponentClass,
         board = board,
         showClock = true,
         chessColor = opponentChessColor,
     })
-    local opponentBar = opponentBarInfo.bar
     frame.topBarNameText = opponentBarInfo.nameText
     frame.topBarClock = opponentBarInfo.timeDisplay
     frame.topBarCapturedContainer = opponentBarInfo.capturedContainer
     frame.opponentCapturedContainer = opponentBarInfo.capturedContainer
-    frame.opponentCapturedColor = myChessColor  -- Opponent captures MY pieces
+    frame.opponentCapturedColor = myChessColor
     frame.opponentClock = opponentBarInfo.timeDisplay
     frame.opponentClockColor = opponentChessColor
-    
-    -- ==================== BOARD ====================
-    local boardContainer = CreateFrame("Frame", nil, frame)
-    boardContainer:SetSize(BOARD_SIZE + LABEL_SIZE, BOARD_SIZE + LABEL_SIZE)
-    boardContainer:SetPoint("TOPLEFT", opponentBar, "BOTTOMLEFT", 0, 0)
-    frame.boardContainer = boardContainer
-    
-    -- Create squares (keyed by UCI notation)
-    frame.squares = DeltaChess.UI:CreateBoardSquares(boardContainer, SQUARE_SIZE, LABEL_SIZE, flipBoard, true)
-    
-    -- Add click and drag handlers
+
+    DeltaChess.UI:RecreateBoardSquares(frame, true)
     DeltaChess.UI:AttachSquareHandlers(frame)
-    
-    -- ==================== PLAYER BAR (BOTTOM) ====================
+
     local playerBarInfo = DeltaChess.UI:CreatePlayerBar({
-        parent = frame,
-        anchorFrame = boardContainer,
-        anchorPoint = "TOPLEFT",
-        anchorRelPoint = "BOTTOMLEFT",
-        offsetX = 0,
-        offsetY = 0,
+        bar = frame.bottomBar,
         playerName = myName,
         playerClass = myClass,
         board = board,
         showClock = true,
         chessColor = myChessColor,
     })
-    local playerBar = playerBarInfo.bar
     frame.bottomBarNameText = playerBarInfo.nameText
     frame.bottomBarClock = playerBarInfo.timeDisplay
     frame.bottomBarCapturedContainer = playerBarInfo.capturedContainer
     frame.playerCapturedContainer = playerBarInfo.capturedContainer
-    frame.playerCapturedColor = opponentChessColor  -- Player captures OPPONENT pieces
+    frame.playerCapturedColor = opponentChessColor
     frame.playerClock = playerBarInfo.timeDisplay
     frame.playerClockColor = myChessColor
-    
-    -- ==================== RIGHT PANEL ====================
-    local rightPanel = CreateFrame("Frame", nil, frame)
-    rightPanel:SetSize(RIGHT_PANEL_WIDTH, PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT)
-    rightPanel:SetPoint("TOPLEFT", opponentBar, "TOPRIGHT", 10, 0)
-    frame.rightPanel = rightPanel
-    
-    -- Move history scroll frame (top portion)
-    local historyHeight = rightPanel:GetHeight() - 70
-    local historyInfo = DeltaChess.UI:CreateMoveHistoryScroller({
-        parent = rightPanel,
-        width = RIGHT_PANEL_WIDTH,
-        height = historyHeight,
-        includeLabel = true,
-    })
-    frame.historyText = historyInfo.historyText
-    frame.historyScrollChild = historyInfo.scrollChild
-    frame.historyScroll = historyInfo.scrollFrame
-    
-    -- Turn indicator
-    local turnLabel = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    turnLabel:SetPoint("BOTTOMLEFT", rightPanel, "BOTTOMLEFT", 0, 35)
-    frame.turnLabel = turnLabel
-    
-    -- Action buttons (bottom row)
-    local buttonWidth = 65
-    local buttonSpacing = 5
-    
-    local resignButton = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    resignButton:SetSize(buttonWidth, 25)
-    resignButton:SetPoint("BOTTOMLEFT", rightPanel, "BOTTOMLEFT", 0, 5)
-    resignButton:SetText("Resign")
-    resignButton:SetScript("OnClick", function()
-        local board = DeltaChess.GetBoard(gameId)
-        if not board or not board:IsActive() then return end
-        DeltaChess._resignConfirmGameId = gameId
-        DeltaChess.UI:ShowGamePopup(gameId, "CHESS_RESIGN_CONFIRM", nil, gameId)
-    end)
-    frame.resignButton = resignButton
-    
-    local drawButton = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    drawButton:SetSize(buttonWidth, 25)
-    drawButton:SetPoint("LEFT", resignButton, "RIGHT", buttonSpacing, 0)
-    frame.drawButton = drawButton
-    
-    if isVsComputer then
-        drawButton:SetText("Back")
-        drawButton:SetScript("OnClick", function()
-            DeltaChess:TakeBackMove(gameId)
-        end)
-    else
-        drawButton:SetText("Remis")
-        drawButton:SetScript("OnClick", function()
-            DeltaChess:OfferDraw(gameId)
-        end)
-    end
-    
-    local closeButton = CreateFrame("Button", nil, rightPanel, "UIPanelButtonTemplate")
-    closeButton:SetSize(buttonWidth, 25)
-    closeButton:SetPoint("LEFT", drawButton, "RIGHT", buttonSpacing, 0)
-    frame.closeButton = closeButton
-    if isVsComputer then
-        closeButton:SetText("Pause")
-        closeButton:SetScript("OnClick", function()
-            local board = DeltaChess.GetBoard(gameId)
-            if board then
-                board:PauseGame()
-            end
-            frame:Hide()
-        end)
-    else
-        closeButton:SetText("Pause")
-        closeButton:SetScript("OnClick", function()
-            DeltaChess:RequestPause(gameId)
-        end)
-    end
     
     -- Restore saved minimized state when opening the board
     frame.isMinimized = (DeltaChess.db and DeltaChess.db.settings and DeltaChess.db.settings.boardMinimized) or false
@@ -2116,29 +1935,15 @@ function DeltaChess.UI:ShowWaitingOverlay(frame, show)
     if not frame then return end
     
     if show then
-        -- Create overlay if it doesn't exist
-        if not frame.waitingOverlay then
-            local overlay = CreateFrame("Frame", nil, frame)
-            overlay:SetAllPoints(frame.boardContainer)
+        local overlay = frame.waitingOverlay
+        if overlay then
+            if overlay.bg and not overlay.bg._colored then
+                overlay.bg:SetColorTexture(0, 0, 0, 0.5)
+                overlay.bg._colored = true
+            end
             overlay:SetFrameLevel(frame:GetFrameLevel() + 10)
-            
-            local bg = overlay:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints()
-            bg:SetColorTexture(0, 0, 0, 0.5)
-            
-            local text = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-            text:SetPoint("CENTER")
-            text:SetText("|cFFFFFF00Waiting for confirmation...|r")
-            
-            -- Spinning indicator
-            local spinner = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-            spinner:SetPoint("CENTER", text, "TOP", 0, 20)
-            spinner:SetText("|cFFFFFF00...|r")
-            
-            frame.waitingOverlay = overlay
+            overlay:Show()
         end
-        
-        frame.waitingOverlay:Show()
         
         -- Disable action buttons
         if frame.resignButton then
@@ -2181,48 +1986,20 @@ function DeltaChess.UI:ShowPromotionDialog(frame, fromSquare, toSquare, isVsComp
     local board = DeltaChess.GetBoard(frame.gameId)
     if not board then return end
     local playerColor = board:GetCurrentTurn()
-    local pieceSize = 36
-    local padding = 8
-    local btnSpacing = 6
-    local dialogWidth = (pieceSize + padding * 2) * 4 + btnSpacing * 3 + 30
-    local titleAreaHeight = 50
-    local dialogHeight = titleAreaHeight + (pieceSize + padding * 2) + 20
 
     if not DeltaChess.frames.promotionDialog then
-        local dialog = CreateFrame("Frame", "ChessPromotionDialog", UIParent, "BasicFrameTemplateWithInset")
-        dialog:SetSize(dialogWidth, dialogHeight)
-        dialog:SetPoint("CENTER")
-        dialog:SetMovable(false)
+        local dialog = ChessPromotionDialog
         dialog:SetFrameStrata("FULLSCREEN_DIALOG")
         dialog:SetFrameLevel(350)
+        dialog:SetMovable(false)
         dialog.TitleText:SetText("Promote pawn to:")
-
-        local pieceTypes = {"q", "r", "b", "n"}
-        for i, pieceType in ipairs(pieceTypes) do
-            local btn = CreateFrame("Button", nil, dialog)
-            btn:SetSize(pieceSize + padding * 2, pieceSize + padding * 2)
-            btn:SetPoint("TOPLEFT", dialog, "TOPLEFT", 15 + (i - 1) * (pieceSize + padding * 2 + btnSpacing), -titleAreaHeight)
-
-            -- Light background so black pieces are visible
-            local bg = btn:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints()
-            bg:SetColorTexture(0.85, 0.8, 0.7, 1)
-            btn.bg = bg
-
-            local tex = btn:CreateTexture(nil, "ARTWORK")
-            tex:SetSize(pieceSize, pieceSize)
-            tex:SetPoint("CENTER")
-            tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-            btn.texture = tex
-
-            local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints()
-            hl:SetColorTexture(1, 1, 1, 0.4)
-            btn:SetHighlightTexture(hl)
-
-            dialog["pieceBtn_" .. pieceType] = btn
+        for _, pieceType in ipairs({ "q", "r", "b", "n" }) do
+            local btn = dialog["pieceBtn_" .. pieceType]
+            btn.bg:SetColorTexture(0.85, 0.8, 0.7, 1)
+            btn.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            btn.highlight:SetColorTexture(1, 1, 1, 0.4)
+            btn:SetHighlightTexture(btn.highlight)
         end
-
         DeltaChess.frames.promotionDialog = dialog
     end
 
@@ -2522,11 +2299,9 @@ end
 local function GetDragGhost(frame)
     local ghost = frame._dragGhost
     if not ghost then
-        ghost = CreateFrame("Frame", nil, frame)
+        ghost = CreateFrame("Frame", nil, frame, "DeltaChessDragGhostTemplate")
         ghost:SetFrameStrata("TOOLTIP")
         ghost:EnableMouse(false)
-        ghost.tex = ghost:CreateTexture(nil, "OVERLAY")
-        ghost.tex:SetAllPoints()
         ghost:Hide()
         frame._dragGhost = ghost
     end
