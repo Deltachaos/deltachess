@@ -49,13 +49,23 @@ function DeltaChess.AI:PauseIfBoardClosed(gameId)
 
     local frame = DeltaChess.UI and DeltaChess.UI.activeFrame
     if frame and frame.gameId == gameId and frame:IsShown() then return end
-    if DeltaChess.UI and DeltaChess.UI.PremovePending and DeltaChess.UI:PremovePending(gameId) then
+    -- A queued premove on the board continues the game; wait for it (or schedule it).
+    if board:GetPremove() then
+        if DeltaChess.SchedulePremove then
+            DeltaChess.SchedulePremove(gameId)
+        end
+        return
+    end
+    if DeltaChess.IsPremovePending and DeltaChess.IsPremovePending(gameId) then
         return
     end
 
     board:PauseGame()
     if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
         DeltaChess.Minimap:UpdateYourTurnHighlight()
+    end
+    if DeltaChess.RefreshGameListIfShown then
+        DeltaChess:RefreshGameListIfShown()
     end
 end
 
@@ -163,11 +173,9 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
                     return
                 end
 
-                -- The premove lives on the game, so play it even when the window
-                -- is showing a different game. Pause only if nothing continues.
-                if DeltaChess.UI and DeltaChess.UI.SchedulePremove then
-                    local premoveFrame = (DeltaChess.UI.activeFrame and DeltaChess.UI.activeFrame.gameId == gameId) and DeltaChess.UI.activeFrame or nil
-                    DeltaChess.UI:SchedulePremove(gameId, premoveFrame)
+                -- Premoves are stored on the board; play if any, else pause when closed.
+                if DeltaChess.SchedulePremove then
+                    DeltaChess.SchedulePremove(gameId)
                 end
                 DeltaChess.AI:PauseIfBoardClosed(gameId)
             end)

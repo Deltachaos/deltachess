@@ -652,6 +652,11 @@ function DeltaChess:ApplyConfirmedMove(gameId, moveData)
     local lastMove = board:GetLastMove()
     local wasCapture = lastMove and lastMove:IsCapture()
     DeltaChess.Sound:PlayMoveSound(board, true, wasCapture, board)
+
+    -- Own move is confirmed: refresh turn status in the open game list
+    if DeltaChess.RefreshGameListIfShown then
+        DeltaChess:RefreshGameListIfShown()
+    end
 end
 
 -- Send move that requires confirmation before being applied locally
@@ -855,7 +860,10 @@ function DeltaChess:HandleOpponentMove(moveData, sender)
         DeltaChess.UI:ShowGameEnd(moveData.gameId, frame)
         return
     end
-    
+
+    if DeltaChess.SchedulePremove then
+        DeltaChess.SchedulePremove(moveData.gameId)
+    end
     DeltaChess:NotifyItIsYourTurn(moveData.gameId, sender)
 end
 

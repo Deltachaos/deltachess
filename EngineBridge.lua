@@ -283,6 +283,150 @@ function DeltaChess.GetPremoveMovesAt(board, fromSquare, color)
     return moves
 end
 
+--------------------------------------------------------------------------------
+-- Premove execution (queue lives on Board; timers are per gameId)
+--------------------------------------------------------------------------------
+
+local premoveTimers = {}
+
+local function myPremoveColor(board, gameId)
+    if board:OneOpponentIsEngine() then
+        return board:GetPlayerColor()
+    end
+    if DeltaChess.GetMyColor then
+        return DeltaChess:GetMyColor(gameId)
+    end
+    return nil
+end
+
+local function refreshPremoveUi(gameId)
+    local frame = DeltaChess.UI and DeltaChess.UI.activeFrame
+    if not frame or frame.gameId ~= gameId then return end
+    if DeltaChess.UI.RefreshPremoveMarkers then
+        DeltaChess.UI:RefreshPremoveMarkers(frame)
+    elseif DeltaChess.UI.UpdateBoard then
+        DeltaChess.UI:UpdateBoard(frame)
+    end
+end
+
+local function afterLocalMove(gameId, board, wasPlayerMove)
+    local lastMove = board:GetLastMove()
+    local wasCapture = lastMove and lastMove.IsCapture and lastMove:IsCapture()
+        or (lastMove and lastMove.captured ~= nil)
+    if DeltaChess.Sound and DeltaChess.Sound.PlayMoveSound then
+        DeltaChess.Sound:PlayMoveSound(board, wasPlayerMove, wasCapture, board)
+    end
+    local frame = DeltaChess.UI and DeltaChess.UI.activeFrame
+    if frame and frame.gameId == gameId and DeltaChess.UI.UpdateBoardAnimated then
+        DeltaChess.UI:UpdateBoardAnimated(frame, true)
+    end
+    if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
+        DeltaChess.Minimap:UpdateYourTurnHighlight()
+    end
+    if board:IsEnded() then
+        local endFrame = (frame and frame.gameId == gameId) and frame or nil
+        if DeltaChess.UI and DeltaChess.UI.ShowGameEnd then
+            DeltaChess.UI:ShowGameEnd(gameId, endFrame)
+        end
+        return true
+    end
+    return false
+end
+
+-- Apply a queued premove from board state. Promotion defaults to queen.
+-- Returns true if a legal move was played.
+local function applyQueuedPremove(gameId, board, pm)
+    local match
+    for _, move in ipairs(DeltaChess.GetLegalMovesAt(board, pm.from)) do
+        if move.square == pm.to then
+            match = move
+            break
+        end
+    end
+    if not match then return false end
+
+    local uci = pm.from .. pm.to .. (match.promotion and "q" or "")
+    if board:OneOpponentIsEngine() then
+        DeltaChess.MakeMove(board, uci)
+        if afterLocalMove(gameId, board, true) then
+            return true
+        end
+        if DeltaChess.AI and DeltaChess.AI.MakeMove then
+            DeltaChess.AI:MakeMove(gameId, 500)
+        end
+        return true
+    end
+    if DeltaChess.SendMoveWithConfirmation then
+        return DeltaChess:SendMoveWithConfirmation(gameId, uci) ~= false
+    end
+    return false
+end
+
+local function tryPlayPremove(gameId)
+    premoveTimers[gameId] = nil
+    local board = DeltaChess.GetBoard(gameId)
+    local pm = board and board:GetPremove()
+    if not board or not pm then
+        if DeltaChess.AI and DeltaChess.AI.PauseIfBoardClosed then
+            DeltaChess.AI:PauseIfBoardClosed(gameId)
+        end
+        return
+    end
+    if board:IsEnded() or board:IsPaused() then
+        board:ClearPremove()
+        refreshPremoveUi(gameId)
+        return
+    end
+    if board:GetCurrentTurn() ~= myPremoveColor(board, gameId) then
+        return
+    end
+    local locked = false
+    if not board:OneOpponentIsEngine() and type(DeltaChess.IsBoardLocked) == "function" then
+        locked = DeltaChess:IsBoardLocked(gameId)
+    end
+    if (DeltaChess._actionBlocked or 0) > 0 or locked then
+        premoveTimers[gameId] = true
+        C_Timer.After(0.1, function() tryPlayPremove(gameId) end)
+        return
+    end
+
+    board:ClearPremove()
+    refreshPremoveUi(gameId)
+    applyQueuedPremove(gameId, board, pm)
+    if DeltaChess.AI and DeltaChess.AI.PauseIfBoardClosed then
+        DeltaChess.AI:PauseIfBoardClosed(gameId)
+    end
+end
+
+--- True while a short timer is waiting to play this game's queued premove.
+function DeltaChess.IsPremovePending(gameId)
+    return premoveTimers[gameId] == true
+end
+
+--- Play this game's board-stored premove once it is that side's turn.
+-- Independent of which game the board window is showing.
+function DeltaChess.SchedulePremove(gameId)
+    local board = DeltaChess.GetBoard(gameId)
+    if not board or not board:GetPremove() then return end
+    if board:IsEnded() or board:IsPaused() then return end
+    if board:GetCurrentTurn() ~= myPremoveColor(board, gameId) then return end
+    if premoveTimers[gameId] then return end
+    premoveTimers[gameId] = true
+    C_Timer.After(0.1, function() tryPlayPremove(gameId) end)
+end
+
+--- After a reload, play any queued premoves that are already the player's turn.
+-- Premoves are serialized with the board; only the in-memory timer is lost.
+function DeltaChess.ResumePendingPremoves()
+    if not DeltaChess.db or not DeltaChess.db.games then return end
+    for gameId, board in pairs(DeltaChess.db.games) do
+        if board and board.IsActive and board:IsActive() and board:GetPremove()
+            and board:GetCurrentTurn() == myPremoveColor(board, gameId) then
+            DeltaChess.SchedulePremove(gameId)
+        end
+    end
+end
+
 --- Check if a move is legal.
 -- @param board Board object from framework
 -- @param fromRow number
@@ -315,7 +459,12 @@ end
 -- @param uci string UCI move (e.g., "e2e4", "e7e8q")
 -- @return Board or nil, error message
 function DeltaChess.MakeMove(board, uci)
-    return board:MakeMoveUci(uci, { timestamp = DeltaChessFramework.Util.TimeNow() })
+    local result, err = board:MakeMoveUci(uci, { timestamp = DeltaChessFramework.Util.TimeNow() })
+    -- Local player moves (vs computer / premoves) do not go through NotifyItIsYourTurn.
+    if result and DeltaChess.RefreshGameListIfShown then
+        DeltaChess:RefreshGameListIfShown()
+    end
+    return result, err
 end
 
 --------------------------------------------------------------------------------

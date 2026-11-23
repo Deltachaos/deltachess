@@ -124,6 +124,10 @@ local function Initialize()
     -- Engine searches live in memory only. A reload during the computer's move
     -- leaves the game running on the computer's turn with no session; start it again.
     DeltaChess.AI:ResumeInterruptedComputerMoves()
+
+    -- Premoves are stored on each board (and survive SavedVariables). Only the
+    -- short play-timer is lost on reload; fire any that are already our turn.
+    DeltaChess.ResumePendingPremoves()
     
     DeltaChess:Print("DeltaChess addon loaded! Use /chess to challenge a player or /chess menu to open settings.")
     
@@ -442,7 +446,17 @@ function DeltaChess:IsMyTurnInAnyGame()
     return false
 end
 
--- Common: notify user that opponent moved and it's their turn (human or computer)
+-- Refresh the main-menu game list when it is open (turn, pause, ended, …).
+function DeltaChess:RefreshGameListIfShown()
+    local menu = self.frames and self.frames.mainMenu
+    if menu and menu:IsShown() then
+        self:RefreshMainMenuContent()
+    end
+end
+
+-- Common: notify user that opponent moved and it's their turn (human or computer).
+-- Called for computer games and player-vs-player, so this is the shared place to
+-- refresh turn-dependent UI after an opponent move.
 function DeltaChess:NotifyItIsYourTurn(gameId, opponentDisplayName)
     local board = DeltaChess.GetBoard(gameId)
     if not board then return end
@@ -459,6 +473,7 @@ function DeltaChess:NotifyItIsYourTurn(gameId, opponentDisplayName)
     if DeltaChess.Minimap and DeltaChess.Minimap.UpdateYourTurnHighlight then
         DeltaChess.Minimap:UpdateYourTurnHighlight()
     end
+    self:RefreshGameListIfShown()
     
     -- Sound is now handled by the Sound module in HandleOpponentMove/ChessAI
 end
