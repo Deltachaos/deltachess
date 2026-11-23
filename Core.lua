@@ -1828,52 +1828,33 @@ function DeltaChess:ShowComputerGameWindow()
         openingBookCheck:SetChecked(true)
 
         local openingBookList = frame.openingBookList
-        local openingBookListMaxWidth = 250
         openingBookList:ClearAllPoints()
         openingBookList:SetPoint("TOPLEFT", openingBookCheck, "BOTTOMLEFT", 5, 0)
-        openingBookList:SetWidth(openingBookListMaxWidth)
+        openingBookList:SetWidth(250)
         openingBookList:SetJustifyH("LEFT")
-        openingBookList:SetWordWrap(false)
+        openingBookList:SetJustifyV("TOP")
+        openingBookList:SetWordWrap(true)
         openingBookList:SetTextColor(0.6, 0.6, 0.6)
-
-        local function setTruncatedOpeningBookText(text)
-            openingBookList:SetText(text)
-            if openingBookList:GetStringWidth() <= openingBookListMaxWidth then
-                return
-            end
-            local ellipsis = "..."
-            local lo, hi = 0, #text
-            while lo < hi do
-                local mid = math.floor((lo + hi + 1) / 2)
-                openingBookList:SetText(text:sub(1, mid) .. ellipsis)
-                if openingBookList:GetStringWidth() <= openingBookListMaxWidth then
-                    lo = mid
-                else
-                    hi = mid - 1
-                end
-            end
-            openingBookList:SetText(text:sub(1, lo) .. ellipsis)
-        end
 
         local function updateOpeningBookList(elo)
             local OpeningBook = DeltaChessFramework.OpeningBook
             if not OpeningBook or not OpeningBook.IsAvailable() then
                 openingBookCheck:SetChecked(false)
                 openingBookCheck:Disable()
-                setTruncatedOpeningBookText("Opening book library not available")
+                openingBookList:SetText("Opening book library not available")
                 return
             end
             openingBookCheck:Enable()
             local books = OpeningBook.GetBooksForElo(elo)
             if not books or #books == 0 then
-                setTruncatedOpeningBookText("No books for this ELO")
+                openingBookList:SetText("No books for this ELO")
                 return
             end
             local names = {}
             for i = 1, #books do
                 names[i] = books[i].name or books[i].id
             end
-            setTruncatedOpeningBookText(table.concat(names, ", "))
+            openingBookList:SetText(table.concat(names, ", "))
         end
         frame.updateOpeningBookList = updateOpeningBookList
         

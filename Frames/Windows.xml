@@ -310,8 +310,8 @@
                         <Anchor point="TOPLEFT" x="20" y="-242"/>
                     </Anchors>
                 </FontString>
-                <FontString parentKey="openingBookList" inherits="GameFontNormalSmall" justifyH="LEFT">
-                    <Size x="250" y="14"/>
+                <FontString parentKey="openingBookList" inherits="GameFontNormalSmall" justifyH="LEFT" justifyV="TOP">
+                    <Size x="250" y="40"/>
                     <Color r="0.6" g="0.6" b="0.6"/>
                     <Anchors>
                         <Anchor point="TOPLEFT" x="1" y="1"/>
