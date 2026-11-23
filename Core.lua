@@ -876,6 +876,7 @@ function DeltaChess:ShowReplayWindow(board)
         end)
         local historyHeight = PLAYER_BAR_HEIGHT + BOARD_SIZE + LABEL_SIZE + PLAYER_BAR_HEIGHT - 100
         local historyInfo = DeltaChess.UI:BindMoveHistory(frame.rightPanel.history, RIGHT_PANEL_WIDTH, historyHeight)
+        frame.historyInfo = historyInfo
         frame.historyText = historyInfo.historyText
         frame.rightPanel.closeBtn:SetScript("OnClick", function()
             frame:Hide()
@@ -892,6 +893,7 @@ function DeltaChess:ShowReplayWindow(board)
         frame.moves[i] = DeltaChessFramework.BoardMove.Wrap(moveData, nil, i)
     end
     frame.currentMoveIndex = 0
+    frame.moveDurations = board:GetMoveDurations()
     frame.myChessColor = myChessColor
     frame.opponentChessColor = opponentChessColor
     frame.flipBoard = flipBoard
@@ -956,8 +958,7 @@ function DeltaChess:ShowReplayWindow(board)
         frame.moveLabel:SetText(string.format("Move: %d / %d", frame.currentMoveIndex, #frame.moves))
         
         -- Update move history with highlighting for current move
-        local historyStr = DeltaChess.UI:FormatMoveHistoryText(frame.moves, frame.currentMoveIndex)
-        frame.historyText:SetText(historyStr)
+        DeltaChess.UI:RenderMoveList(frame.historyInfo, frame.moves, frame.moveDurations, frame.currentMoveIndex)
         
         -- Update captured pieces display from snapshot board
         local myAdvantage = snapshotBoard:CalculateMaterialAdvantage(myChessColor)
