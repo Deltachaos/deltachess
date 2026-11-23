@@ -31,7 +31,7 @@ jobs:
       - name: Run tests
         run: |
           cd .release/DeltaChess
-          lua5.1 Libs/LibUnitWow/run.lua --no-toc
+          FAIL_ON_MISSING_SNAPSHOTS=1 TEST_WORKERS=$(nproc --all) lua5.1 Libs/LibUnitWow/run.lua --no-toc
 
   package:
     runs-on: ubuntu-latest
