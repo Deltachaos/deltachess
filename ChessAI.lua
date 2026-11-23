@@ -111,6 +111,11 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
 
         local difficulty = board:GetEngineElo()
         local engineName = engine.name or engine.id
+        local settings = board:GetGameMeta("settings") or {}
+        local useOpeningBook = settings.useOpeningBook
+        if useOpeningBook == nil then
+            useOpeningBook = true
+        end
         local moveApplied = false
 
         -- Function to apply a validated move. Returns true if the move was accepted
@@ -186,6 +191,7 @@ function DeltaChess.AI:MakeMove(gameId, delayMs)
         local session = DeltaChessFramework.EngineRunner.Create(engineId)
             :Fen(board:GetFen())
             :Elo(difficulty)
+            :UseOpeningBook(useOpeningBook)
             :HandleError(function(err)
                 DeltaChess:Print("|cFFFF0000Engine error: " .. tostring(err.message or err) .. "|r")
                 return true  -- Return random legal move on error

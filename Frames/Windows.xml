@@ -273,7 +273,7 @@
     </Frame>
 
     <Frame name="ChessComputerWindow" parent="UIParent" inherits="BasicFrameTemplateWithInset" frameStrata="DIALOG" frameLevel="150" hidden="true" movable="true" enableMouse="true">
-        <Size x="320" y="350"/>
+        <Size x="320" y="420"/>
         <Anchors>
             <Anchor point="CENTER"/>
         </Anchors>
@@ -310,6 +310,13 @@
                         <Anchor point="TOPLEFT" x="20" y="-242"/>
                     </Anchors>
                 </FontString>
+                <FontString parentKey="openingBookList" inherits="GameFontNormalSmall" justifyH="LEFT">
+                    <Size x="250" y="14"/>
+                    <Color r="0.6" g="0.6" b="0.6"/>
+                    <Anchors>
+                        <Anchor point="TOPLEFT" x="1" y="1"/>
+                    </Anchors>
+                </FontString>
             </Layer>
         </Layers>
         <Frames>
@@ -342,6 +349,11 @@
                     <Anchor point="TOPLEFT" x="0" y="-210"/>
                 </Anchors>
             </Frame>
+            <CheckButton name="$parentOpeningBookCheck" parentKey="openingBookCheck" inherits="UICheckButtonTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="15" y="-300"/>
+                </Anchors>
+            </CheckButton>
             <Button name="$parentStartButton" parentKey="startButton" inherits="UIPanelButtonTemplate" text="Start Game">
                 <Size x="120" y="30"/>
                 <Anchors>
